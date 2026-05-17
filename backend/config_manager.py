@@ -56,6 +56,20 @@ def scan_models(directory: str) -> List[ModelInfo]:
     return models
 
 
+def list_drives() -> list[str]:
+    """List available drive letters on Windows, or ['/'] on Linux."""
+    import sys
+    if sys.platform == "win32":
+        import string
+        drives = []
+        for letter in string.ascii_uppercase:
+            d = f"{letter}:\\"
+            if Path(d).exists():
+                drives.append(f"{letter}:")
+        return drives
+    return ["/"]
+
+
 def browse_directory(directory: str) -> list[dict]:
     """List contents of a directory (files + dirs)."""
     from .models import DirEntry

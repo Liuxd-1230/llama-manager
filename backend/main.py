@@ -222,6 +222,12 @@ async def list_models():
         return JSONResponse(content={"error": str(e)}, status_code=502)
 
 
+@app.get("/api/drives")
+def list_drives():
+    """List available drives (Windows) or ['/'] (Linux)."""
+    return {"drives": cfg.list_drives()}
+
+
 @app.get("/api/browse")
 def browse_dir(dir: str):
     """Browse directory contents for folder picker."""

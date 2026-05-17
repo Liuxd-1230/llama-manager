@@ -396,6 +396,7 @@ textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); fo
   <div class="modal">
     <h3 id="folderModalTitle">📂 浏览文件夹</h3>
     <div class="breadcrumb" id="folderBreadcrumb"></div>
+    <div id="driveList" style="display:none;gap:6px;margin-bottom:10px;flex-wrap:wrap"></div>
     <div class="form-row" style="margin-bottom:10px">
       <input type="text" id="folderPathInput" placeholder="输入路径..." style="flex:1">
       <button class="btn btn-secondary" onclick="browseTo()">前往</button>
@@ -426,6 +427,8 @@ textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); fo
 
 <!-- ═══ 导入文件 input ═══ -->
 <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImport(event)">
+<input type="file" id="nativeFolderPicker" webkitdirectory style="display:none" onchange="handleNativeFolder(event)">
+<input type="file" id="nativeFilePicker" accept=".gguf" style="display:none" onchange="handleNativeFile(event)">
 
 <script>
 // ── State ──
@@ -551,13 +554,55 @@ function showToast(msg){
 }
 
 // ── Folder browser ──
+let nativePickerTarget='';
 function openFolderPicker(targetInput){
+  nativePickerTarget=targetInput;
+  // Use native OS folder picker
+  document.getElementById('nativeFolderPicker').click();
+}
+function handleNativeFolder(e){
+  const files=e.target.files;
+  if(files&&files.length>0){
+    // Extract folder path from first file's webkitRelativePath
+    const fp=files[0].webkitRelativePath;
+    const fullPath=files[0].path||'';
+    // Try to get directory path
+    let dir='';
+    if(fullPath){dir=fullPath.replace(/[\\/][^\\/]*$/,'')}
+    else if(fp){dir=fp.split('/')[0]}
+    if(dir&&nativePickerTarget)document.getElementById(nativePickerTarget).value=dir;
+  }
+  e.target.value='';
+}
+function openFilePicker(targetInput,ext){
+  nativePickerTarget=targetInput;
+  document.getElementById('nativeFilePicker').click();
+}
+function handleNativeFile(e){
+  const f=e.target.files[0];
+  if(f){
+    let p=f.path||f.name;
+    if(nativePickerTarget)document.getElementById(nativePickerTarget).value=p;
+  }
+  e.target.value='';
+}
+// Keep custom browser as fallback
+function openCustomFolderPicker(targetInput){
   folderCallback=(path)=>{document.getElementById(targetInput).value=path};
   currentBrowsePath=document.getElementById(targetInput).value||'';
   document.getElementById('folderModal').classList.add('show');
+  loadDriveList();
   if(currentBrowsePath) browseTo(currentBrowsePath); else browseTo(isWindows?'C:\\':'/');
 }
 function closeFolderModal(){document.getElementById('folderModal').classList.remove('show')}
+async function loadDriveList(){
+  const r=await api('/api/drives');
+  const dl=document.getElementById('driveList');
+  if(r.drives&&r.drives.length>1){
+    dl.innerHTML=r.drives.map(d=>`<button class="btn btn-secondary" style="padding:3px 10px;font-size:12px" onclick="browseTo('${d}\\\\')">${d}</button>`).join('');
+    dl.style.display='flex';
+  }else{dl.style.display='none'}
+}
 async function browseTo(path){
   if(path!==undefined) currentBrowsePath=path;
   document.getElementById('folderPathInput').value=currentBrowsePath;
@@ -565,7 +610,7 @@ async function browseTo(path){
   const r=await api('/api/browse?dir='+encodeURIComponent(currentBrowsePath));
   const list=document.getElementById('folderList');
   if(!r.entries||!r.entries.length){list.innerHTML='<div style="color:var(--fg-muted);padding:12px;text-align:center">空目录</div>';return}
-  list.innerHTML=r.entries.filter(e=>e.is_dir).map(e=>`<div class="file-item" onclick="browseTo('${e.path.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')"><span class="file-icon">📁</span><span>${e.name}</span></div>`).join('');
+  list.innerHTML=r.entries.filter(e=>e.is_dir).map(e=>{const p=e.path.replace(/\\/g,'\\\\').replace(/'/g,"\\'");return `<div class="file-item" onclick="browseTo('${p}')"><span class="file-icon">📁</span><span>${e.name}</span></div>`}).join('');
 }
 function updateBreadcrumb(){
   const bc=document.getElementById('folderBreadcrumb');
@@ -592,15 +637,6 @@ async function scanModels(){
   list.innerHTML=r.models.map(m=>`<label class="file-item"><input type="radio" name="modelPick" value="${m.path}" style="margin-right:6px"><span style="flex:1">${m.name}</span><span class="file-size">${m.size_mb} MB</span></label>`).join('');
 }
 function selectModel(){const p=document.querySelector('input[name="modelPick"]:checked');if(p)document.getElementById('modelPath').value=p.value;closeModelModal()}
-
-// ── File picker (for mmproj) ──
-function openFilePicker(targetInput,ext){
-  folderCallback=(path)=>{document.getElementById(targetInput).value=path};
-  currentBrowsePath='';
-  document.getElementById('folderModalTitle').textContent='📂 选择文件';
-  document.getElementById('folderModal').classList.add('show');
-  browseTo(isWindows?'C:\\':'/');
-}
 
 // ── Server detect ──
 async function detectServer(){const d=document.getElementById('llamaCppDir').value;const r=await api('/api/detect-server?llama_cpp_dir='+encodeURIComponent(d));const el=document.getElementById('serverBinStatus');if(r.found){el.textContent='✅ '+r.path;el.style.color='var(--green)'}else{el.textContent='❌ 未找到 llama-server';el.style.color='var(--red)'}}
