@@ -616,7 +616,7 @@ async function loadDriveList(){
   const r=await api('/api/drives');
   const dl=document.getElementById('driveList');
   if(r.drives&&r.drives.length>1){
-    dl.innerHTML=r.drives.map(d=>`<button class="btn btn-secondary" style="padding:3px 10px;font-size:12px" onclick="browseTo('${d}\\\\')">${d}</button>`).join('');
+    dl.innerHTML=r.drives.map(d=>'<button class="btn btn-secondary" style="padding:3px 10px;font-size:12px" data-browse="'+d+'\\">'+d+'</button>').join('');
     dl.style.display='flex';
   }else{dl.style.display='none'}
 }
@@ -627,16 +627,23 @@ async function browseTo(path){
   const r=await api('/api/browse?dir='+encodeURIComponent(currentBrowsePath));
   const list=document.getElementById('folderList');
   if(!r.entries||!r.entries.length){list.innerHTML='<div style="color:var(--fg-muted);padding:12px;text-align:center">空目录</div>';return}
-  list.innerHTML=r.entries.filter(e=>e.is_dir).map(e=>{const p=e.path.replace(/\\/g,'\\\\').replace(/'/g,"\\'");return `<div class="file-item" onclick="browseTo('${p}')"><span class="file-icon">📁</span><span>${e.name}</span></div>`}).join('');
+  list.innerHTML=r.entries.filter(e=>e.is_dir).map(e=>{
+    return '<div class="file-item" data-browse="'+e.path.replace(/"/g,'&quot;')+'"><span class="file-icon">📁</span><span>'+e.name+'</span></div>';
+  }).join('');
 }
 function updateBreadcrumb(){
   const bc=document.getElementById('folderBreadcrumb');
   const parts=currentBrowsePath.replace(/\\/g,'/').split('/').filter(Boolean);
-  let html='<span onclick="browseTo(\'/\')">/</span>';
+  let html='<span data-browse="/">/</span>';
   let acc='';
-  parts.forEach(p=>{acc+='/'+p;const pa=acc;html+=`<span onclick="browseTo('${pa}')">${p}</span> / `});
+  parts.forEach(p=>{acc+='/'+p;html+='<span data-browse="'+acc+'">'+p+'</span> / '});
   bc.innerHTML=html;
 }
+// Event delegation for all browse clicks
+document.addEventListener('click',function(e){
+  const el=e.target.closest('[data-browse]');
+  if(el){e.preventDefault();browseTo(el.dataset.browse)}
+});
 function selectFolder(){if(folderCallback)folderCallback(currentBrowsePath);closeFolderModal()}
 
 // ── Model picker ──

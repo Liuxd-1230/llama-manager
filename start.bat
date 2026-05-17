@@ -3,9 +3,9 @@ chcp 65001 >nul 2>&1
 title llama.cpp Run Manager
 
 echo.
-echo  ╔══════════════════════════════════════╗
-echo  ║   🦙 llama.cpp Run Manager           ║
-echo  ╚══════════════════════════════════════╝
+echo  ================================
+echo    llama.cpp Run Manager
+echo  ================================
 echo.
 
 cd /d "%~dp0"
