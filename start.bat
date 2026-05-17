@@ -10,46 +10,44 @@ echo.
 
 cd /d "%~dp0"
 
-REM ── 检查 Python ──
+REM -- Check Python --
 where python >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [错误] 未找到 Python，请先安装 Python 3.10+
-    echo 下载地址: https://www.python.org/downloads/
+    echo [ERROR] Python not found. Install Python 3.10+
+    echo https://www.python.org/downloads/
     pause
     exit /b 1
 )
 
-REM ── 检查/创建虚拟环境 ──
+REM -- Create venv if needed --
 if not exist ".venv\Scripts\activate.bat" (
-    echo [1/3] 创建虚拟环境...
+    echo [1/3] Creating virtual environment...
     python -m venv .venv
     if %errorlevel% neq 0 (
-        echo [错误] 创建虚拟环境失败
+        echo [ERROR] Failed to create venv
         pause
         exit /b 1
     )
 )
 
-REM ── 激活虚拟环境 ──
+REM -- Activate venv --
 call .venv\Scripts\activate.bat
 
-REM ── 安装依赖 ──
-echo [2/3] 检查依赖...
+REM -- Install deps --
+echo [2/3] Checking dependencies...
 pip install -q -r requirements.txt 2>nul
 
-REM ── 启动服务 ──
-echo [3/3] 启动服务...
+REM -- Start --
+echo [3/3] Starting server...
 echo.
-echo  ┌─────────────────────────────────────┐
-echo  │  地址: http://localhost:9090         │
-echo  │  按 Ctrl+C 停止                      │
-echo  └─────────────────────────────────────┘
+echo  Address: http://localhost:9090
+echo  Press Ctrl+C to stop
 echo.
 
-REM ── 延迟打开浏览器 ──
+REM -- Open browser after delay --
 start "" cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:9090"
 
-REM ── 运行 uvicorn ──
+REM -- Run uvicorn --
 python -m uvicorn backend.main:app --host 0.0.0.0 --port 9090
 
 pause
