@@ -724,7 +724,7 @@ function buildParamPreview(){
   if(c.basic.n_cpu_moe>0) add('--n-cpu-moe',c.basic.n_cpu_moe,'MoE CPU 卸载层数');
   if(c.basic.kv_cache_quant_k) add('--cache-type-k',c.basic.kv_cache_quant_k,'KV 缓存量化 K');
   if(c.basic.kv_cache_quant_v) add('--cache-type-v',c.basic.kv_cache_quant_v,'KV 缓存量化 V');
-  if(c.basic.enable_thinking) add("--chat-template-kwargs","'{"enable_thinking":true}'","思维链");
+  if(c.basic.enable_thinking) add('--chat-template-kwargs',`'{"enable_thinking":true}'`,'思维链');
   add('--temp',c.sampling.temperature,'');
   add('--top-k',c.sampling.top_k,'');
   add('--top-p',c.sampling.top_p,'');
