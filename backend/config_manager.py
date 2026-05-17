@@ -88,14 +88,26 @@ def browse_directory(directory: str) -> list[dict]:
 
 
 def detect_server_binary(llama_cpp_dir: str) -> str:
-    """Try to find llama-server binary in the llama.cpp directory."""
+    """Try to find llama-server binary in the llama.cpp directory.
+    Checks common paths first, then falls back to recursive search."""
     d = Path(llama_cpp_dir)
+    if not d.is_dir():
+        return ""
+
+    import sys
+    exe = "llama-server.exe" if sys.platform == "win32" else "llama-server"
+
+    # 1. Common fixed paths (fast)
     candidates = [
-        d / "build" / "bin" / "llama-server",
-        d / "build" / "bin" / "llama-server.exe",
-        d / "llama-server",
+        d / "build" / "bin" / exe,
+        d / exe,
     ]
     for c in candidates:
         if c.exists():
             return str(c)
+
+    # 2. Recursive search (slower but thorough)
+    for f in d.rglob(exe):
+        return str(f)
+
     return ""
