@@ -56,6 +56,23 @@ def scan_models(directory: str) -> List[ModelInfo]:
     return models
 
 
+def browse_directory(directory: str) -> list[dict]:
+    """List contents of a directory (files + dirs)."""
+    from .models import DirEntry
+    d = Path(directory)
+    if not d.is_dir():
+        return []
+    entries = []
+    try:
+        for item in sorted(d.iterdir()):
+            if item.name.startswith('.'):
+                continue
+            entries.append({"name": item.name, "path": str(item), "is_dir": item.is_dir()})
+    except PermissionError:
+        pass
+    return entries
+
+
 def detect_server_binary(llama_cpp_dir: str) -> str:
     """Try to find llama-server binary in the llama.cpp directory."""
     d = Path(llama_cpp_dir)

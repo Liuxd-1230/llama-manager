@@ -58,8 +58,8 @@ class ProcessManager:
         else:
             cmd.append("--no-mmap")
 
-        if b.moe_cpu_offload:
-            cmd += ["--moe-expert-override", "cpu"]
+        if b.n_cpu_moe > 0:
+            cmd += ["--n-cpu-moe", str(b.n_cpu_moe)]
 
         if b.kv_cache_quant:
             cmd += ["--cache-type-k", f"q{b.kv_cache_quant}",
@@ -85,6 +85,11 @@ class ProcessManager:
 
         srv = config.server
         cmd += ["--host", srv.host, "--port", str(srv.port)]
+
+        # MTP speculative decoding
+        mtp = config.mtp
+        if mtp.enabled:
+            cmd += ["--spec-type", mtp.spec_type, "--spec-draft-n-max", str(mtp.draft_n_max)]
 
         if config.extra_params.strip():
             cmd += config.extra_params.strip().split()

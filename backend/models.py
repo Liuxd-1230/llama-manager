@@ -10,7 +10,7 @@ class BasicSettings(BaseModel):
     threads: int = 8
     parallel: int = 1
     mmap: bool = True
-    moe_cpu_offload: bool = False
+    n_cpu_moe: int = 0  # 0=disabled, >0 = number of MoE expert layers to offload to CPU
     kv_cache_quant: str = ""  # e.g. "q8_0", "q4_0", empty = default
     enable_thinking: bool = False
 
@@ -25,6 +25,12 @@ class SamplingSettings(BaseModel):
     repeat_penalty: float = 1.1
     presence_penalty_enabled: bool = False
     presence_penalty: float = 0.0
+
+
+class MTPSettings(BaseModel):
+    enabled: bool = False
+    spec_type: str = "draft-mtp"  # draft-mtp
+    draft_n_max: int = 3  # max draft tokens (2 or 3 typical)
 
 
 class ServerSettings(BaseModel):
@@ -43,6 +49,7 @@ class AppConfig(BaseModel):
     mmproj_path: str = ""
     basic: BasicSettings = Field(default_factory=BasicSettings)
     sampling: SamplingSettings = Field(default_factory=SamplingSettings)
+    mtp: MTPSettings = Field(default_factory=MTPSettings)
     system_prompt: str = ""
     extra_params: str = ""
     server: ServerSettings = Field(default_factory=ServerSettings)
@@ -53,6 +60,12 @@ class ModelInfo(BaseModel):
     name: str
     path: str
     size_mb: float
+
+
+class DirEntry(BaseModel):
+    name: str
+    path: str
+    is_dir: bool
 
 
 class ServerStatus(BaseModel):

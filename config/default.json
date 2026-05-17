@@ -8,7 +8,7 @@
     "threads": 8,
     "parallel": 1,
     "mmap": true,
-    "moe_cpu_offload": false,
+    "n_cpu_moe": 0,
     "kv_cache_quant": "",
     "enable_thinking": false
   },
@@ -22,6 +22,11 @@
     "repeat_penalty": 1.1,
     "presence_penalty_enabled": false,
     "presence_penalty": 0.0
+  },
+  "mtp": {
+    "enabled": false,
+    "spec_type": "draft-mtp",
+    "draft_n_max": 3
   },
   "system_prompt": "",
   "extra_params": "",

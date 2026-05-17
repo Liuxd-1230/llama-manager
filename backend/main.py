@@ -10,6 +10,7 @@ from .models import AppConfig
 from . import config_manager as cfg
 from .process_manager import process_manager
 from .update_manager import update_manager
+from .download_manager import download_manager
 
 app = FastAPI(title="llama.cpp Run Manager")
 
@@ -219,6 +220,47 @@ async def list_models():
             return JSONResponse(content=resp.json(), status_code=resp.status_code)
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=502)
+
+
+@app.get("/api/browse")
+def browse_dir(dir: str):
+    """Browse directory contents for folder picker."""
+    return {"entries": cfg.browse_directory(dir)}
+
+
+# ── Download endpoints ────────────────────────────────────────
+
+@app.post("/api/download/start")
+async def download_start(body: dict):
+    target_dir = body.get("target_dir", "")
+    if not target_dir:
+        return JSONResponse(status_code=400, content={"error": "target_dir required"})
+    try:
+        await download_manager.start_download(target_dir)
+        return {"ok": True}
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+
+@app.get("/api/download/status")
+def download_status():
+    return {"is_downloading": download_manager.is_downloading(), "logs": download_manager.get_logs()}
+
+
+@app.websocket("/ws/download")
+async def ws_download(websocket: WebSocket):
+    await websocket.accept()
+    q = download_manager.subscribe()
+    try:
+        for line in download_manager.get_logs():
+            await websocket.send_text(line)
+        while True:
+            text = await q.get()
+            await websocket.send_text(text)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        download_manager.unsubscribe(q)
 
 
 # ── Static files ──────────────────────────────────────────────
