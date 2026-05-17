@@ -1,10 +1,11 @@
 """FastAPI main application — routes and WebSocket."""
 from __future__ import annotations
 import asyncio
+import json
 from pathlib import Path
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from .models import AppConfig
 from . import config_manager as cfg
 from .process_manager import process_manager
@@ -172,6 +173,52 @@ async def ws_compile(websocket: WebSocket):
         pass
     finally:
         update_manager.unsubscribe(q)
+
+
+# ── Chat proxy to llama-server ──────────────────────────────
+
+@app.post("/api/chat")
+async def chat_proxy(request: Request):
+    """Proxy chat requests to the local llama-server's /v1/chat/completions."""
+    import httpx
+    config = cfg.get_config()
+    body = await request.body()
+    target = f"http://{config.server.host}:{config.server.port}/v1/chat/completions"
+
+    stream = False
+    try:
+        data = json.loads(body)
+        stream = data.get("stream", False)
+    except Exception:
+        pass
+
+    headers = {"Content-Type": "application/json"}
+
+    if stream:
+        async def generate():
+            async with httpx.AsyncClient(timeout=300) as client:
+                async with client.stream("POST", target, content=body, headers=headers) as resp:
+                    async for chunk in resp.aiter_bytes():
+                        yield chunk
+        return StreamingResponse(generate(), media_type="text/event-stream")
+    else:
+        async with httpx.AsyncClient(timeout=300) as client:
+            resp = await client.post(target, content=body, headers=headers)
+            return JSONResponse(content=resp.json(), status_code=resp.status_code)
+
+
+@app.get("/api/chat/models")
+async def list_models():
+    """Proxy model list from llama-server."""
+    import httpx
+    config = cfg.get_config()
+    target = f"http://{config.server.host}:{config.server.port}/v1/models"
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(target)
+            return JSONResponse(content=resp.json(), status_code=resp.status_code)
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=502)
 
 
 # ── Static files ──────────────────────────────────────────────

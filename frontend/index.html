@@ -91,6 +91,8 @@ textarea { resize: vertical; min-height: 80px; font-family: 'Consolas', monospac
     <button onclick="showPage('sampling')">🎲 采样器</button>
     <button onclick="showPage('prompt')">📝 提示词</button>
     <button onclick="showPage('server')">🖥️ 服务器</button>
+    <button onclick="showPage('chat')">💬 对话</button>
+    <button onclick="showPage('webui')">🌐 原生WebUI</button>
     <button onclick="showPage('update')">🔄 更新编译</button>
     <button onclick="showPage('logs')">📋 日志</button>
   </nav>
@@ -336,6 +338,48 @@ textarea { resize: vertical; min-height: 80px; font-family: 'Consolas', monospac
       </div>
       <div class="log-box" id="fullLog" style="height:calc(100vh - 200px)"></div>
     </div>
+
+    <!-- ═══ 对话页 ═══ -->
+    <div id="page-chat" class="page">
+      <div class="section-title">💬 对话 (OpenAI 兼容 API)</div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="grid-3">
+          <div class="form-group">
+            <label>模型</label>
+            <select id="chatModel"><option>加载中...</option></select>
+          </div>
+          <div class="form-group">
+            <label>温度</label>
+            <input type="number" id="chatTemp" value="0.7" min="0" max="2" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>最大 tokens</label>
+            <input type="number" id="chatMaxTokens" value="2048" min="1" max="32768">
+          </div>
+        </div>
+      </div>
+      <div id="chatMessages" style="flex:1;overflow-y:auto;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);height:calc(100vh - 380px);margin-bottom:12px">
+        <div style="text-align:center;color:var(--fg2);padding:40px">启动服务器后开始对话</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <textarea id="chatInput" rows="2" placeholder="输入消息... (Enter 发送, Shift+Enter 换行)" style="flex:1;resize:none"></textarea>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <button class="btn btn-primary" onclick="sendChat()" id="btnSend" style="flex:1">发送</button>
+          <button class="btn btn-secondary" onclick="clearChat()" style="font-size:11px">清空</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 原生 WebUI 页 ═══ -->
+    <div id="page-webui" class="page" style="padding:0;height:100%">
+      <div style="padding:8px 24px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
+        <span style="font-size:14px">🌐 llama-server 原生 WebUI</span>
+        <span style="font-size:12px;color:var(--fg2)">嵌入服务器自带的聊天界面</span>
+        <button class="btn btn-secondary" onclick="refreshWebUI()" style="margin-left:auto">🔄 刷新</button>
+        <button class="btn btn-secondary" onclick="openWebUI()">↗ 新窗口打开</button>
+      </div>
+      <iframe id="webuiFrame" style="width:100%;height:calc(100% - 50px);border:none;background:#000" src="about:blank"></iframe>
+    </div>
   </div>
 </div>
 
@@ -373,6 +417,8 @@ function showPage(name) {
   document.getElementById('page-' + name).classList.add('active');
   event.target.classList.add('active');
   if (name === 'server') connectLogWS();
+  if (name === 'chat') loadChatModels();
+  if (name === 'webui') refreshWebUI();
   if (name === 'update') connectCompileWS();
   if (name === 'logs') connectLogWS();
 }
@@ -685,6 +731,143 @@ async function startCompile() {
   const r = await api('/api/update/compile', { method:'POST' });
   if (r.error) { alert('编译启动失败: ' + r.error); document.getElementById('btnCompile').disabled = false; return; }
   connectCompileWS();
+}
+
+// ── Chat ──
+let chatHistory = [];
+
+async function loadChatModels() {
+  try {
+    const r = await api('/api/chat/models');
+    const sel = document.getElementById('chatModel');
+    if (r.data && r.data.length) {
+      sel.innerHTML = r.data.map(m => `<option value="${m.id}">${m.id}</option>`).join('');
+    } else {
+      sel.innerHTML = '<option>服务器未启动</option>';
+    }
+  } catch {
+    document.getElementById('chatModel').innerHTML = '<option>服务器未启动</option>';
+  }
+}
+
+function appendChatMsg(role, content) {
+  const box = document.getElementById('chatMessages');
+  // Remove placeholder
+  if (box.querySelector('div[style*="text-align:center"]')) box.innerHTML = '';
+  const div = document.createElement('div');
+  div.style.cssText = 'margin-bottom:12px;padding:10px 14px;border-radius:8px;max-width:85%;white-space:pre-wrap;word-break:break-word;line-height:1.5;';
+  if (role === 'user') {
+    div.style.background = 'var(--accent2)';
+    div.style.marginLeft = 'auto';
+    div.textContent = content;
+  } else {
+    div.style.background = 'var(--bg3)';
+    div.innerHTML = content;
+  }
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+
+  chatHistory.push({role: 'user', content: msg});
+  appendChatMsg('user', msg);
+
+  const model = document.getElementById('chatModel').value;
+  const temp = parseFloat(document.getElementById('chatTemp').value);
+  const maxTokens = parseInt(document.getElementById('chatMaxTokens').value);
+
+  const thinkingEnabled = document.getElementById('enableThinking')?.checked;
+
+  const body = {
+    model: model,
+    messages: chatHistory,
+    temperature: temp,
+    max_tokens: maxTokens,
+    stream: true,
+  };
+
+  const aiDiv = appendChatMsg('assistant', '⏳ 生成中...');
+  document.getElementById('btnSend').disabled = true;
+
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    let buffer = '';
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep incomplete line
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') continue;
+        try {
+          const json = JSON.parse(data);
+          const delta = json.choices?.[0]?.delta?.content || '';
+          fullText += delta;
+          aiDiv.innerHTML = fullText;
+          const box = document.getElementById('chatMessages');
+          box.scrollTop = box.scrollHeight;
+        } catch {}
+      }
+    }
+
+    if (!fullText) {
+      aiDiv.textContent = '(空回复)';
+    }
+    chatHistory.push({role: 'assistant', content: fullText});
+  } catch (e) {
+    aiDiv.textContent = '❌ 错误: ' + e.message;
+  }
+  document.getElementById('btnSend').disabled = false;
+}
+
+function clearChat() {
+  chatHistory = [];
+  document.getElementById('chatMessages').innerHTML = '<div style="text-align:center;color:var(--fg2);padding:40px">对话已清空</div>';
+}
+
+// Enter to send
+document.addEventListener('DOMContentLoaded', () => {
+  const chatInput = document.getElementById('chatInput');
+  if (chatInput) {
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChat();
+      }
+    });
+  }
+});
+
+// ── WebUI iframe ──
+function refreshWebUI() {
+  const s = configFromUI().server;
+  const url = `http://${s.host === '0.0.0.0' ? location.hostname : s.host}:${s.port}`;
+  document.getElementById('webuiFrame').src = url;
+}
+function openWebUI() {
+  const s = configFromUI().server;
+  const url = `http://${s.host === '0.0.0.0' ? location.hostname : s.host}:${s.port}`;
+  window.open(url, '_blank');
 }
 
 // ── Init ──

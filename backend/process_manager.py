@@ -2,11 +2,13 @@
 from __future__ import annotations
 import asyncio
 import time
-import signal
+import sys
 import os
-from typing import Optional, List, Callable, Any
+from typing import Optional, List, Any
 from .models import AppConfig, ServerStatus
 from .config_manager import detect_server_binary
+
+IS_WINDOWS = sys.platform == "win32"
 
 
 class ProcessManager:
@@ -136,17 +138,27 @@ class ProcessManager:
             return
 
         pid = self._process.pid
-        self._append_log(f"[manager] Sending SIGTERM to PID={pid}...")
+        self._append_log(f"[manager] Stopping PID={pid}...")
         try:
-            self._process.terminate()
-            try:
-                await asyncio.wait_for(self._process.wait(), timeout=10)
-                self._append_log(f"[manager] Process {pid} exited gracefully.")
-            except asyncio.TimeoutError:
-                self._append_log(f"[manager] SIGTERM timeout, sending SIGKILL...")
-                self._process.kill()
-                await self._process.wait()
-                self._append_log(f"[manager] Process {pid} killed.")
+            if IS_WINDOWS:
+                # Windows: use taskkill to kill process tree
+                kill_proc = await asyncio.create_subprocess_exec(
+                    "taskkill", "/F", "/T", "/PID", str(pid),
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await kill_proc.wait()
+                self._append_log(f"[manager] Process {pid} killed via taskkill.")
+            else:
+                self._process.terminate()
+                try:
+                    await asyncio.wait_for(self._process.wait(), timeout=10)
+                    self._append_log(f"[manager] Process {pid} exited gracefully.")
+                except asyncio.TimeoutError:
+                    self._append_log(f"[manager] Terminate timeout, killing...")
+                    self._process.kill()
+                    await self._process.wait()
+                    self._append_log(f"[manager] Process {pid} killed.")
         except ProcessLookupError:
             self._append_log(f"[manager] Process {pid} already exited.")
 
