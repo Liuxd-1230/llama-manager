@@ -19,11 +19,17 @@ cd ~/llama-manager
 pip install -r requirements.txt
 ```
 
-## 运行
+## 启动
 
+**Windows 一键启动（推荐）：**
+- 双击 `start.bat` — 显示控制台日志，自动打开浏览器
+- 双击 `start-hidden.vbs` — 静默后台启动，自动打开浏览器
+- 双击 `stop.bat` — 停止服务
+
+**手动启动：**
 ```bash
 cd ~/llama-manager
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 9090 --reload
+python -m uvicorn backend.main:app --host 0.0.0.0 --port 9090
 ```
 
 然后浏览器打开 `http://localhost:9090`
