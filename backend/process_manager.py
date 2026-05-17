@@ -61,12 +61,13 @@ class ProcessManager:
         if b.n_cpu_moe > 0:
             cmd += ["--n-cpu-moe", str(b.n_cpu_moe)]
 
-        if b.kv_cache_quant:
-            cmd += ["--cache-type-k", f"q{b.kv_cache_quant}",
-                    "--cache-type-v", f"q{b.kv_cache_quant}"]
+        if b.kv_cache_quant_k:
+            cmd += ["--cache-type-k", b.kv_cache_quant_k]
+        if b.kv_cache_quant_v:
+            cmd += ["--cache-type-v", b.kv_cache_quant_v]
 
         if b.enable_thinking:
-            cmd.append("--enable-thinking")
+            cmd += ["--chat-template-kwargs", '{"enable_thinking":true}']
 
         s = config.sampling
         cmd += ["--temp", str(s.temperature)]

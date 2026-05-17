@@ -203,8 +203,11 @@ textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); fo
           <div class="form-group"><label>CPU 线程数 (-t)</label><input type="number" id="threads" value="8" min="1"></div>
           <div class="form-group"><label>并行数 (-np)</label><input type="number" id="parallel" value="1" min="1"></div>
           <div class="form-group"><label>MoE CPU 卸载层数 (--n-cpu-moe)</label><input type="number" id="nCpuMoe" value="0" min="0"><div class="inline-help">0 = 关闭，>0 = 卸载到CPU的专家层数</div></div>
-          <div class="form-group"><label>KV 缓存量化</label>
-            <select id="kvCacheQuant"><option value="">默认 (不量化)</option><option value="q8_0">q8_0</option><option value="q4_0">q4_0</option><option value="q4_1">q4_1</option><option value="iq4_nl">iq4_nl</option><option value="f16">f16</option></select>
+          <div class="form-group"><label>KV 缓存量化 K</label>
+            <select id="kvCacheQuantK"><option value="">默认 (f16)</option><option value="f32">f32</option><option value="f16">f16</option><option value="bf16">bf16</option><option value="q8_0">q8_0</option><option value="q4_0">q4_0</option><option value="q4_1">q4_1</option><option value="iq4_nl">iq4_nl</option><option value="q5_0">q5_0</option><option value="q5_1">q5_1</option></select>
+          </div>
+          <div class="form-group"><label>KV 缓存量化 V</label>
+            <select id="kvCacheQuantV"><option value="">默认 (f16)</option><option value="f32">f32</option><option value="f16">f16</option><option value="bf16">bf16</option><option value="q8_0">q8_0</option><option value="q4_0">q4_0</option><option value="q4_1">q4_1</option><option value="iq4_nl">iq4_nl</option><option value="q5_0">q5_0</option><option value="q5_1">q5_1</option></select>
           </div>
         </div>
         <div class="toggle-row"><label class="toggle"><input type="checkbox" id="mmap" checked><span class="slider"></span></label><span>内存映射 (--mmap)</span></div>
@@ -332,7 +335,7 @@ textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); fo
         <button class="btn btn-secondary" onclick="refreshWebUI()" style="margin-left:auto">🔄 刷新</button>
         <button class="btn btn-secondary" onclick="openWebUI()">↗ 新窗口</button>
       </div>
-      <iframe id="webuiFrame" style="width:100%;height:calc(100% - 52px);border:none;background:#1e1e1e" src="about:blank"></iframe>
+      <iframe id="webuiFrame" style="width:100%;height:calc(100vh - 90px);border:none;background:#1e1e1e" src="about:blank"></iframe>
     </div>
 
     <!-- ═══ 更新编译页 ═══ -->
@@ -459,7 +462,11 @@ document.querySelectorAll('#sidebar button').forEach(btn => {
 // ── Helpers ──
 function syncR(n){document.getElementById(n+'Val').value=document.getElementById(n+'Range').value}
 function syncV(n){document.getElementById(n+'Range').value=document.getElementById(n+'Val').value}
-function toggleSamp(n){const e=document.getElementById(n+'Enabled'),g=document.getElementById(n+'Group');g.style.opacity=e.checked?'1':'.4';g.style.pointerEvents=e.checked?'auto':'none'}
+function toggleSamp(n){
+  const e=document.getElementById(n+'Enabled'),g=document.getElementById(n+'Group');
+  if(e.checked){g.style.opacity='1';g.style.pointerEvents='auto';g.querySelectorAll('input[type=range]').forEach(r=>r.style.accentColor='var(--accent)')}
+  else{g.style.opacity='.4';g.style.pointerEvents='none';g.querySelectorAll('input[type=range]').forEach(r=>r.style.accentColor='#999')}
+}
 function toggleMTP(){const e=document.getElementById('mtpEnabled'),g=document.getElementById('mtpGroup');g.style.opacity=e.checked?'1':'.4';g.style.pointerEvents=e.checked?'auto':'none'}
 function onModeChange(){const m=document.getElementById('serverMode').value;document.getElementById('serverHost').value=m==='lan'?'0.0.0.0':'127.0.0.1'}
 async function api(u,o={}){const r=await fetch(u,{headers:{'Content-Type':'application/json'},...o});return r.json()}
@@ -477,7 +484,8 @@ function cfgFromUI(){
       parallel:+document.getElementById('parallel').value,
       mmap:document.getElementById('mmap').checked,
       n_cpu_moe:+document.getElementById('nCpuMoe').value,
-      kv_cache_quant:document.getElementById('kvCacheQuant').value,
+      kv_cache_quant_k:document.getElementById('kvCacheQuantK').value,
+      kv_cache_quant_v:document.getElementById('kvCacheQuantV').value,
       enable_thinking:document.getElementById('enableThinking').checked,
     },
     sampling:{
@@ -514,7 +522,8 @@ function uiFromCfg(c){
   document.getElementById('parallel').value=b.parallel??1;
   document.getElementById('mmap').checked=b.mmap??true;
   document.getElementById('nCpuMoe').value=b.n_cpu_moe??0;
-  document.getElementById('kvCacheQuant').value=b.kv_cache_quant||'';
+  document.getElementById('kvCacheQuantK').value=b.kv_cache_quant_k||'';
+  document.getElementById('kvCacheQuantV').value=b.kv_cache_quant_v||'';
   document.getElementById('enableThinking').checked=b.enable_thinking??false;
   const s=c.sampling||{};
   ['temp',s.temperature??0.7],['topk',s.top_k??40],['topp',s.top_p??0.95],['minp',s.min_p??0.05],['repeat',s.repeat_penalty??1.1],['presence',s.presence_penalty??0].forEach(()=>{});
@@ -706,8 +715,9 @@ function buildParamPreview(){
   add('-np',c.basic.parallel,'并行数');
   add(c.basic.mmap?'--mmap':'--mmap=0','','内存映射');
   if(c.basic.n_cpu_moe>0) add('--n-cpu-moe',c.basic.n_cpu_moe,'MoE CPU 卸载层数');
-  if(c.basic.kv_cache_quant){add('--cache-type-k','q'+c.basic.kv_cache_quant,'KV 缓存量化 K');add('--cache-type-v','q'+c.basic.kv_cache_quant,'KV 缓存量化 V')}
-  if(c.basic.enable_thinking) add('--enable-thinking','','思维链');
+  if(c.basic.kv_cache_quant_k) add('--cache-type-k',c.basic.kv_cache_quant_k,'KV 缓存量化 K');
+  if(c.basic.kv_cache_quant_v) add('--cache-type-v',c.basic.kv_cache_quant_v,'KV 缓存量化 V');
+  if(c.basic.enable_thinking) add("--chat-template-kwargs","'{"enable_thinking":true}'","思维链");
   add('--temp',c.sampling.temperature,'');
   add('--top-k',c.sampling.top_k,'');
   add('--top-p',c.sampling.top_p,'');

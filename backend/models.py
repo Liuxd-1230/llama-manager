@@ -11,7 +11,8 @@ class BasicSettings(BaseModel):
     parallel: int = 1
     mmap: bool = True
     n_cpu_moe: int = 0  # 0=disabled, >0 = number of MoE expert layers to offload to CPU
-    kv_cache_quant: str = ""  # e.g. "q8_0", "q4_0", empty = default
+    kv_cache_quant_k: str = ""  # e.g. "q8_0", "q4_0", empty = default
+    kv_cache_quant_v: str = ""  # separate K and V quant
     enable_thinking: bool = False
 
 

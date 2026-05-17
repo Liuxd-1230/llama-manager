@@ -9,7 +9,8 @@
     "parallel": 1,
     "mmap": true,
     "n_cpu_moe": 0,
-    "kv_cache_quant": "",
+    "kv_cache_quant_k": "",
+    "kv_cache_quant_v": "",
     "enable_thinking": false
   },
   "sampling": {
