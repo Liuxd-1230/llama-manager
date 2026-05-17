@@ -345,6 +345,7 @@ textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); fo
         <div style="display:flex;gap:10px;margin-bottom:14px">
           <button class="btn btn-secondary" onclick="checkUpdate()">🔍 检查更新</button>
           <button class="btn btn-primary" onclick="pullUpdate()">⬇ 拉取更新</button>
+          <button class="btn btn-danger" onclick="pullUpdate(true)">⬇ 强制重置拉取</button>
           <button class="btn btn-success" id="btnCompile" onclick="startCompile()">🔨 开始编译</button>
           <button class="btn btn-danger" id="btnCompileStop" onclick="stopCompile()" disabled>⏹ 停止</button>
         </div>
@@ -699,7 +700,7 @@ function openWebUI(){const s=cfgFromUI().server;window.open(`http://${s.host==='
 
 // ── Update ──
 async function checkUpdate(){const r=await api('/api/update/check');const el=document.getElementById('updateInfo');if(r.error){el.textContent='❌ '+r.error;el.style.color='var(--red)';return}if(r.has_update){el.innerHTML=`🔄 有更新: <b>${r.current_commit}</b> → <b>${r.remote_commit}</b>`;el.style.color='var(--yellow)'}else{el.innerHTML=`✅ 已是最新 (${r.current_commit})`;el.style.color='var(--green)'}}
-async function pullUpdate(){const r=await api('/api/update/pull',{method:'POST'});const el=document.getElementById('updateInfo');if(r.success){el.textContent='✅ '+r.output;el.style.color='var(--green)'}else{el.textContent='❌ '+(r.error||r.output);el.style.color='var(--red)'}}
+async function pullUpdate(force=false){const r=await api('/api/update/pull',{method:'POST',body:JSON.stringify({force}),headers:{'Content-Type':'application/json'}});const el=document.getElementById('updateInfo');if(r.success){el.textContent='✅ '+r.output;el.style.color='var(--green)'}else{el.textContent='❌ '+(r.error||r.output);el.style.color='var(--red)'}}
 async function stopCompile(){await api('/api/update/compile/stop',{method:'POST'});document.getElementById('btnCompile').disabled=false;document.getElementById('btnCompileStop').disabled=true}
 async function startCompile(){document.getElementById('btnCompile').disabled=true;document.getElementById('btnCompileStop').disabled=false;await api('/api/config',{method:'POST',body:JSON.stringify(cfgFromUI())});const r=await api('/api/update/compile',{method:'POST'});if(r.error){alert(r.error);document.getElementById('btnCompile').disabled=false;return}connectCompileWS()}
 

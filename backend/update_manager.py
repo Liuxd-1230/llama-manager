@@ -63,10 +63,19 @@ class UpdateManager:
         except Exception as e:
             return {"has_update": False, "error": str(e)}
 
-    async def pull_update(self, llama_cpp_dir: str) -> dict:
-        """Pull latest changes."""
+    async def pull_update(self, llama_cpp_dir: str, force: bool = False) -> dict:
+        """Pull latest changes. If force=True, reset to remote first."""
         d = Path(llama_cpp_dir)
         try:
+            if force:
+                # Stash local changes and reset to remote
+                subprocess.run(["git", "stash"], capture_output=True, text=True, cwd=str(d), timeout=30)
+                subprocess.run(["git", "fetch", "origin"], capture_output=True, text=True, cwd=str(d), timeout=60)
+                # Detect default branch
+                r0 = subprocess.run(["git", "symbolic-ref", "refs/remotes/origin/HEAD"], capture_output=True, text=True, cwd=str(d), timeout=10)
+                branch = r0.stdout.strip().replace("refs/remotes/origin/", "") if r0.returncode == 0 else "master"
+                subprocess.run(["git", "reset", "--hard", f"origin/{branch}"], capture_output=True, text=True, cwd=str(d), timeout=30)
+
             r = subprocess.run(
                 ["git", "pull"],
                 capture_output=True, text=True, cwd=str(d), timeout=120

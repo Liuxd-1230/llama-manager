@@ -114,11 +114,13 @@ async def update_check():
 
 
 @app.post("/api/update/pull")
-async def update_pull():
+async def update_pull(request: Request):
     config = cfg.get_config()
     if not config.llama_cpp_dir:
         return JSONResponse(status_code=400, content={"error": "llama.cpp directory not set"})
-    return await update_manager.pull_update(config.llama_cpp_dir)
+    body = await request.json() if request.headers.get("content-type","") == "application/json" else {}
+    force = body.get("force", False)
+    return await update_manager.pull_update(config.llama_cpp_dir, force=force)
 
 
 @app.post("/api/update/compile")
