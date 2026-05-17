@@ -161,6 +161,7 @@ textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); fo
     <button data-page="chat">💬 对话</button>
     <button data-page="webui">🌐 原生 WebUI</button>
     <button data-page="update">🔄 更新编译</button>
+    <button data-page="optimize">🧪 自动优化</button>
     <button data-page="download">⬇️ 下载部署</button>
     <button data-page="logs">📄 日志</button>
   </nav>
@@ -359,6 +360,97 @@ textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); fo
       </div>
     </div>
 
+    <!-- ═══ 自动优化页 ═══ -->
+    <div id="page-optimize" class="page">
+      <div class="card">
+        <div class="card-title"><span class="icon">🧪</span> 贝叶斯自动优化</div>
+        <div class="inline-help" style="margin-bottom:14px">使用 Optuna 贝叶斯优化自动搜索最优 llama.cpp 参数组合（ngl × n_cpu_moe × ctx × kv）</div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label>ngl 范围 (GPU 卸载层数)</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="number" id="optNglMin" value="0" min="0" max="99" style="width:70px"> ~
+              <input type="number" id="optNglMax" value="99" min="0" max="99" style="width:70px">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>n_cpu_moe 范围 (MoE CPU 卸载)</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="number" id="optMoeMin" value="0" min="0" max="99" style="width:70px"> ~
+              <input type="number" id="optMoeMax" value="99" min="0" max="99" style="width:70px">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>上下文长度 (ctx_size) — 勾选要测试的值</label>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-ctx" value="512"> 512</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-ctx" value="1024"> 1024</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-ctx" value="2048"> 2048</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-ctx" value="4096" checked> 4096</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-ctx" value="8192"> 8192</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-ctx" value="16384"> 16384</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-ctx" value="32768"> 32768</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-ctx" value="65536"> 65536</label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>KV 缓存量化 — 勾选要测试的值</label>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-kv" value="f16" checked> f16</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-kv" value="bf16"> bf16</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-kv" value="q8_0" checked> q8_0</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-kv" value="q5_0"> q5_0</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-kv" value="q4_0"> q4_0</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-kv" value="q4_1"> q4_1</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-kv" value="iq4_nl"> iq4_nl</label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>试验次数</label>
+          <input type="number" id="optTrials" value="50" min="10" max="500" style="width:100px">
+          <div class="inline-help">推荐 30-50 次，每次约 30-60 秒</div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn btn-success" id="btnOptStart" onclick="startOptimize()">🚀 开始优化</button>
+          <button class="btn btn-danger" id="btnOptStop" onclick="stopOptimize()" disabled>⏹ 停止</button>
+          <span id="optProgress" style="font-size:13px;color:var(--fg-muted);align-self:center"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="icon">📊</span> 优化结果</div>
+        <div style="overflow-x:auto">
+          <table id="optResultTable" style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="border-bottom:2px solid var(--border);text-align:left">
+                <th style="padding:6px 10px">#</th>
+                <th style="padding:6px 10px">ngl</th>
+                <th style="padding:6px 10px">n_cpu_moe</th>
+                <th style="padding:6px 10px">ctx</th>
+                <th style="padding:6px 10px">kv</th>
+                <th style="padding:6px 10px">pp (t/s)</th>
+                <th style="padding:6px 10px">tg (t/s)</th>
+                <th style="padding:6px 10px">状态</th>
+                <th style="padding:6px 10px"></th>
+              </tr>
+            </thead>
+            <tbody id="optResultBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="icon">📋</span> 优化日志</div>
+        <div class="log-box" id="optimizeLog" style="height:300px"></div>
+      </div>
+    </div>
+
     <!-- ═══ 下载部署页 ═══ -->
     <div id="page-download" class="page">
       <div class="card">
@@ -459,6 +551,7 @@ document.querySelectorAll('#sidebar button').forEach(btn => {
     if(page==='webui') refreshWebUI();
     if(page==='update') connectCompileWS();
     if(page==='download') connectDownloadWS();
+    if(page==='optimize') connectOptimizeWS();
     if(page==='logs') connectLogWS();
     if(page==='params') buildParamPreview();
   });
@@ -765,6 +858,101 @@ function buildParamPreview(){
   document.getElementById('cmdPreview').textContent=cmd;
 }
 function copyParams(){const t=document.getElementById('paramPreview').innerText;navigator.clipboard.writeText(t);showToast('已复制到剪贴板')}
+
+// ── Optimizer ──
+let wsOptimize=null;
+let optResults=[];
+
+function connectOptimizeWS(){
+  if(wsOptimize&&wsOptimize.readyState<=1)return;
+  wsOptimize=new WebSocket(`ws://${location.host}/ws/optimize`);
+  wsOptimize.onmessage=e=>{
+    const text=e.data;
+    // Try to parse as JSON status update
+    try{
+      const data=JSON.parse(text);
+      if(data.type==='status'){
+        document.getElementById('optProgress').textContent=`进度: ${data.current_trial}/${data.total_trials}`;
+        if(data.best){
+          document.getElementById('optProgress').textContent+=` | 最优: tg=${data.best.tg} t/s`;
+        }
+      }else if(data.type==='result'){
+        optResults.push(data);
+        appendResultRow(data);
+      }
+    }catch{
+      // Plain text log line
+      appendLog('optimizeLog',text);
+    }
+  };
+  wsOptimize.onclose=()=>{if(document.getElementById('btnOptStop').disabled===false)wsOptimize=null};
+}
+
+function appendResultRow(r){
+  const tbody=document.getElementById('optResultBody');
+  // Remove "no results" placeholder
+  if(tbody.querySelector('td[colspan]'))tbody.innerHTML='';
+  const tr=document.createElement('tr');
+  tr.style.borderBottom='1px solid var(--border)';
+  tr.innerHTML=`<td style="padding:6px 10px">${r.trial}</td>
+    <td style="padding:6px 10px">${r.ngl}</td>
+    <td style="padding:6px 10px">${r.n_cpu_moe}</td>
+    <td style="padding:6px 10px">${r.ctx}</td>
+    <td style="padding:6px 10px">${r.kv}</td>
+    <td style="padding:6px 10px;font-weight:600">${r.pp}</td>
+    <td style="padding:6px 10px;font-weight:600;color:var(--accent)">${r.tg}</td>
+    <td style="padding:6px 10px">${r.status==='ok'?'✅':'❌'}</td>
+    <td style="padding:6px 10px"><button class="btn btn-secondary" style="padding:2px 8px;font-size:11px" onclick="applyOptResult(${JSON.stringify(r).replace(/"/g,'&quot;')})">应用</button></td>`;
+  tbody.appendChild(tr);
+  // Sort by tg descending
+  const rows=Array.from(tbody.querySelectorAll('tr'));
+  rows.sort((a,b)=>{
+    const tgA=parseFloat(a.querySelectorAll('td')[6]?.textContent||'0');
+    const tgB=parseFloat(b.querySelectorAll('td')[6]?.textContent||'0');
+    return tgB-tgA;
+  });
+  tbody.innerHTML='';
+  rows.forEach(r=>tbody.appendChild(r));
+}
+
+function applyOptResult(r){
+  // Apply the result to config page
+  document.getElementById('ngl').value=r.ngl;
+  document.getElementById('nCpuMoe').value=r.n_cpu_moe;
+  document.getElementById('ctxSize').value=r.ctx;
+  document.getElementById('kvCacheQuantK').value=r.kv;
+  document.getElementById('kvCacheQuantV').value=r.kv;
+  showToast(`已应用: ngl=${r.ngl}, n_cpu_moe=${r.n_cpu_moe}, ctx=${r.ctx}, kv=${r.kv}`);
+  // Switch to config tab
+  document.querySelector('[data-page="config"]').click();
+}
+
+async function startOptimize(){
+  const ctxOptions=Array.from(document.querySelectorAll('.opt-ctx:checked')).map(e=>+e.value);
+  const kvOptions=Array.from(document.querySelectorAll('.opt-kv:checked')).map(e=>e.value);
+  if(!ctxOptions.length){alert('请至少选择一个上下文长度');return}
+  if(!kvOptions.length){alert('请至少选择一个KV缓存类型');return}
+  const body={
+    ngl_range:[+document.getElementById('optNglMin').value,+document.getElementById('optNglMax').value],
+    n_cpu_moe_range:[+document.getElementById('optMoeMin').value,+document.getElementById('optMoeMax').value],
+    ctx_options:ctxOptions,
+    kv_options:kvOptions,
+    n_trials:+document.getElementById('optTrials').value,
+  };
+  document.getElementById('btnOptStart').disabled=true;
+  document.getElementById('btnOptStop').disabled=false;
+  document.getElementById('optResultBody').innerHTML='<tr><td colspan="9" style="padding:12px;text-align:center;color:var(--fg-muted)">运行中...</td></tr>';
+  optResults=[];
+  const r=await api('/api/optimize/start',{method:'POST',body:JSON.stringify(body)});
+  if(r.error){alert(r.error);document.getElementById('btnOptStart').disabled=false;document.getElementById('btnOptStop').disabled=true;return}
+  connectOptimizeWS();
+}
+
+async function stopOptimize(){
+  await api('/api/optimize/stop',{method:'POST'});
+  document.getElementById('btnOptStart').disabled=false;
+  document.getElementById('btnOptStop').disabled=true;
+}
 
 // ── Init ──
 loadInitCfg();

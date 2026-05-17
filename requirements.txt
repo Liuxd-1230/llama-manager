@@ -3,3 +3,4 @@ uvicorn[standard]>=0.24.0
 websockets>=12.0
 psutil>=5.9.0
 httpx>=0.25.0
+optuna>=3.4.0

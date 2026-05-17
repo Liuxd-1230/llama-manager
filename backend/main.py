@@ -11,6 +11,7 @@ from . import config_manager as cfg
 from .process_manager import process_manager
 from .update_manager import update_manager
 from .download_manager import download_manager
+from .optimizer import optimizer
 
 app = FastAPI(title="llama.cpp Run Manager")
 
@@ -281,6 +282,57 @@ async def ws_download(websocket: WebSocket):
         pass
     finally:
         download_manager.unsubscribe(q)
+
+
+# ── Optimizer endpoints ────────────────────────────────────────
+
+@app.post("/api/optimize/start")
+async def optimize_start(request: Request):
+    body = await request.json()
+    config = cfg.get_config()
+    try:
+        await optimizer.run_optimization(
+            llama_cpp_dir=config.llama_cpp_dir,
+            model_path=config.model_path,
+            threads=config.basic.threads,
+            ngl_range=tuple(body.get("ngl_range", [0, 99])),
+            n_cpu_moe_range=tuple(body.get("n_cpu_moe_range", [0, 99])),
+            ctx_options=body.get("ctx_options", [4096]),
+            kv_options=body.get("kv_options", ["f16"]),
+            n_trials=body.get("n_trials", 50),
+            mmap=config.basic.mmap,
+            mlock=config.basic.mlock,
+        )
+        return {"ok": True}
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+
+@app.post("/api/optimize/stop")
+async def optimize_stop():
+    await optimizer.stop()
+    return {"ok": True}
+
+
+@app.get("/api/optimize/status")
+def optimize_status():
+    return optimizer.get_status()
+
+
+@app.websocket("/ws/optimize")
+async def ws_optimize(websocket: WebSocket):
+    await websocket.accept()
+    q = optimizer.subscribe()
+    try:
+        for line in optimizer.get_status()["logs"]:
+            await websocket.send_text(line if isinstance(line, str) else json.dumps(line))
+        while True:
+            text = await q.get()
+            await websocket.send_text(text if isinstance(text, str) else json.dumps(text))
+    except WebSocketDisconnect:
+        pass
+    finally:
+        optimizer.unsubscribe(q)
 
 
 # ── Static files ──────────────────────────────────────────────
