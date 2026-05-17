@@ -1,0 +1,36 @@
+{
+  "llama_cpp_dir": "",
+  "model_path": "",
+  "mmproj_path": "",
+  "basic": {
+    "ctx_size": 4096,
+    "ngl": 99,
+    "threads": 8,
+    "parallel": 1,
+    "mmap": true,
+    "moe_cpu_offload": false,
+    "kv_cache_quant": "",
+    "enable_thinking": false
+  },
+  "sampling": {
+    "temperature": 0.7,
+    "top_k": 40,
+    "top_p": 0.95,
+    "min_p_enabled": false,
+    "min_p": 0.05,
+    "repeat_penalty_enabled": false,
+    "repeat_penalty": 1.1,
+    "presence_penalty_enabled": false,
+    "presence_penalty": 0.0
+  },
+  "system_prompt": "",
+  "extra_params": "",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8080,
+    "mode": "local"
+  },
+  "compile": {
+    "command": "cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release -j12"
+  }
+}

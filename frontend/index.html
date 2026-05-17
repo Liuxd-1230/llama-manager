@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>llama.cpp Run Manager</title>
+<style>
+:root {
+  --bg: #1a1a2e; --bg2: #16213e; --bg3: #0f3460;
+  --fg: #e0e0e0; --fg2: #a0a0b0; --accent: #e94560; --accent2: #533483;
+  --green: #4ade80; --red: #f87171; --yellow: #fbbf24; --blue: #60a5fa;
+  --border: #2a2a4a; --input-bg: #1e1e3a;
+  --radius: 8px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--fg); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+header { background: var(--bg2); padding: 12px 24px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--border); }
+header h1 { font-size: 20px; flex: 1; }
+header h1 span { font-size: 24px; margin-right: 6px; }
+.status-badge { padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; }
+.status-stopped { background: rgba(248,113,113,.2); color: var(--red); }
+.status-running { background: rgba(74,222,128,.2); color: var(--green); }
+.status-starting { background: rgba(251,191,36,.2); color: var(--yellow); }
+.main { display: flex; flex: 1; overflow: hidden; }
+nav { width: 160px; background: var(--bg2); border-right: 1px solid var(--border); padding: 12px 0; display: flex; flex-direction: column; gap: 2px; }
+nav button { background: none; border: none; color: var(--fg2); padding: 10px 20px; text-align: left; cursor: pointer; font-size: 14px; transition: all .15s; }
+nav button:hover { background: var(--bg3); color: var(--fg); }
+nav button.active { background: var(--accent2); color: #fff; border-left: 3px solid var(--accent); }
+.content { flex: 1; overflow-y: auto; padding: 24px; }
+.page { display: none; }
+.page.active { display: block; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; color: var(--fg2); margin-bottom: 4px; }
+.form-row { display: flex; gap: 12px; align-items: end; }
+.form-row .form-group { flex: 1; }
+input[type="text"], input[type="number"], select, textarea {
+  width: 100%; background: var(--input-bg); border: 1px solid var(--border); color: var(--fg);
+  padding: 8px 12px; border-radius: var(--radius); font-size: 14px; outline: none;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+textarea { resize: vertical; min-height: 80px; font-family: 'Consolas', monospace; }
+.btn { padding: 8px 16px; border: none; border-radius: var(--radius); cursor: pointer; font-size: 13px; font-weight: 600; transition: all .15s; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { filter: brightness(1.15); }
+.btn-secondary { background: var(--bg3); color: var(--fg); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--accent2); }
+.btn-success { background: var(--green); color: #000; }
+.btn-danger { background: var(--red); color: #000; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.toggle-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.toggle { position: relative; width: 40px; height: 22px; cursor: pointer; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle .slider { position: absolute; inset: 0; background: var(--border); border-radius: 11px; transition: .2s; }
+.toggle .slider::before { content:''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: var(--fg); border-radius: 50%; transition: .2s; }
+.toggle input:checked + .slider { background: var(--accent); }
+.toggle input:checked + .slider::before { transform: translateX(18px); }
+.log-box { background: #0d0d1a; border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; font-family: 'Consolas', monospace; font-size: 12px; height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; line-height: 1.5; }
+.log-box .log-line { color: var(--fg2); }
+.log-box .log-line.error { color: var(--red); }
+.log-box .log-line.info { color: var(--green); }
+.log-toolbar { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+.section-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+.browse-btn { white-space: nowrap; }
+.inline-help { font-size: 11px; color: var(--fg2); margin-top: 2px; }
+.range-display { display: flex; align-items: center; gap: 8px; }
+.range-display input[type="range"] { flex: 1; accent-color: var(--accent); }
+.range-display .range-val { min-width: 50px; text-align: right; font-family: monospace; }
+@media (max-width: 800px) {
+  .main { flex-direction: column; }
+  nav { width: 100%; flex-direction: row; overflow-x: auto; }
+  nav button { white-space: nowrap; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>🦙</span> llama.cpp Run Manager</h1>
+  <div id="statusBadge" class="status-badge status-stopped">● 已停止</div>
+  <span id="listenAddr" style="font-size:12px;color:var(--fg2)"></span>
+</header>
+
+<div class="main">
+  <nav>
+    <button class="active" onclick="showPage('config')">⚙️ 配置</button>
+    <button onclick="showPage('sampling')">🎲 采样器</button>
+    <button onclick="showPage('prompt')">📝 提示词</button>
+    <button onclick="showPage('server')">🖥️ 服务器</button>
+    <button onclick="showPage('update')">🔄 更新编译</button>
+    <button onclick="showPage('logs')">📋 日志</button>
+  </nav>
+
+  <div class="content">
+    <!-- ═══ 配置页 ═══ -->
+    <div id="page-config" class="page active">
+      <div class="section-title">📁 llama.cpp 配置</div>
+
+      <div class="card">
+        <div class="form-group">
+          <label>llama.cpp 目录</label>
+          <div class="form-row">
+            <div class="form-group" style="flex:3">
+              <input type="text" id="llamaCppDir" placeholder="/home/user/llama.cpp" onchange="onDirChange()">
+            </div>
+            <button class="btn btn-secondary browse-btn" onclick="detectServer()">🔍 检测</button>
+          </div>
+          <div class="inline-help" id="serverBinStatus"></div>
+        </div>
+
+        <div class="form-group">
+          <label>模型路径</label>
+          <div class="form-row">
+            <div class="form-group" style="flex:3">
+              <input type="text" id="modelPath" placeholder="/path/to/model.gguf">
+            </div>
+            <button class="btn btn-secondary browse-btn" onclick="openModelBrowser()">📂 浏览</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>mmproj 路径 (可选)</label>
+          <input type="text" id="mmprojPath" placeholder="/path/to/mmproj.gguf">
+        </div>
+      </div>
+
+      <div class="section-title">🔧 基础设置</div>
+      <div class="card">
+        <div class="grid-3">
+          <div class="form-group">
+            <label>上下文长度 (ctx_size)</label>
+            <input type="number" id="ctxSize" value="4096" min="128" step="128">
+          </div>
+          <div class="form-group">
+            <label>GPU 卸载层数 (ngl)</label>
+            <input type="number" id="ngl" value="99" min="0">
+          </div>
+          <div class="form-group">
+            <label>CPU 线程数</label>
+            <input type="number" id="threads" value="8" min="1">
+          </div>
+          <div class="form-group">
+            <label>并行数 (parallel)</label>
+            <input type="number" id="parallel" value="1" min="1">
+          </div>
+          <div class="form-group">
+            <label>KV 缓存量化</label>
+            <select id="kvCacheQuant">
+              <option value="">默认 (不量化)</option>
+              <option value="q8_0">q8_0</option>
+              <option value="q4_0">q4_0</option>
+              <option value="q4_1">q4_1</option>
+              <option value="iq4_nl">iq4_nl</option>
+              <option value="f16">f16</option>
+            </select>
+          </div>
+        </div>
+        <div class="toggle-row">
+          <label class="toggle"><input type="checkbox" id="mmap" checked><span class="slider"></span></label>
+          <span>内存映射 (mmap)</span>
+        </div>
+        <div class="toggle-row">
+          <label class="toggle"><input type="checkbox" id="moeCpuOffload"><span class="slider"></span></label>
+          <span>MoE 专家层 CPU 卸载</span>
+        </div>
+        <div class="toggle-row">
+          <label class="toggle"><input type="checkbox" id="enableThinking"><span class="slider"></span></label>
+          <span>思维链 (enable-thinking)</span>
+        </div>
+      </div>
+
+      <div class="section-title">🌐 服务器模式</div>
+      <div class="card">
+        <div class="grid-3">
+          <div class="form-group">
+            <label>监听模式</label>
+            <select id="serverMode" onchange="onModeChange()">
+              <option value="local">本地 (127.0.0.1)</option>
+              <option value="lan">局域网 (0.0.0.0)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>监听地址</label>
+            <input type="text" id="serverHost" value="127.0.0.1">
+          </div>
+          <div class="form-group">
+            <label>端口</label>
+            <input type="number" id="serverPort" value="8080" min="1" max="65535">
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn btn-primary" onclick="saveConfig()">💾 保存配置</button>
+        <button class="btn btn-secondary" onclick="exportConfig()">📤 导出 JSON</button>
+        <button class="btn btn-secondary" onclick="importConfig()">📥 导入 JSON</button>
+        <select id="configList" onchange="loadConfig()" style="margin-left:auto;background:var(--input-bg);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px">
+          <option value="">-- 已保存配置 --</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ═══ 采样器页 ═══ -->
+    <div id="page-sampling" class="page">
+      <div class="section-title">🎲 采样器设置</div>
+      <div class="card">
+        <div class="form-group">
+          <label>温度 (temperature)</label>
+          <div class="range-display">
+            <input type="range" id="tempRange" min="0" max="2" step="0.05" value="0.7" oninput="syncRange('temp')">
+            <input type="number" id="tempVal" value="0.7" min="0" max="2" step="0.05" style="width:80px" oninput="syncVal('temp')">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Top-K</label>
+          <div class="range-display">
+            <input type="range" id="topkRange" min="0" max="200" step="1" value="40" oninput="syncRange('topk')">
+            <input type="number" id="topkVal" value="40" min="0" max="200" style="width:80px" oninput="syncVal('topk')">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Top-P</label>
+          <div class="range-display">
+            <input type="range" id="toppRange" min="0" max="1" step="0.01" value="0.95" oninput="syncRange('topp')">
+            <input type="number" id="toppVal" value="0.95" min="0" max="1" step="0.01" style="width:80px" oninput="syncVal('topp')">
+          </div>
+        </div>
+
+        <hr style="border-color:var(--border);margin:16px 0">
+
+        <div class="toggle-row">
+          <label class="toggle"><input type="checkbox" id="minpEnabled" onchange="toggleSampler('minp')"><span class="slider"></span></label>
+          <span>Min-P</span>
+        </div>
+        <div class="form-group" id="minpGroup" style="opacity:.4;pointer-events:none">
+          <div class="range-display">
+            <input type="range" id="minpRange" min="0" max="1" step="0.01" value="0.05" oninput="syncRange('minp')">
+            <input type="number" id="minpVal" value="0.05" min="0" max="1" step="0.01" style="width:80px" oninput="syncVal('minp')">
+          </div>
+        </div>
+
+        <div class="toggle-row">
+          <label class="toggle"><input type="checkbox" id="repeatPenaltyEnabled" onchange="toggleSampler('repeat')"><span class="slider"></span></label>
+          <span>重复惩罚 (repeat penalty)</span>
+        </div>
+        <div class="form-group" id="repeatGroup" style="opacity:.4;pointer-events:none">
+          <div class="range-display">
+            <input type="range" id="repeatRange" min="1" max="2" step="0.05" value="1.1" oninput="syncRange('repeat')">
+            <input type="number" id="repeatVal" value="1.1" min="1" max="2" step="0.05" style="width:80px" oninput="syncVal('repeat')">
+          </div>
+        </div>
+
+        <div class="toggle-row">
+          <label class="toggle"><input type="checkbox" id="presencePenaltyEnabled" onchange="toggleSampler('presence')"><span class="slider"></span></label>
+          <span>存在惩罚 (presence penalty)</span>
+        </div>
+        <div class="form-group" id="presenceGroup" style="opacity:.4;pointer-events:none">
+          <div class="range-display">
+            <input type="range" id="presenceRange" min="0" max="2" step="0.05" value="0" oninput="syncRange('presence')">
+            <input type="number" id="presenceVal" value="0" min="0" max="2" step="0.05" style="width:80px" oninput="syncVal('presence')">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 提示词页 ═══ -->
+    <div id="page-prompt" class="page">
+      <div class="section-title">📝 提示词与额外参数</div>
+      <div class="card">
+        <div class="form-group">
+          <label>系统提示词 (system prompt)</label>
+          <textarea id="systemPrompt" rows="6" placeholder="You are a helpful assistant..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>额外参数 (extra params)</label>
+          <textarea id="extraParams" rows="3" placeholder="--flash-attn --no-mmap 等实验性参数，用空格分隔"></textarea>
+          <div class="inline-help">直接追加到 llama-server 命令行末尾，用于实验性 PR 参数</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 服务器页 ═══ -->
+    <div id="page-server" class="page">
+      <div class="section-title">🖥️ 服务器控制</div>
+      <div class="card">
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px">
+          <button class="btn btn-success" id="btnStart" onclick="startServer()">▶ 启动</button>
+          <button class="btn btn-danger" id="btnStop" onclick="stopServer()" disabled>⏹ 停止</button>
+          <button class="btn btn-secondary" onclick="refreshStatus()">🔄 刷新状态</button>
+          <span id="serverInfo" style="font-size:13px;color:var(--fg2)"></span>
+        </div>
+        <div class="form-group">
+          <label>当前命令预览</label>
+          <div id="cmdPreview" style="background:#0d0d1a;padding:12px;border-radius:var(--radius);font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;color:var(--fg2);max-height:200px;overflow-y:auto"></div>
+        </div>
+      </div>
+      <div class="section-title">📋 实时日志</div>
+      <div class="log-toolbar">
+        <button class="btn btn-secondary" onclick="clearLogs()">🗑 清空日志</button>
+        <label style="font-size:12px;color:var(--fg2)"><input type="checkbox" id="autoScroll" checked> 自动滚动</label>
+      </div>
+      <div class="log-box" id="serverLog"></div>
+    </div>
+
+    <!-- ═══ 更新页 ═══ -->
+    <div id="page-update" class="page">
+      <div class="section-title">🔄 更新与编译</div>
+      <div class="card">
+        <div style="display:flex;gap:12px;margin-bottom:16px">
+          <button class="btn btn-secondary" onclick="checkUpdate()">🔍 检查更新</button>
+          <button class="btn btn-primary" onclick="pullUpdate()">⬇ 拉取更新</button>
+          <button class="btn btn-success" id="btnCompile" onclick="startCompile()">🔨 开始编译</button>
+        </div>
+        <div id="updateInfo" style="font-size:13px;color:var(--fg2);margin-bottom:16px"></div>
+        <div class="form-group">
+          <label>编译命令</label>
+          <input type="text" id="compileCmd" value='cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release -j12'>
+          <div class="inline-help">可自定义，支持 && 连接多条命令</div>
+        </div>
+      </div>
+      <div class="section-title">📋 编译日志</div>
+      <div class="log-box" id="compileLog" style="height:350px"></div>
+    </div>
+
+    <!-- ═══ 日志页 (独立全屏日志) ═══ -->
+    <div id="page-logs" class="page">
+      <div class="section-title">📋 运行日志</div>
+      <div class="log-toolbar">
+        <button class="btn btn-secondary" onclick="clearLogs()">🗑 清空日志</button>
+        <button class="btn btn-secondary" onclick="downloadLogs()">💾 下载日志</button>
+        <label style="font-size:12px;color:var(--fg2)"><input type="checkbox" id="autoScroll2" checked> 自动滚动</label>
+      </div>
+      <div class="log-box" id="fullLog" style="height:calc(100vh - 200px)"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 模型浏览器弹窗 ═══ -->
+<div id="modelModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;width:500px;max-width:90vw;max-height:80vh;display:flex;flex-direction:column">
+    <h3 style="margin-bottom:12px">📂 模型浏览器</h3>
+    <div class="form-group">
+      <label>父目录</label>
+      <div class="form-row">
+        <input type="text" id="browseDir" placeholder="/path/to/models">
+        <button class="btn btn-secondary" onclick="scanDir()">扫描</button>
+      </div>
+    </div>
+    <div id="modelList" style="flex:1;overflow-y:auto;max-height:300px;margin:8px 0"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="closeModelModal()">取消</button>
+      <button class="btn btn-primary" onclick="selectModel()">选择</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 导入文件 input ═══ -->
+<input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImport(event)">
+
+<script>
+// ── State ──
+let ws = null, wsCompile = null;
+let statusTimer = null;
+
+// ── Navigation ──
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'server') connectLogWS();
+  if (name === 'update') connectCompileWS();
+  if (name === 'logs') connectLogWS();
+}
+
+// ── Range sync ──
+function syncRange(name) {
+  document.getElementById(name + 'Val').value = document.getElementById(name + 'Range').value;
+}
+function syncVal(name) {
+  document.getElementById(name + 'Range').value = document.getElementById(name + 'Val').value;
+}
+
+// ── Toggle sampler ──
+function toggleSampler(name) {
+  const el = document.getElementById(name + 'Enabled');
+  const grp = document.getElementById(name + 'Group');
+  grp.style.opacity = el.checked ? '1' : '.4';
+  grp.style.pointerEvents = el.checked ? 'auto' : 'none';
+}
+
+// ── Mode ──
+function onModeChange() {
+  const m = document.getElementById('serverMode').value;
+  document.getElementById('serverHost').value = m === 'lan' ? '0.0.0.0' : '127.0.0.1';
+}
+
+// ── Config <-> UI ──
+function configFromUI() {
+  return {
+    llama_cpp_dir: document.getElementById('llamaCppDir').value,
+    model_path: document.getElementById('modelPath').value,
+    mmproj_path: document.getElementById('mmprojPath').value,
+    basic: {
+      ctx_size: +document.getElementById('ctxSize').value,
+      ngl: +document.getElementById('ngl').value,
+      threads: +document.getElementById('threads').value,
+      parallel: +document.getElementById('parallel').value,
+      mmap: document.getElementById('mmap').checked,
+      moe_cpu_offload: document.getElementById('moeCpuOffload').checked,
+      kv_cache_quant: document.getElementById('kvCacheQuant').value,
+      enable_thinking: document.getElementById('enableThinking').checked,
+    },
+    sampling: {
+      temperature: +document.getElementById('tempVal').value,
+      top_k: +document.getElementById('topkVal').value,
+      top_p: +document.getElementById('toppVal').value,
+      min_p_enabled: document.getElementById('minpEnabled').checked,
+      min_p: +document.getElementById('minpVal').value,
+      repeat_penalty_enabled: document.getElementById('repeatPenaltyEnabled').checked,
+      repeat_penalty: +document.getElementById('repeatVal').value,
+      presence_penalty_enabled: document.getElementById('presencePenaltyEnabled').checked,
+      presence_penalty: +document.getElementById('presenceVal').value,
+    },
+    system_prompt: document.getElementById('systemPrompt').value,
+    extra_params: document.getElementById('extraParams').value,
+    server: {
+      host: document.getElementById('serverHost').value,
+      port: +document.getElementById('serverPort').value,
+      mode: document.getElementById('serverMode').value,
+    },
+    compile: { command: document.getElementById('compileCmd').value },
+  };
+}
+
+function uiFromConfig(c) {
+  document.getElementById('llamaCppDir').value = c.llama_cpp_dir || '';
+  document.getElementById('modelPath').value = c.model_path || '';
+  document.getElementById('mmprojPath').value = c.mmproj_path || '';
+  const b = c.basic || {};
+  document.getElementById('ctxSize').value = b.ctx_size ?? 4096;
+  document.getElementById('ngl').value = b.ngl ?? 99;
+  document.getElementById('threads').value = b.threads ?? 8;
+  document.getElementById('parallel').value = b.parallel ?? 1;
+  document.getElementById('mmap').checked = b.mmap ?? true;
+  document.getElementById('moeCpuOffload').checked = b.moe_cpu_offload ?? false;
+  document.getElementById('kvCacheQuant').value = b.kv_cache_quant || '';
+  document.getElementById('enableThinking').checked = b.enable_thinking ?? false;
+  const s = c.sampling || {};
+  document.getElementById('tempVal').value = s.temperature ?? 0.7;
+  document.getElementById('tempRange').value = s.temperature ?? 0.7;
+  document.getElementById('topkVal').value = s.top_k ?? 40;
+  document.getElementById('topkRange').value = s.top_k ?? 40;
+  document.getElementById('toppVal').value = s.top_p ?? 0.95;
+  document.getElementById('toppRange').value = s.top_p ?? 0.95;
+  document.getElementById('minpEnabled').checked = s.min_p_enabled ?? false;
+  document.getElementById('minpVal').value = s.min_p ?? 0.05;
+  document.getElementById('minpRange').value = s.min_p ?? 0.05;
+  document.getElementById('repeatPenaltyEnabled').checked = s.repeat_penalty_enabled ?? false;
+  document.getElementById('repeatVal').value = s.repeat_penalty ?? 1.1;
+  document.getElementById('repeatRange').value = s.repeat_penalty ?? 1.1;
+  document.getElementById('presencePenaltyEnabled').checked = s.presence_penalty_enabled ?? false;
+  document.getElementById('presenceVal').value = s.presence_penalty ?? 0;
+  document.getElementById('presenceRange').value = s.presence_penalty ?? 0;
+  toggleSampler('minp'); toggleSampler('repeat'); toggleSampler('presence');
+  document.getElementById('systemPrompt').value = c.system_prompt || '';
+  document.getElementById('extraParams').value = c.extra_params || '';
+  const sv = c.server || {};
+  document.getElementById('serverMode').value = sv.mode || 'local';
+  document.getElementById('serverHost').value = sv.host || '127.0.0.1';
+  document.getElementById('serverPort').value = sv.port ?? 8080;
+  document.getElementById('compileCmd').value = c.compile?.command || 'cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release -j12';
+  document.getElementById('listenAddr').textContent = `监听: ${sv.host || '127.0.0.1'}:${sv.port || 8080}`;
+}
+
+// ── API calls ──
+async function api(url, opts = {}) {
+  const r = await fetch(url, { headers: {'Content-Type':'application/json'}, ...opts });
+  return r.json();
+}
+
+async function loadInitialConfig() {
+  const c = await api('/api/config');
+  uiFromConfig(c);
+  refreshConfigList();
+}
+
+async function saveConfig() {
+  await api('/api/config', { method:'POST', body: JSON.stringify(configFromUI()) });
+  alert('配置已保存');
+  refreshConfigList();
+}
+
+async function refreshConfigList() {
+  const {configs} = await api('/api/config/list');
+  const sel = document.getElementById('configList');
+  sel.innerHTML = '<option value="">-- 已保存配置 --</option>';
+  configs.forEach(n => { sel.innerHTML += `<option value="${n}">${n}</option>`; });
+}
+
+async function loadConfig() {
+  const name = document.getElementById('configList').value;
+  if (!name) return;
+  const c = await api('/api/config/load', { method:'POST', body: JSON.stringify({name}) });
+  uiFromConfig(c);
+}
+
+function exportConfig() {
+  const blob = new Blob([JSON.stringify(configFromUI(), null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'llama-manager-config.json';
+  a.click();
+}
+
+function importConfig() {
+  document.getElementById('importFile').click();
+}
+
+async function handleImport(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  const c = await api('/api/config/import', { method:'POST', body: JSON.stringify({content: text}) });
+  uiFromConfig(c);
+  e.target.value = '';
+}
+
+// ── Model browser ──
+function openModelBrowser() {
+  const dir = document.getElementById('llamaCppDir').value;
+  if (dir) document.getElementById('browseDir').value = dir + '/models';
+  document.getElementById('modelModal').style.display = 'flex';
+}
+function closeModelModal() {
+  document.getElementById('modelModal').style.display = 'none';
+}
+async function scanDir() {
+  const dir = document.getElementById('browseDir').value;
+  const {models} = await api('/api/scan-models?dir=' + encodeURIComponent(dir));
+  const list = document.getElementById('modelList');
+  if (!models.length) { list.innerHTML = '<p style="color:var(--fg2)">未找到 .gguf 文件</p>'; return; }
+  list.innerHTML = models.map(m => `
+    <label style="display:flex;gap:8px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:4px;cursor:pointer">
+      <input type="radio" name="modelPick" value="${m.path}">
+      <span style="flex:1">${m.name}</span>
+      <span style="color:var(--fg2);font-size:12px">${m.size_mb} MB</span>
+    </label>
+  `).join('');
+}
+function selectModel() {
+  const picked = document.querySelector('input[name="modelPick"]:checked');
+  if (picked) document.getElementById('modelPath').value = picked.value;
+  closeModelModal();
+}
+
+// ── Server detect ──
+async function detectServer() {
+  const dir = document.getElementById('llamaCppDir').value;
+  const r = await api('/api/detect-server?llama_cpp_dir=' + encodeURIComponent(dir));
+  const el = document.getElementById('serverBinStatus');
+  if (r.found) { el.textContent = '✅ 找到: ' + r.path; el.style.color = 'var(--green)'; }
+  else { el.textContent = '❌ 未找到 llama-server'; el.style.color = 'var(--red)'; }
+}
+
+async function onDirChange() { detectServer(); }
+
+// ── Server control ──
+async function startServer() {
+  document.getElementById('btnStart').disabled = true;
+  // Save config first
+  await api('/api/config', { method:'POST', body: JSON.stringify(configFromUI()) });
+  const r = await api('/api/server/start', { method:'POST' });
+  if (r.error) { alert('启动失败: ' + r.error); document.getElementById('btnStart').disabled = false; return; }
+  connectLogWS();
+  refreshStatus();
+}
+
+async function stopServer() {
+  document.getElementById('btnStop').disabled = true;
+  await api('/api/server/stop', { method:'POST' });
+  refreshStatus();
+}
+
+async function refreshStatus() {
+  const s = await api('/api/server/status');
+  const badge = document.getElementById('statusBadge');
+  const info = document.getElementById('serverInfo');
+  const btnStart = document.getElementById('btnStart');
+  const btnStop = document.getElementById('btnStop');
+
+  badge.className = 'status-badge';
+  if (s.state === 'running') {
+    badge.classList.add('status-running');
+    badge.textContent = '● 运行中';
+    btnStart.disabled = true; btnStop.disabled = false;
+    info.textContent = `PID: ${s.pid} | 运行: ${Math.floor(s.uptime_seconds/60)}m${Math.floor(s.uptime_seconds%60)}s`;
+  } else {
+    badge.classList.add('status-stopped');
+    badge.textContent = '● 已停止';
+    btnStart.disabled = false; btnStop.disabled = true;
+    info.textContent = s.error || '';
+  }
+}
+
+// ── WebSocket logs ──
+function connectLogWS() {
+  if (ws && ws.readyState <= 1) return;
+  ws = new WebSocket(`ws://${location.host}/ws/logs`);
+  ws.onmessage = (e) => appendLog('serverLog', e.data);
+  ws.onclose = () => { setTimeout(connectLogWS, 3000); };
+}
+
+function connectCompileWS() {
+  if (wsCompile && wsCompile.readyState <= 1) return;
+  wsCompile = new WebSocket(`ws://${location.host}/ws/compile`);
+  wsCompile.onmessage = (e) => appendLog('compileLog', e.data);
+  wsCompile.onclose = () => { setTimeout(connectCompileWS, 3000); };
+}
+
+function appendLog(boxId, text) {
+  const box = document.getElementById(boxId);
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  if (text.includes('ERROR') || text.includes('error')) line.classList.add('error');
+  if (text.includes('[manager]')) line.classList.add('info');
+  line.textContent = text;
+  box.appendChild(line);
+  // Also mirror to full log
+  if (boxId === 'serverLog') {
+    const full = document.getElementById('fullLog');
+    const line2 = line.cloneNode(true);
+    full.appendChild(line2);
+    if (document.getElementById('autoScroll2')?.checked) full.scrollTop = full.scrollHeight;
+  }
+  const autoScroll = document.getElementById('autoScroll');
+  if (autoScroll?.checked) box.scrollTop = box.scrollHeight;
+}
+
+async function clearLogs() {
+  await api('/api/server/logs/clear', { method:'POST' });
+  document.getElementById('serverLog').innerHTML = '';
+  document.getElementById('fullLog').innerHTML = '';
+}
+
+function downloadLogs() {
+  const text = document.getElementById('fullLog').innerText;
+  const blob = new Blob([text], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `llama-server-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.log`;
+  a.click();
+}
+
+// ── Update ──
+async function checkUpdate() {
+  const r = await api('/api/update/check');
+  const el = document.getElementById('updateInfo');
+  if (r.error) { el.textContent = '❌ ' + r.error; el.style.color = 'var(--red)'; return; }
+  if (r.has_update) {
+    el.innerHTML = `🔄 有更新可用! 当前: <b>${r.current_commit}</b> → 远程: <b>${r.remote_commit}</b>`;
+    el.style.color = 'var(--yellow)';
+  } else {
+    el.innerHTML = `✅ 已是最新版本 (${r.current_commit})`;
+    el.style.color = 'var(--green)';
+  }
+}
+
+async function pullUpdate() {
+  const r = await api('/api/update/pull', { method:'POST' });
+  const el = document.getElementById('updateInfo');
+  if (r.success) { el.textContent = '✅ 拉取成功: ' + r.output; el.style.color = 'var(--green)'; }
+  else { el.textContent = '❌ ' + (r.error || r.output); el.style.color = 'var(--red)'; }
+}
+
+async function startCompile() {
+  document.getElementById('btnCompile').disabled = true;
+  // Save compile cmd
+  const cfg = configFromUI();
+  await api('/api/config', { method:'POST', body: JSON.stringify(cfg) });
+  const r = await api('/api/update/compile', { method:'POST' });
+  if (r.error) { alert('编译启动失败: ' + r.error); document.getElementById('btnCompile').disabled = false; return; }
+  connectCompileWS();
+}
+
+// ── Init ──
+loadInitialConfig();
+statusTimer = setInterval(refreshStatus, 5000);
+refreshStatus();
+</script>
+</body>
+</html>

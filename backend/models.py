@@ -1,0 +1,70 @@
+"""Pydantic data models for llama.cpp Run Manager."""
+from __future__ import annotations
+from pydantic import BaseModel, Field
+from typing import Optional
+
+
+class BasicSettings(BaseModel):
+    ctx_size: int = 4096
+    ngl: int = 99
+    threads: int = 8
+    parallel: int = 1
+    mmap: bool = True
+    moe_cpu_offload: bool = False
+    kv_cache_quant: str = ""  # e.g. "q8_0", "q4_0", empty = default
+    enable_thinking: bool = False
+
+
+class SamplingSettings(BaseModel):
+    temperature: float = 0.7
+    top_k: int = 40
+    top_p: float = 0.95
+    min_p_enabled: bool = False
+    min_p: float = 0.05
+    repeat_penalty_enabled: bool = False
+    repeat_penalty: float = 1.1
+    presence_penalty_enabled: bool = False
+    presence_penalty: float = 0.0
+
+
+class ServerSettings(BaseModel):
+    host: str = "127.0.0.1"
+    port: int = 8080
+    mode: str = "local"  # "local" or "lan"
+
+
+class CompileSettings(BaseModel):
+    command: str = "cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release -j12"
+
+
+class AppConfig(BaseModel):
+    llama_cpp_dir: str = ""
+    model_path: str = ""
+    mmproj_path: str = ""
+    basic: BasicSettings = Field(default_factory=BasicSettings)
+    sampling: SamplingSettings = Field(default_factory=SamplingSettings)
+    system_prompt: str = ""
+    extra_params: str = ""
+    server: ServerSettings = Field(default_factory=ServerSettings)
+    compile: CompileSettings = Field(default_factory=CompileSettings)
+
+
+class ModelInfo(BaseModel):
+    name: str
+    path: str
+    size_mb: float
+
+
+class ServerStatus(BaseModel):
+    state: str = "stopped"  # stopped, starting, running, error
+    pid: Optional[int] = None
+    uptime_seconds: float = 0
+    error: Optional[str] = None
+
+
+class UpdateStatus(BaseModel):
+    has_update: bool = False
+    current_commit: str = ""
+    remote_commit: str = ""
+    is_compiling: bool = False
+    compile_output: str = ""
