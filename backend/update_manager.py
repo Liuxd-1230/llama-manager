@@ -2,6 +2,7 @@
 from __future__ import annotations
 import asyncio
 import subprocess
+import sys
 from typing import List
 from pathlib import Path
 
@@ -117,6 +118,18 @@ class UpdateManager:
 
     def get_compile_logs(self) -> List[str]:
         return list(self._compile_log)
+
+    async def stop(self):
+        if self._compile_process and self._compile_process.returncode is None:
+            self._append("[compile] Stopping...")
+            if sys.platform == "win32":
+                kill = await asyncio.create_subprocess_exec("taskkill","/F","/T","/PID",str(self._compile_process.pid),
+                    stdout=asyncio.subprocess.DEVNULL,stderr=asyncio.subprocess.DEVNULL)
+                await kill.wait()
+            else:
+                self._compile_process.terminate()
+            self._append("[compile] Stopped.")
+            self._is_compiling = False
 
     def is_compiling(self) -> bool:
         return self._is_compiling

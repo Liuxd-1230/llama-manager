@@ -343,6 +343,7 @@ textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); fo
           <button class="btn btn-secondary" onclick="checkUpdate()">🔍 检查更新</button>
           <button class="btn btn-primary" onclick="pullUpdate()">⬇ 拉取更新</button>
           <button class="btn btn-success" id="btnCompile" onclick="startCompile()">🔨 开始编译</button>
+          <button class="btn btn-danger" id="btnCompileStop" onclick="stopCompile()" disabled>⏹ 停止</button>
         </div>
         <div id="updateInfo" style="font-size:13px;color:var(--fg-muted);margin-bottom:14px"></div>
         <div class="form-group"><label>编译命令</label><input type="text" id="compileCmd" value='cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release -j12'><div class="inline-help">可自定义，支持 && 连接多条命令</div></div>
@@ -364,6 +365,7 @@ textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); fo
             <div class="form-group" style="flex:3"><input type="text" id="downloadDir" placeholder="C:\Users\you"></div>
             <button class="btn btn-secondary" onclick="openFolderPicker('downloadDir')">📂 浏览</button>
             <button class="btn btn-success" id="btnDownload" onclick="startDownload()">⬇ 开始下载</button>
+            <button class="btn btn-danger" id="btnDownloadStop" onclick="stopDownload()" disabled>⏹ 停止</button>
           </div>
           <div class="inline-help">将在该目录下创建 llama.cpp 文件夹，自动 git clone --depth=1</div>
         </div>
@@ -556,9 +558,12 @@ function showToast(msg){
 // ── Folder browser ──
 let nativePickerTarget='';
 function openFolderPicker(targetInput){
-  nativePickerTarget=targetInput;
-  // Use native OS folder picker
-  document.getElementById('nativeFolderPicker').click();
+  // Open the custom browser modal instead — native picker says "Upload" which is confusing
+  folderCallback=(path)=>{document.getElementById(targetInput).value=path;if(targetInput==='llamaCppDir')setTimeout(detectServer,200)};
+  currentBrowsePath=document.getElementById(targetInput).value||'';
+  document.getElementById('folderModal').classList.add('show');
+  loadDriveList();
+  if(currentBrowsePath) browseTo(currentBrowsePath); else browseTo(isWindows?'E:\\':'/');
 }
 function handleNativeFolder(e){
   const files=e.target.files;
@@ -679,10 +684,12 @@ function openWebUI(){const s=cfgFromUI().server;window.open(`http://${s.host==='
 // ── Update ──
 async function checkUpdate(){const r=await api('/api/update/check');const el=document.getElementById('updateInfo');if(r.error){el.textContent='❌ '+r.error;el.style.color='var(--red)';return}if(r.has_update){el.innerHTML=`🔄 有更新: <b>${r.current_commit}</b> → <b>${r.remote_commit}</b>`;el.style.color='var(--yellow)'}else{el.innerHTML=`✅ 已是最新 (${r.current_commit})`;el.style.color='var(--green)'}}
 async function pullUpdate(){const r=await api('/api/update/pull',{method:'POST'});const el=document.getElementById('updateInfo');if(r.success){el.textContent='✅ '+r.output;el.style.color='var(--green)'}else{el.textContent='❌ '+(r.error||r.output);el.style.color='var(--red)'}}
-async function startCompile(){document.getElementById('btnCompile').disabled=true;await api('/api/config',{method:'POST',body:JSON.stringify(cfgFromUI())});const r=await api('/api/update/compile',{method:'POST'});if(r.error){alert(r.error);document.getElementById('btnCompile').disabled=false;return}connectCompileWS()}
+async function stopCompile(){await api('/api/update/compile/stop',{method:'POST'});document.getElementById('btnCompile').disabled=false;document.getElementById('btnCompileStop').disabled=true}
+async function startCompile(){document.getElementById('btnCompile').disabled=true;document.getElementById('btnCompileStop').disabled=false;await api('/api/config',{method:'POST',body:JSON.stringify(cfgFromUI())});const r=await api('/api/update/compile',{method:'POST'});if(r.error){alert(r.error);document.getElementById('btnCompile').disabled=false;return}connectCompileWS()}
 
 // ── Download ──
-async function startDownload(){const dir=document.getElementById('downloadDir').value;if(!dir){alert('请填写目标文件夹');return}document.getElementById('btnDownload').disabled=true;const r=await api('/api/download/start',{method:'POST',body:JSON.stringify({target_dir:dir})});if(r.error){alert(r.error);document.getElementById('btnDownload').disabled=false;return}connectDownloadWS()}
+async function stopDownload(){await api('/api/download/stop',{method:'POST'});document.getElementById('btnDownload').disabled=false;document.getElementById('btnDownloadStop').disabled=true}
+async function startDownload(){const dir=document.getElementById('downloadDir').value;if(!dir){alert('请填写目标文件夹');return}document.getElementById('btnDownload').disabled=true;document.getElementById('btnDownloadStop').disabled=false;const r=await api('/api/download/start',{method:'POST',body:JSON.stringify({target_dir:dir})});if(r.error){alert(r.error);document.getElementById('btnDownload').disabled=false;return}connectDownloadWS()}
 
 // ── Param preview ──
 function buildParamPreview(){

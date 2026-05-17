@@ -1,6 +1,7 @@
 """Download/clone llama.cpp to a local directory."""
 from __future__ import annotations
 import asyncio
+import sys
 from pathlib import Path
 from typing import List
 
@@ -70,6 +71,19 @@ class DownloadManager:
 
     def get_logs(self) -> List[str]:
         return list(self._log_buffer)
+
+    async def stop(self):
+        if self._process and self._process.returncode is None:
+            self._append("[download] Stopping...")
+            if sys.platform == "win32":
+                import asyncio
+                kill = await asyncio.create_subprocess_exec("taskkill","/F","/T","/PID",str(self._process.pid),
+                    stdout=asyncio.subprocess.DEVNULL,stderr=asyncio.subprocess.DEVNULL)
+                await kill.wait()
+            else:
+                self._process.terminate()
+            self._append("[download] Stopped.")
+            self._is_downloading = False
 
     def is_downloading(self) -> bool:
         return self._is_downloading

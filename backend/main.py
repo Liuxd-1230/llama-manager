@@ -133,6 +133,12 @@ async def update_compile():
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
+@app.post("/api/update/compile/stop")
+async def compile_stop():
+    await update_manager.stop()
+    return {"ok": True}
+
+
 @app.get("/api/update/compile/logs")
 def compile_logs():
     return {"logs": update_manager.get_compile_logs(), "is_compiling": update_manager.is_compiling()}
@@ -246,6 +252,12 @@ async def download_start(body: dict):
         return {"ok": True}
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
+
+
+@app.post("/api/download/stop")
+async def download_stop():
+    await download_manager.stop()
+    return {"ok": True}
 
 
 @app.get("/api/download/status")

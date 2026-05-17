@@ -97,9 +97,11 @@ def detect_server_binary(llama_cpp_dir: str) -> str:
     import sys
     exe = "llama-server.exe" if sys.platform == "win32" else "llama-server"
 
-    # 1. Common fixed paths (fast)
+    # 1. Common fixed paths (fast) — Windows MSVC uses Release/Debug subdirs
     candidates = [
         d / "build" / "bin" / exe,
+        d / "build" / "bin" / "Release" / exe,
+        d / "build" / "bin" / "Debug" / exe,
         d / exe,
     ]
     for c in candidates:
