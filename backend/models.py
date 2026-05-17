@@ -40,7 +40,7 @@ class ServerSettings(BaseModel):
 
 
 class CompileSettings(BaseModel):
-    command: str = "cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release -j12"
+    command: str = "cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="89" && cmake --build build --config Release -j12"
 
 
 class AppConfig(BaseModel):

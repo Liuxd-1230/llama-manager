@@ -36,6 +36,6 @@
     "mode": "local"
   },
   "compile": {
-    "command": "cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release -j12"
+    "command": "cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="89" && cmake --build build --config Release -j12"
   }
 }
