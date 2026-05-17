@@ -57,6 +57,8 @@ class ProcessManager:
             cmd.append("--mmap")
         else:
             cmd.append("--no-mmap")
+        if b.mlock:
+            cmd.append("--mlock")
 
         if b.n_cpu_moe > 0:
             cmd += ["--n-cpu-moe", str(b.n_cpu_moe)]

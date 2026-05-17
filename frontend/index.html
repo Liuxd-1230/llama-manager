@@ -190,7 +190,7 @@ textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); fo
           <label>mmproj 路径 (可选，多模态)</label>
           <div class="form-row">
             <div class="form-group" style="flex:3"><input type="text" id="mmprojPath" placeholder="mmproj-*.gguf"></div>
-            <button class="btn btn-secondary" onclick="openFilePicker('mmprojPath','gguf')">📂 浏览</button>
+            <button class="btn btn-secondary" onclick="openFileBrowser('mmprojPath')">📂 浏览</button>
           </div>
         </div>
       </div>
@@ -211,6 +211,7 @@ textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); fo
           </div>
         </div>
         <div class="toggle-row"><label class="toggle"><input type="checkbox" id="mmap" checked><span class="slider"></span></label><span>内存映射 (--mmap)</span></div>
+        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="mlock"><span class="slider"></span></label><span>锁定内存 (--mlock)</span></div>
         <div class="toggle-row"><label class="toggle"><input type="checkbox" id="enableThinking"><span class="slider"></span></label><span>思维链 (--enable-thinking)</span></div>
       </div>
 
@@ -402,7 +403,10 @@ textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); fo
   <div class="modal">
     <h3 id="folderModalTitle">📂 浏览文件夹</h3>
     <div class="breadcrumb" id="folderBreadcrumb"></div>
-    <div id="driveList" style="display:none;gap:6px;margin-bottom:10px;flex-wrap:wrap"></div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
+      <button class="btn btn-secondary" onclick="goUpOneLevel()" style="padding:3px 10px;font-size:12px">⬆ 上一级</button>
+      <div id="driveList" style="display:none;gap:6px;flex-wrap:wrap"></div>
+    </div>
     <div class="form-row" style="margin-bottom:10px">
       <input type="text" id="folderPathInput" placeholder="输入路径..." style="flex:1">
       <button class="btn btn-secondary" onclick="browseTo()">前往</button>
@@ -484,6 +488,7 @@ function cfgFromUI(){
       threads:+document.getElementById('threads').value,
       parallel:+document.getElementById('parallel').value,
       mmap:document.getElementById('mmap').checked,
+      mlock:document.getElementById('mlock').checked,
       n_cpu_moe:+document.getElementById('nCpuMoe').value,
       kv_cache_quant_k:document.getElementById('kvCacheQuantK').value,
       kv_cache_quant_v:document.getElementById('kvCacheQuantV').value,
@@ -522,6 +527,7 @@ function uiFromCfg(c){
   document.getElementById('threads').value=b.threads??8;
   document.getElementById('parallel').value=b.parallel??1;
   document.getElementById('mmap').checked=b.mmap??true;
+  document.getElementById('mlock').checked=b.mlock??false;
   document.getElementById('nCpuMoe').value=b.n_cpu_moe??0;
   document.getElementById('kvCacheQuantK').value=b.kv_cache_quant_k||'';
   document.getElementById('kvCacheQuantV').value=b.kv_cache_quant_v||'';
@@ -604,6 +610,15 @@ function handleNativeFile(e){
   }
   e.target.value='';
 }
+// File browser (for mmproj etc.) — same modal but picks files not dirs
+function openFileBrowser(targetInput){
+  folderCallback=(path)=>{document.getElementById(targetInput).value=path};
+  currentBrowsePath=document.getElementById(targetInput).value||'';
+  document.getElementById('folderModal').classList.add('show');
+  loadDriveList();
+  if(currentBrowsePath){let p=currentBrowsePath.replace(/[\\/][^\\/]*$/,'');browseTo(p||currentBrowsePath)}
+  else browseTo(isWindows?'E:\\':'/');
+}
 // Keep custom browser as fallback
 function openCustomFolderPicker(targetInput){
   folderCallback=(path)=>{document.getElementById(targetInput).value=path};
@@ -646,6 +661,12 @@ document.addEventListener('click',function(e){
   if(el){e.preventDefault();browseTo(el.dataset.browse)}
 });
 function selectFolder(){if(folderCallback)folderCallback(currentBrowsePath);closeFolderModal()}
+function goUpOneLevel(){
+  let p=currentBrowsePath.replace(/\\/g,'/').replace(/\/$/,'');
+  let idx=p.lastIndexOf('/');
+  if(idx>0){browseTo(p.substring(0,idx)+(isWindows&&idx<=2?'/':''))}
+  else if(isWindows&&p.length>=2){browseTo(p.substring(0,2)+'\\')}
+}
 
 // ── Model picker ──
 function openModelPicker(){
@@ -722,6 +743,7 @@ function buildParamPreview(){
   add('-t',c.basic.threads,'CPU 线程数');
   add('-np',c.basic.parallel,'并行数');
   add(c.basic.mmap?'--mmap':'--mmap=0','','内存映射');
+  if(c.basic.mlock) add('--mlock','','锁定内存');
   if(c.basic.n_cpu_moe>0) add('--n-cpu-moe',c.basic.n_cpu_moe,'MoE CPU 卸载层数');
   if(c.basic.kv_cache_quant_k) add('--cache-type-k',c.basic.kv_cache_quant_k,'KV 缓存量化 K');
   if(c.basic.kv_cache_quant_v) add('--cache-type-v',c.basic.kv_cache_quant_v,'KV 缓存量化 V');

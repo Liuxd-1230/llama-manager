@@ -10,6 +10,7 @@ class BasicSettings(BaseModel):
     threads: int = 8
     parallel: int = 1
     mmap: bool = True
+    mlock: bool = False  # lock model in RAM, prevent swapping
     n_cpu_moe: int = 0  # 0=disabled, >0 = number of MoE expert layers to offload to CPU
     kv_cache_quant_k: str = ""  # e.g. "q8_0", "q4_0", empty = default
     kv_cache_quant_v: str = ""  # separate K and V quant

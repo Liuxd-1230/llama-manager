@@ -8,6 +8,7 @@
     "threads": 8,
     "parallel": 1,
     "mmap": true,
+    "mlock": false,
     "n_cpu_moe": 0,
     "kv_cache_quant_k": "",
     "kv_cache_quant_v": "",
