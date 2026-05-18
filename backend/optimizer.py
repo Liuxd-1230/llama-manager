@@ -82,10 +82,10 @@ class Optimizer:
             "-m", model,
             "-ngl", str(ngl),
             "-t", str(threads),
-            "--ctx-size", str(ctx),  # context size (KV cache window)
-            "-p", "512",             # prompt size for pp benchmark
-            "-n", "128",             # tokens to generate for tg benchmark
-            "--output", "json",      # force JSON for reliable parsing
+            "-p", str(ctx),        # n-prompt: 模拟不同上下文大小
+            "-n", "128",           # n-gen: 生成 128 token 测 tg 速度
+            "-o", "json",          # JSON 输出
+            "-r", "3",             # 重复 3 次取平均
         ]
         if kv_k:
             cmd += ["--cache-type-k", kv_k]
@@ -148,27 +148,22 @@ class Optimizer:
             pp_tok_s = None
             tg_tok_s = None
 
-            # Strategy 1: Parse JSON (--output json)
-            # Format: {"results": [{"test": "pp512", "avg_ts": 1234.56}, ...]}
+            # Strategy 1: Parse JSON (-o json)
+            # Format: array of objects with avg_ts, n_prompt, n_gen
             try:
-                json_start = output.find('{')
-                json_end = output.rfind('}') + 1
+                json_start = output.find('[')
+                json_end = output.rfind(']') + 1
                 if json_start >= 0 and json_end > json_start:
-                    j = json.loads(output[json_start:json_end])
-                    results_list = j.get("results", [])
+                    results_list = json.loads(output[json_start:json_end])
                     if isinstance(results_list, list):
                         for r in results_list:
-                            test = str(r.get("test", "")).lower()
                             ts = r.get("avg_ts", 0)
-                            if "pp" in test and pp_tok_s is None:
+                            n_prompt = r.get("n_prompt", 0)
+                            n_gen = r.get("n_gen", 0)
+                            if n_prompt > 0 and pp_tok_s is None:
                                 pp_tok_s = float(ts)
-                            elif "tg" in test and tg_tok_s is None:
+                            elif n_gen > 0 and tg_tok_s is None:
                                 tg_tok_s = float(ts)
-                    # Also try flat keys
-                    if pp_tok_s is None and "avg_ts_pp" in j:
-                        pp_tok_s = float(j["avg_ts_pp"])
-                    if tg_tok_s is None and "avg_ts_tg" in j:
-                        tg_tok_s = float(j["avg_ts_tg"])
             except (json.JSONDecodeError, ValueError, TypeError, KeyError):
                 pass
 
