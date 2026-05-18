@@ -71,6 +71,18 @@ class ProcessManager:
         if b.enable_thinking:
             cmd += ["--chat-template-kwargs", '{"enable_thinking":true}']
 
+        # KV cache offload to GPU
+        if not b.kv_offload:
+            cmd.append("--no-kv-offload")
+
+        # Flash attention
+        if b.flash_attn:
+            cmd.append("--flash-attn")
+
+        # Fit model to GPU memory with margin
+        if b.fit_target > 0:
+            cmd += ["--fit-target", str(b.fit_target)]
+
         s = config.sampling
         cmd += ["--temp", str(s.temperature)]
         cmd += ["--top-k", str(s.top_k)]

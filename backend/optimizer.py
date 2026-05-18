@@ -75,7 +75,9 @@ class Optimizer:
 
     def _run_bench(self, bench_bin: str, model: str, ngl: int, threads: int,
                    ctx: int, kv_k: str, kv_v: str, n_cpu_moe: int,
-                   mmap: bool, mlock: bool) -> Optional[Dict[str, float]]:
+                   mmap: bool, mlock: bool,
+                   kv_offload: bool = True, flash_attn: bool = False,
+                   fit_target: int = 0) -> Optional[Dict[str, float]]:
         """Run llama-bench once and parse output. Returns {pp: tok/s, tg: tok/s} or None if OOM."""
         cmd = [
             bench_bin,
@@ -98,6 +100,15 @@ class Optimizer:
             cmd.append("--mmap")
         if mlock:
             cmd.append("--mlock")
+        # KV cache offload to GPU (default: offloaded, -nkvo 1 to disable)
+        if not kv_offload:
+            cmd += ["-nkvo", "1"]
+        # Flash attention
+        if flash_attn:
+            cmd += ["-fa", "1"]
+        # Fit model to GPU memory with margin
+        if fit_target > 0:
+            cmd += ["-fitt", str(fit_target)]
 
         self._append(f"  $ {' '.join(cmd)}")
 
@@ -248,6 +259,9 @@ class Optimizer:
         n_trials: int = 50,
         mmap: bool = True,
         mlock: bool = False,
+        kv_offload: bool = True,
+        flash_attn: bool = False,
+        fit_target: int = 0,
     ):
         """Run Bayesian optimization.
 

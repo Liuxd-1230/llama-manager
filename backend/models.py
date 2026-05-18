@@ -15,6 +15,9 @@ class BasicSettings(BaseModel):
     kv_cache_quant_k: str = ""  # e.g. "q8_0", "q4_0", empty = default
     kv_cache_quant_v: str = ""  # separate K and V quant
     enable_thinking: bool = False
+    kv_offload: bool = True  # KV cache offload to GPU (--no-kv-offload to disable)
+    flash_attn: bool = False  # Flash Attention
+    fit_target: int = 0  # --fit-target: fit model to GPU with margin in MiB (0=off)
 
 
 class SamplingSettings(BaseModel):
