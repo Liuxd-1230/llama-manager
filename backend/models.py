@@ -19,6 +19,10 @@ class BasicSettings(BaseModel):
     flash_attn: bool = False  # Flash Attention
     fit_target: int = 0  # --fit-target: fit model to GPU with margin in MiB (0=off)
     kv_unified: bool = True  # unified KV buffer shared across all sequences (--kv-unified)
+    batch_size: int = 2048  # logical max batch size (-b)
+    ubatch_size: int = 512  # physical max batch size (-ub)
+    context_shift: bool = False  # auto context shift on infinite generation
+    cache_ram: int = -1  # max cache size in MiB (-cram, -1=no limit, 0=disable)
 
 
 class SamplingSettings(BaseModel):

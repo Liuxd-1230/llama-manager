@@ -56,6 +56,10 @@ function cfgFromUI(){
       flash_attn:document.getElementById('flashAttn').checked,
       fit_target:+document.getElementById('fitTarget').value,
       kv_unified:document.getElementById('kvUnified').checked,
+      batch_size:+document.getElementById('batchSize').value,
+      ubatch_size:+document.getElementById('ubatchSize').value,
+      context_shift:document.getElementById('contextShift').checked,
+      cache_ram:+document.getElementById('cacheRam').value,
     },
     sampling:{
       temperature:+document.getElementById('tempVal').value,
@@ -99,6 +103,10 @@ function uiFromCfg(c){
   document.getElementById('flashAttn').checked=b.flash_attn??false;
   document.getElementById('fitTarget').value=b.fit_target??0;
   document.getElementById('kvUnified').checked=b.kv_unified??true;
+  document.getElementById('batchSize').value=b.batch_size??2048;
+  document.getElementById('ubatchSize').value=b.ubatch_size??512;
+  document.getElementById('contextShift').checked=b.context_shift??false;
+  document.getElementById('cacheRam').value=b.cache_ram??-1;
   const s=c.sampling||{};
   ['temp',s.temperature??0.7],['topk',s.top_k??40],['topp',s.top_p??0.95],['minp',s.min_p??0.05],['repeat',s.repeat_penalty??1.1],['presence',s.presence_penalty??0].forEach(()=>{});
   document.getElementById('tempVal').value=s.temperature??0.7;document.getElementById('tempRange').value=s.temperature??0.7;
@@ -384,6 +392,10 @@ function buildParamPreview(){
   if(c.basic.flash_attn) add('--flash-attn','','Flash Attention');
   if(c.basic.fit_target>0) add('--fit-target',c.basic.fit_target,'GPU显存余量限制(MiB)');
   if(!c.basic.kv_unified) add('--no-kv-unified','','禁用Unified KV缓存');
+  if(c.basic.batch_size!==2048) add('-b',c.basic.batch_size,'逻辑批大小');
+  if(c.basic.ubatch_size!==512) add('-ub',c.basic.ubatch_size,'物理批大小');
+  if(c.basic.context_shift) add('--context-shift','','上下文自动切换');
+  if(c.basic.cache_ram>=0) add('--cache-ram',c.basic.cache_ram,'缓存RAM上限(MiB)');
   add('--temp',c.sampling.temperature,'');
   add('--top-k',c.sampling.top_k,'');
   add('--top-p',c.sampling.top_p,'');

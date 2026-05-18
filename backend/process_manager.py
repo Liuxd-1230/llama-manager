@@ -87,6 +87,18 @@ class ProcessManager:
         if not b.kv_unified:
             cmd.append("--no-kv-unified")
 
+        # Batch sizes
+        cmd += ["-b", str(b.batch_size)]
+        cmd += ["-ub", str(b.ubatch_size)]
+
+        # Context shift
+        if b.context_shift:
+            cmd.append("--context-shift")
+
+        # Cache RAM limit
+        if b.cache_ram >= 0:
+            cmd += ["--cache-ram", str(b.cache_ram)]
+
         s = config.sampling
         cmd += ["--temp", str(s.temperature)]
         cmd += ["--top-k", str(s.top_k)]
