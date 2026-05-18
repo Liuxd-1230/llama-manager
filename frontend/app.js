@@ -55,6 +55,7 @@ function cfgFromUI(){
       kv_offload:document.getElementById('kvOffload').checked,
       flash_attn:document.getElementById('flashAttn').checked,
       fit_target:+document.getElementById('fitTarget').value,
+      kv_unified:document.getElementById('kvUnified').checked,
     },
     sampling:{
       temperature:+document.getElementById('tempVal').value,
@@ -97,6 +98,7 @@ function uiFromCfg(c){
   document.getElementById('kvOffload').checked=b.kv_offload??true;
   document.getElementById('flashAttn').checked=b.flash_attn??false;
   document.getElementById('fitTarget').value=b.fit_target??0;
+  document.getElementById('kvUnified').checked=b.kv_unified??true;
   const s=c.sampling||{};
   ['temp',s.temperature??0.7],['topk',s.top_k??40],['topp',s.top_p??0.95],['minp',s.min_p??0.05],['repeat',s.repeat_penalty??1.1],['presence',s.presence_penalty??0].forEach(()=>{});
   document.getElementById('tempVal').value=s.temperature??0.7;document.getElementById('tempRange').value=s.temperature??0.7;
@@ -381,6 +383,7 @@ function buildParamPreview(){
   if(!c.basic.kv_offload) add('--no-kv-offload','','KV缓存不卸载到GPU');
   if(c.basic.flash_attn) add('--flash-attn','','Flash Attention');
   if(c.basic.fit_target>0) add('--fit-target',c.basic.fit_target,'GPU显存余量限制(MiB)');
+  if(!c.basic.kv_unified) add('--no-kv-unified','','禁用Unified KV缓存');
   add('--temp',c.sampling.temperature,'');
   add('--top-k',c.sampling.top_k,'');
   add('--top-p',c.sampling.top_p,'');

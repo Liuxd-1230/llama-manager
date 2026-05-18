@@ -82,6 +82,7 @@
         <div class="toggle-row"><label class="toggle"><input type="checkbox" id="enableThinking"><span class="slider"></span></label><span>思维链 (--enable-thinking)</span></div>
         <div class="toggle-row"><label class="toggle"><input type="checkbox" id="kvOffload" checked><span class="slider"></span></label><span>KV 缓存卸载到 GPU (--no-kv-offload 取消)</span></div>
         <div class="toggle-row"><label class="toggle"><input type="checkbox" id="flashAttn"><span class="slider"></span></label><span>Flash Attention (--flash-attn)</span></div>
+        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="kvUnified" checked><span class="slider"></span></label><span>Unified KV 缓存 (--kv-unified)</span></div>
         <div class="form-group" style="margin-top:8px"><label>GPU 显存余量限制 (--fit-target MiB)</label><input type="number" id="fitTarget" value="0" min="0" step="100"><div class="inline-help">0 = 关闭，>0 = 限制模型卸载到 GPU 的显存余量（MiB）</div></div>
       </div>
 

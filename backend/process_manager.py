@@ -83,6 +83,10 @@ class ProcessManager:
         if b.fit_target > 0:
             cmd += ["--fit-target", str(b.fit_target)]
 
+        # Unified KV buffer
+        if not b.kv_unified:
+            cmd.append("--no-kv-unified")
+
         s = config.sampling
         cmd += ["--temp", str(s.temperature)]
         cmd += ["--top-k", str(s.top_k)]

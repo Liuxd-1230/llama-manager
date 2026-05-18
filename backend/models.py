@@ -18,6 +18,7 @@ class BasicSettings(BaseModel):
     kv_offload: bool = True  # KV cache offload to GPU (--no-kv-offload to disable)
     flash_attn: bool = False  # Flash Attention
     fit_target: int = 0  # --fit-target: fit model to GPU with margin in MiB (0=off)
+    kv_unified: bool = True  # unified KV buffer shared across all sequences (--kv-unified)
 
 
 class SamplingSettings(BaseModel):
