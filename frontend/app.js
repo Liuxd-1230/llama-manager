@@ -392,9 +392,9 @@ function buildParamPreview(){
   if(c.basic.n_cpu_moe>0) add('--n-cpu-moe',c.basic.n_cpu_moe,'MoE CPU 卸载层数');
   if(c.basic.kv_cache_quant_k) add('--cache-type-k',c.basic.kv_cache_quant_k,'KV 缓存量化 K');
   if(c.basic.kv_cache_quant_v) add('--cache-type-v',c.basic.kv_cache_quant_v,'KV 缓存量化 V');
-  if(c.basic.enable_thinking) add('--chat-template-kwargs',`'{"enable_thinking":true}'`,'思维链');
+  if(c.basic.enable_thinking) add('--reasoning','','思维链');
   if(!c.basic.kv_offload) add('--no-kv-offload','','KV缓存不卸载到GPU');
-  if(c.basic.flash_attn) add('--flash-attn','','Flash Attention');
+  if(c.basic.flash_attn) add('--flash-attn','on','Flash Attention');
   if(c.basic.fit_target>0) add('--fit-target',c.basic.fit_target,'GPU显存余量限制(MiB)');
   if(!c.basic.kv_unified) add('--no-kv-unified','','禁用Unified KV缓存');
   if(c.basic.batch_size!==2048) add('-b',c.basic.batch_size,'逻辑批大小');

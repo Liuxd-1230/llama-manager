@@ -69,7 +69,7 @@ class ProcessManager:
             cmd += ["--cache-type-v", b.kv_cache_quant_v]
 
         if b.enable_thinking:
-            cmd += ["--chat-template-kwargs", '{"enable_thinking":true}']
+            cmd.append("--reasoning")
 
         # KV cache offload to GPU
         if not b.kv_offload:
@@ -77,7 +77,7 @@ class ProcessManager:
 
         # Flash attention
         if b.flash_attn:
-            cmd.append("--flash-attn")
+            cmd += ["--flash-attn", "on"]
 
         # Fit model to GPU memory with margin
         if b.fit_target > 0:
