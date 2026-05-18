@@ -114,29 +114,73 @@ class Optimizer:
                 return None
 
             # Parse llama-bench output
-            # Format varies, but typically:
-            # | model | pp | tg |
-            # or CSV output
+            # Modern llama-bench prints a markdown table:
+            # | model | ... | test |              t/s |
+            # |-------|-----|------|-----------------|
+            # | ...   | ... | pp512| 1234.56 ± 12.34 |
+            # | ...   | ... | tg128|   45.67 ±  1.23 |
+            #
+            # Also supports CSV mode (--output csv) and JSON (--output json)
             pp_tok_s = None
             tg_tok_s = None
 
-            # Try to parse table format
-            for line in output.split("\n"):
-                line = line.strip()
-                # Look for numbers in the output
-                if "pp" in line.lower() and "tg" in line.lower():
-                    continue  # header
-                # Try regex for numbers
-                numbers = re.findall(r'(\d+\.?\d*)\s*t/s', line)
-                if len(numbers) >= 2:
-                    pp_tok_s = float(numbers[0])
-                    tg_tok_s = float(numbers[1])
-                elif len(numbers) == 1 and pp_tok_s is None:
-                    pp_tok_s = float(numbers[0])
-                elif len(numbers) == 1 and tg_tok_s is None:
-                    tg_tok_s = float(numbers[0])
+            # Strategy 1: Try JSON output (llama-bench --output json)
+            # Not used here since we don't pass --output json, but parse if present
+            json_match = re.search(r'\{.*"n_pp".*"n_tg".*\}', output, re.DOTALL)
+            if json_match:
+                try:
+                    j = json.loads(json_match.group())
+                    pp_tok_s = float(j.get("avg_ts_pp", 0))
+                    tg_tok_s = float(j.get("avg_ts_tg", 0))
+                except (json.JSONDecodeError, ValueError, TypeError):
+                    pass
 
-            # Also try: look for lines with just numbers (CSV-like)
+            # Strategy 2: Parse markdown table rows
+            # Look for rows containing pp/tg test labels, extract the t/s value
+            if pp_tok_s is None or tg_tok_s is None:
+                for line in output.split("\n"):
+                    line = line.strip()
+                    if not line.startswith("|"):
+                        continue
+                    cells = [c.strip() for c in line.split("|")]
+                    cells = [c for c in cells if c]  # remove empty
+                    if len(cells) < 2:
+                        continue
+                    # Check if any cell contains pp or tg test label
+                    row_text = line.lower()
+                    # Extract numbers (possibly with ± stddev): "1234.56 ± 12.34"
+                    num_match = re.findall(r'(\d+\.?\d*)\s*(?:±|$)', line)
+                    if not num_match:
+                        continue
+                    val = float(num_match[0])
+                    # Detect pp or tg from test label cell
+                    has_pp = bool(re.search(r'\bpp\b|\bpp\d+', row_text))
+                    has_tg = bool(re.search(r'\btg\b|\btg\d+', row_text))
+                    if has_pp and pp_tok_s is None:
+                        pp_tok_s = val
+                    elif has_tg and tg_tok_s is None:
+                        tg_tok_s = val
+
+            # Strategy 3: Look for "prompt eval" / "eval" lines (llama-bench older or server)
+            if pp_tok_s is None or tg_tok_s is None:
+                for line in output.split("\n"):
+                    ll = line.lower()
+                    m = re.search(r'(\d+\.?\d*)\s*(?:tokens?/s|t/s)', ll)
+                    if not m:
+                        continue
+                    val = float(m.group(1))
+                    if "prompt" in ll or "pp" in ll:
+                        if pp_tok_s is None:
+                            pp_tok_s = val
+                    elif "eval" in ll or "tg" in ll or "generation" in ll:
+                        if tg_tok_s is None:
+                            tg_tok_s = val
+                    elif pp_tok_s is None:
+                        pp_tok_s = val
+                    elif tg_tok_s is None:
+                        tg_tok_s = val
+
+            # Strategy 4: CSV-like fallback
             if pp_tok_s is None:
                 for line in output.split("\n"):
                     parts = line.strip().split(",")
