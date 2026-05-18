@@ -154,14 +154,12 @@ async def ws_logs(websocket: WebSocket):
     await websocket.accept()
     q = process_manager.subscribe()
     try:
-        # Send existing logs first
         for line in process_manager.get_logs():
             await websocket.send_text(line)
-        # Stream new logs
         while True:
             text = await q.get()
             await websocket.send_text(text)
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, asyncio.CancelledError):
         pass
     finally:
         process_manager.unsubscribe(q)
@@ -179,7 +177,7 @@ async def ws_compile(websocket: WebSocket):
         while True:
             text = await q.get()
             await websocket.send_text(text)
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, asyncio.CancelledError):
         pass
     finally:
         update_manager.unsubscribe(q)
@@ -278,7 +276,7 @@ async def ws_download(websocket: WebSocket):
         while True:
             text = await q.get()
             await websocket.send_text(text)
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, asyncio.CancelledError):
         pass
     finally:
         download_manager.unsubscribe(q)
@@ -329,7 +327,7 @@ async def ws_optimize(websocket: WebSocket):
         while True:
             text = await q.get()
             await websocket.send_text(text if isinstance(text, str) else json.dumps(text))
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, asyncio.CancelledError):
         pass
     finally:
         optimizer.unsubscribe(q)

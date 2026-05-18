@@ -19,6 +19,7 @@ class Optimizer:
         self._current_trial: int = 0
         self._total_trials: int = 0
         self._best_result: Optional[Dict[str, Any]] = None
+        self._current_process: Optional[subprocess.Popen] = None
 
     def _append(self, text: str):
         self._log_buffer.append(text)
@@ -101,14 +102,26 @@ class Optimizer:
         try:
             # Dynamic timeout: base 300s + scale with ctx size (256k ctx needs ~15min)
             timeout = max(300, 60 + ctx // 50)
-            result = subprocess.run(
+            # Use Popen so we can kill on stop
+            proc = subprocess.Popen(
                 cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                cwd=str(Path(bench_bin).parent.parent.parent),  # llama.cpp root
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=str(Path(bench_bin).parent.parent.parent),
             )
-            output = result.stdout + result.stderr
+            self._current_process = proc
+            try:
+                stdout, stderr = proc.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+                raise
+            finally:
+                self._current_process = None
+            # If stop was requested while waiting
+            if self._should_stop:
+                return None
+            output = (stdout or b'').decode('utf-8', errors='replace') + (stderr or b'').decode('utf-8', errors='replace')
 
             # Check for OOM
             oom_keywords = ["out of memory", "oom", "cuda error", "memory allocation failed"]
@@ -330,6 +343,14 @@ class Optimizer:
     async def stop(self):
         self._should_stop = True
         self._append("[optimizer] 停止中...")
+        # Kill current bench process immediately
+        if self._current_process and self._current_process.poll() is None:
+            try:
+                self._current_process.kill()
+                self._current_process.wait(timeout=5)
+                self._append("[optimizer] 已终止当前 llama-bench 进程")
+            except Exception as e:
+                self._append(f"[optimizer] 终止进程: {e}")
 
     def get_status(self) -> dict:
         return {
