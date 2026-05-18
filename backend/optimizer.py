@@ -82,8 +82,9 @@ class Optimizer:
             "-m", model,
             "-ngl", str(ngl),
             "-t", str(threads),
-            "-p", str(ctx),        # n-prompt: 模拟不同上下文大小
+            "-p", "512",           # n-prompt: 固定 prompt 大小
             "-n", "128",           # n-gen: 生成 128 token 测 tg 速度
+            "-d", str(ctx),        # n-depth: KV 缓存预填充深度，模拟上下文
             "-o", "json",          # JSON 输出
             "-r", "3",             # 重复 3 次取平均
         ]
@@ -278,13 +279,13 @@ class Optimizer:
         self._append(f"📊 参数范围:")
         self._append(f"  ngl: {ngl_range[0]}~{ngl_range[1]}")
         self._append(f"  n_cpu_moe: {n_cpu_moe_range[0]}~{n_cpu_moe_range[1]}")
-        self._append(f"  ctx (n-prompt): {ctx_options}")
+        self._append(f"  ctx (n-depth): {ctx_options}")
         self._append(f"  kv: {kv_options}")
         self._append(f"📊 总试验次数: {n_trials}")
         self._append(f"📊 线程数: {threads}")
         self._append(f"")
-        self._append(f"💡 提示: -p 值模拟上下文大小，8GB显存+35B模型建议 -p 4096~8192")
-        self._append(f"   大上下文需配合 --n-cpu-moe 卸载专家到CPU")
+        self._append(f"💡 提示: -d (n-depth) 预填充 KV 缓存，模拟不同上下文深度")
+        self._append(f"   大上下文需配合 --n-cpu-moe 卸载专家到CPU避免 OOM")
         self._append(f"")
 
         # Suppress optuna logs
