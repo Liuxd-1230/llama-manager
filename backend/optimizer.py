@@ -82,10 +82,10 @@ class Optimizer:
             "-m", model,
             "-ngl", str(ngl),
             "-t", str(threads),
-            "-c", str(ctx),      # context size (KV cache window)
-            "-p", "512",         # prompt size for pp benchmark
-            "-n", "128",         # tokens to generate for tg benchmark
-            "--output", "json",  # force JSON for reliable parsing
+            "--ctx-size", str(ctx),  # context size (KV cache window)
+            "-p", "512",             # prompt size for pp benchmark
+            "-n", "128",             # tokens to generate for tg benchmark
+            "--output", "json",      # force JSON for reliable parsing
         ]
         if kv_k:
             cmd += ["--cache-type-k", kv_k]

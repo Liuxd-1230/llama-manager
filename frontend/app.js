@@ -1,0 +1,493 @@
+// ── State ──
+let ws=null, wsCompile=null, wsDownload=null, statusTimer=null, chatHistory=[];
+let folderCallback=null, currentBrowsePath='';
+let browseMode='folder', browseFilter='.gguf', selectedFilePath='';
+let isWindows = navigator.platform.indexOf('Win')>=0;
+
+// ── Navigation ──
+document.querySelectorAll('#sidebar button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('#sidebar button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const page = btn.dataset.page;
+    document.getElementById('page-' + page).classList.add('active');
+    if(page==='server') connectLogWS();
+    if(page==='chat') loadChatModels();
+    if(page==='webui') refreshWebUI();
+    if(page==='update') connectCompileWS();
+    if(page==='download') connectDownloadWS();
+    if(page==='optimize') connectOptimizeWS();
+    if(page==='logs') connectLogWS();
+    if(page==='params') buildParamPreview();
+  });
+});
+
+// ── Helpers ──
+function syncR(n){document.getElementById(n+'Val').value=document.getElementById(n+'Range').value}
+function syncV(n){document.getElementById(n+'Range').value=document.getElementById(n+'Val').value}
+function toggleSamp(n){
+  const e=document.getElementById(n+'Enabled'),g=document.getElementById(n+'Group');
+  if(e.checked){g.style.opacity='1';g.style.pointerEvents='auto';g.querySelectorAll('input[type=range]').forEach(r=>r.style.accentColor='var(--accent)')}
+  else{g.style.opacity='.4';g.style.pointerEvents='none';g.querySelectorAll('input[type=range]').forEach(r=>r.style.accentColor='#999')}
+}
+function toggleMTP(){const e=document.getElementById('mtpEnabled'),g=document.getElementById('mtpGroup');g.style.opacity=e.checked?'1':'.4';g.style.pointerEvents=e.checked?'auto':'none'}
+function onModeChange(){const m=document.getElementById('serverMode').value;document.getElementById('serverHost').value=m==='lan'?'0.0.0.0':'127.0.0.1'}
+async function api(u,o={}){const r=await fetch(u,{headers:{'Content-Type':'application/json'},...o});return r.json()}
+
+// ── Config <-> UI ──
+function cfgFromUI(){
+  return {
+    llama_cpp_dir:document.getElementById('llamaCppDir').value,
+    model_path:document.getElementById('modelPath').value,
+    mmproj_path:document.getElementById('mmprojPath').value,
+    basic:{
+      ctx_size:+document.getElementById('ctxSize').value,
+      ngl:+document.getElementById('ngl').value,
+      threads:+document.getElementById('threads').value,
+      parallel:+document.getElementById('parallel').value,
+      mmap:document.getElementById('mmap').checked,
+      mlock:document.getElementById('mlock').checked,
+      n_cpu_moe:+document.getElementById('nCpuMoe').value,
+      kv_cache_quant_k:document.getElementById('kvCacheQuantK').value,
+      kv_cache_quant_v:document.getElementById('kvCacheQuantV').value,
+      enable_thinking:document.getElementById('enableThinking').checked,
+    },
+    sampling:{
+      temperature:+document.getElementById('tempVal').value,
+      top_k:+document.getElementById('topkVal').value,
+      top_p:+document.getElementById('toppVal').value,
+      min_p_enabled:document.getElementById('minpEnabled').checked,
+      min_p:+document.getElementById('minpVal').value,
+      repeat_penalty_enabled:document.getElementById('repeatEnabled').checked,
+      repeat_penalty:+document.getElementById('repeatVal').value,
+      presence_penalty_enabled:document.getElementById('presenceEnabled').checked,
+      presence_penalty:+document.getElementById('presenceVal').value,
+    },
+    mtp:{
+      enabled:document.getElementById('mtpEnabled').checked,
+      spec_type:document.getElementById('mtpSpecType').value,
+      draft_n_max:+document.getElementById('mtpDraftNMax').value,
+    },
+    system_prompt:document.getElementById('systemPrompt').value,
+    extra_params:document.getElementById('extraParams').value,
+    server:{host:document.getElementById('serverHost').value,port:+document.getElementById('serverPort').value,mode:document.getElementById('serverMode').value},
+    compile:{command:document.getElementById('compileCmd').value},
+  };
+}
+
+function uiFromCfg(c){
+  document.getElementById('llamaCppDir').value=c.llama_cpp_dir||'';
+  document.getElementById('modelPath').value=c.model_path||'';
+  document.getElementById('mmprojPath').value=c.mmproj_path||'';
+  const b=c.basic||{};
+  document.getElementById('ctxSize').value=b.ctx_size??4096;
+  document.getElementById('ngl').value=b.ngl??99;
+  document.getElementById('threads').value=b.threads??8;
+  document.getElementById('parallel').value=b.parallel??1;
+  document.getElementById('mmap').checked=b.mmap??true;
+  document.getElementById('mlock').checked=b.mlock??false;
+  document.getElementById('nCpuMoe').value=b.n_cpu_moe??0;
+  document.getElementById('kvCacheQuantK').value=b.kv_cache_quant_k||'';
+  document.getElementById('kvCacheQuantV').value=b.kv_cache_quant_v||'';
+  document.getElementById('enableThinking').checked=b.enable_thinking??false;
+  const s=c.sampling||{};
+  ['temp',s.temperature??0.7],['topk',s.top_k??40],['topp',s.top_p??0.95],['minp',s.min_p??0.05],['repeat',s.repeat_penalty??1.1],['presence',s.presence_penalty??0].forEach(()=>{});
+  document.getElementById('tempVal').value=s.temperature??0.7;document.getElementById('tempRange').value=s.temperature??0.7;
+  document.getElementById('topkVal').value=s.top_k??40;document.getElementById('topkRange').value=s.top_k??40;
+  document.getElementById('toppVal').value=s.top_p??0.95;document.getElementById('toppRange').value=s.top_p??0.95;
+  document.getElementById('minpEnabled').checked=s.min_p_enabled??false;document.getElementById('minpVal').value=s.min_p??0.05;document.getElementById('minpRange').value=s.min_p??0.05;
+  document.getElementById('repeatEnabled').checked=s.repeat_penalty_enabled??false;document.getElementById('repeatVal').value=s.repeat_penalty??1.1;document.getElementById('repeatRange').value=s.repeat_penalty??1.1;
+  document.getElementById('presenceEnabled').checked=s.presence_penalty_enabled??false;document.getElementById('presenceVal').value=s.presence_penalty??0;document.getElementById('presenceRange').value=s.presence_penalty??0;
+  toggleSamp('minp');toggleSamp('repeat');toggleSamp('presence');
+  const m=c.mtp||{};
+  document.getElementById('mtpEnabled').checked=m.enabled??false;
+  document.getElementById('mtpSpecType').value=m.spec_type||'draft-mtp';
+  document.getElementById('mtpDraftNMax').value=m.draft_n_max??3;
+  toggleMTP();
+  document.getElementById('systemPrompt').value=c.system_prompt||'';
+  document.getElementById('extraParams').value=c.extra_params||'';
+  const sv=c.server||{};
+  document.getElementById('serverMode').value=sv.mode||'local';
+  document.getElementById('serverHost').value=sv.host||'127.0.0.1';
+  document.getElementById('serverPort').value=sv.port??8080;
+  document.getElementById('compileCmd').value=c.compile?.command||'cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release -j12';
+  document.getElementById('listenAddr').textContent=sv.host+':'+sv.port;
+}
+
+async function loadInitCfg(){const c=await api('/api/config');uiFromCfg(c);refreshCfgList()}
+async function saveConfig(){
+  const name=document.getElementById('configName').value.trim()||'default';
+  await api('/api/config/save-as',{method:'POST',body:JSON.stringify({name,config:cfgFromUI()})});
+  showToast('配置已保存: '+name);refreshCfgList()
+}
+async function refreshCfgList(){const{configs}=await api('/api/config/list');const s=document.getElementById('configList');s.innerHTML='<option value="">-- 已保存配置 --</option>';configs.forEach(n=>{s.innerHTML+=`<option value="${n}">${n}</option>`})}
+async function loadSavedConfig(){const n=document.getElementById('configList').value;if(!n)return;const c=await api('/api/config/load',{method:'POST',body:JSON.stringify({name:n})});uiFromCfg(c);document.getElementById('configName').value=n}
+async function deleteConfig(){
+  const name=document.getElementById('configName').value.trim()||'default';
+  if(name==='default'){alert('不能删除默认配置');return}
+  if(!confirm('确定删除配置 "'+name+'" ?'))return;
+  await api('/api/config/delete',{method:'POST',body:JSON.stringify({name})});
+  showToast('已删除: '+name);document.getElementById('configName').value='default';refreshCfgList()
+}
+function exportConfig(){const b=new Blob([JSON.stringify(cfgFromUI(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='llama-manager-config.json';a.click()}
+function importConfig(){document.getElementById('importFile').click()}
+async function handleImport(e){const f=e.target.files[0];if(!f)return;const t=await f.text();const c=await api('/api/config/import',{method:'POST',body:JSON.stringify({content:t})});uiFromCfg(c);e.target.value=''}
+
+// ── Toast ──
+function showToast(msg){
+  const t=document.createElement('div');
+  t.style.cssText='position:fixed;top:20px;right:20px;background:var(--green);color:#fff;padding:10px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;z-index:200;box-shadow:var(--shadow-lg);';
+  t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);
+}
+
+// ── Folder / File browser ──
+let nativePickerTarget='';
+function openFolderPicker(targetInput){
+  browseMode='folder';
+  browseFilter='';
+  selectedFilePath='';
+  document.getElementById('folderModalTitle').textContent='📂 浏览文件夹';
+  document.getElementById('folderSelectBtn').textContent='选择此文件夹';
+  document.getElementById('selectedFileInfo').style.display='none';
+  folderCallback=(path)=>{document.getElementById(targetInput).value=path;if(targetInput==='llamaCppDir')setTimeout(detectServer,200)};
+  currentBrowsePath=document.getElementById(targetInput).value||'';
+  document.getElementById('folderModal').classList.add('show');
+  loadDriveList();
+  if(currentBrowsePath) browseTo(currentBrowsePath); else browseTo(isWindows?'C:\\':'/');
+}
+function handleNativeFolder(e){
+  const files=e.target.files;
+  if(files&&files.length>0){
+    const fp=files[0].webkitRelativePath;
+    const fullPath=files[0].path||'';
+    let dir='';
+    if(fullPath){dir=fullPath.replace(/[\\/][^\\/]*$/,'')}
+    else if(fp){dir=fp.split('/')[0]}
+    if(dir&&nativePickerTarget){
+      document.getElementById(nativePickerTarget).value=dir;
+      if(nativePickerTarget==='llamaCppDir')setTimeout(detectServer,200);
+    }
+  }
+  e.target.value='';
+}
+function openFilePicker(targetInput,ext){
+  nativePickerTarget=targetInput;
+  document.getElementById('nativeFilePicker').click();
+}
+function handleNativeFile(e){
+  const f=e.target.files[0];
+  if(f){
+    let p=f.path||f.name;
+    if(nativePickerTarget)document.getElementById(nativePickerTarget).value=p;
+  }
+  e.target.value='';
+}
+// File browser (for model/mmproj) — same modal but picks files
+function openFileBrowser(targetInput, filter){
+  browseMode='file';
+  browseFilter=filter||'.gguf';
+  selectedFilePath='';
+  const title=targetInput==='modelPath'?'🧠 选择模型':'🖼️ 选择 mmproj 文件';
+  document.getElementById('folderModalTitle').textContent=title;
+  document.getElementById('folderSelectBtn').textContent='选择此文件';
+  document.getElementById('selectedFileInfo').style.display='none';
+  folderCallback=(path)=>{document.getElementById(targetInput).value=path};
+  // Start from current path's parent, or default to common model locations
+  const currentVal=document.getElementById(targetInput).value;
+  if(currentVal){
+    let p=currentVal.replace(/[\\/][^\\/]*$/,'');
+    currentBrowsePath=p||currentVal;
+  }else{
+    // Default to common model locations instead of llamaCppDir
+    currentBrowsePath=isWindows?'C:\\':'/';
+  }
+  document.getElementById('folderModal').classList.add('show');
+  loadDriveList();
+  browseTo(currentBrowsePath);
+}
+function closeFolderModal(){document.getElementById('folderModal').classList.remove('show')}
+async function loadDriveList(){
+  const r=await api('/api/drives');
+  const dl=document.getElementById('driveList');
+  if(r.drives&&r.drives.length>1){
+    dl.innerHTML=r.drives.map(d=>'<button class="btn btn-secondary" style="padding:3px 10px;font-size:12px" data-browse="'+d+'\\">'+d+'</button>').join('');
+    dl.style.display='flex';
+  }else{dl.style.display='none'}
+}
+async function browseTo(path){
+  if(path!==undefined) currentBrowsePath=path;
+  document.getElementById('folderPathInput').value=currentBrowsePath;
+  updateBreadcrumb();
+  const r=await api('/api/browse?dir='+encodeURIComponent(currentBrowsePath));
+  const list=document.getElementById('folderList');
+  if(!r.entries||!r.entries.length){list.innerHTML='<div style="color:var(--fg-muted);padding:12px;text-align:center">空目录</div>';return}
+  // Always show directories
+  let html=r.entries.filter(e=>e.is_dir).map(e=>{
+    return '<div class="file-item" data-browse="'+e.path.replace(/"/g,'&quot;')+'"><span class="file-icon">📁</span><span>'+e.name+'</span></div>';
+  }).join('');
+  // In file mode, also show .gguf files
+  if(browseMode==='file'){
+    const files=r.entries.filter(e=>!e.is_dir && e.name.toLowerCase().endsWith(browseFilter));
+    if(files.length){
+      html+=files.map(e=>{
+        const sizeMB=(e.size_mb||(e.size||0)/(1024*1024)).toFixed(0);
+        return '<div class="file-item" data-file="'+e.path.replace(/"/g,'&quot;')+'" data-name="'+e.name.replace(/"/g,'&quot;')+'"><span class="file-icon">📄</span><span style="flex:1">'+e.name+'</span><span class="file-size">'+sizeMB+' MB</span></div>';
+      }).join('');
+    }
+    // Auto-scan hint if no gguf found
+    if(!files.length && r.entries.length>0){
+      html+='<div style="color:var(--fg-muted);padding:8px 10px;font-size:12px;text-align:center">此目录无 '+browseFilter+' 文件</div>';
+    }
+  }
+  list.innerHTML=html;
+}
+function updateBreadcrumb(){
+  const bc=document.getElementById('folderBreadcrumb');
+  const parts=currentBrowsePath.replace(/\\/g,'/').split('/').filter(Boolean);
+  let html='<span data-browse="/">/</span>';
+  let acc='';
+  parts.forEach(p=>{acc+='/'+p;html+='<span data-browse="'+acc+'">'+p+'</span> / '});
+  bc.innerHTML=html;
+}
+// Event delegation for all browse clicks
+document.addEventListener('click',function(e){
+  const el=e.target.closest('[data-browse]');
+  if(el){e.preventDefault();browseTo(el.dataset.browse)}
+  const fileEl=e.target.closest('[data-file]');
+  if(fileEl){
+    e.preventDefault();
+    // Select this file
+    selectedFilePath=fileEl.dataset.file;
+    // Highlight
+    document.querySelectorAll('#folderList .file-item').forEach(i=>i.classList.remove('selected'));
+    fileEl.classList.add('selected');
+    // Show selection info
+    const info=document.getElementById('selectedFileInfo');
+    info.textContent='✅ 已选择: '+fileEl.dataset.name;
+    info.style.display='block';
+  }
+});
+function selectFolder(){
+  if(browseMode==='file'){
+    // In file mode, use selected file or try to find .gguf in current dir
+    if(selectedFilePath){
+      if(folderCallback)folderCallback(selectedFilePath);
+    }else{
+      // Auto-scan current directory for .gguf files
+      scanAndPickFile();
+      return;
+    }
+  }else{
+    if(folderCallback)folderCallback(currentBrowsePath);
+  }
+  closeFolderModal();
+}
+async function scanAndPickFile(){
+  const r=await api('/api/scan-models?dir='+encodeURIComponent(currentBrowsePath));
+  if(r.models&&r.models.length){
+    // Auto-select if only one, otherwise pick first
+    const picked=r.models[0].path;
+    if(folderCallback)folderCallback(picked);
+    showToast('自动检测到 '+r.models.length+' 个模型，已选择: '+r.models[0].name);
+  }else{
+    showToast('⚠️ 此目录未找到 .gguf 文件');
+    return;
+  }
+  closeFolderModal();
+}
+function goUpOneLevel(){
+  let p=currentBrowsePath.replace(/\\/g,'/').replace(/\/$/,'');
+  let idx=p.lastIndexOf('/');
+  if(idx>0){browseTo(p.substring(0,idx)+(isWindows&&idx<=2?'/':''))}
+  else if(isWindows&&p.length>=2){browseTo(p.substring(0,2)+'\\')}
+}
+
+// ── Model picker (uses unified file browser) ──
+function openModelPicker(){
+  openFileBrowser('modelPath', '.gguf');
+}
+
+// ── Server detect ──
+async function detectServer(){
+  const d=document.getElementById('llamaCppDir').value;
+  if(!d)return;
+  const r=await api('/api/detect-server?llama_cpp_dir='+encodeURIComponent(d));
+  const el=document.getElementById('serverBinStatus');
+  if(r.found){el.textContent='✅ '+r.path;el.style.color='var(--green)'}
+  else{el.innerHTML='❌ 未找到 llama-server'+(isWindows?'.exe':'')+'，请确认已编译或检查目录';el.style.color='var(--red)'}
+}
+async function onDirChange(){setTimeout(detectServer,100)}
+
+// ── Server control ──
+async function startServer(){document.getElementById('btnStart').disabled=true;await api('/api/config',{method:'POST',body:JSON.stringify(cfgFromUI())});const r=await api('/api/server/start',{method:'POST'});if(r.error){alert('启动失败: '+r.error);document.getElementById('btnStart').disabled=false;return}connectLogWS();refreshStatus()}
+async function stopServer(){document.getElementById('btnStop').disabled=true;await api('/api/server/stop',{method:'POST'});refreshStatus()}
+async function refreshStatus(){const s=await api('/api/server/status');const b=document.getElementById('statusBadge'),info=document.getElementById('serverInfo');b.className='status-pill';if(s.state==='running'){b.classList.add('st-running');b.textContent='● 运行中';document.getElementById('btnStart').disabled=true;document.getElementById('btnStop').disabled=false;info.textContent=`PID ${s.pid} | ${Math.floor(s.uptime_seconds/60)}m${Math.floor(s.uptime_seconds%60)}s`}else{b.classList.add('st-stopped');b.textContent='● 已停止';document.getElementById('btnStart').disabled=false;document.getElementById('btnStop').disabled=true;info.textContent=s.error||''}}
+
+// ── WebSocket logs ──
+function connectLogWS(){if(ws&&ws.readyState<=1)return;ws=new WebSocket(`ws://${location.host}/ws/logs`);ws.onmessage=e=>appendLog('serverLog',e.data);ws.onclose=()=>setTimeout(connectLogWS,3000)}
+function connectCompileWS(){if(wsCompile&&wsCompile.readyState<=1)return;wsCompile=new WebSocket(`ws://${location.host}/ws/compile`);wsCompile.onmessage=e=>appendLog('compileLog',e.data);wsCompile.onclose=()=>setTimeout(connectCompileWS,3000)}
+function connectDownloadWS(){if(wsDownload&&wsDownload.readyState<=1)return;wsDownload=new WebSocket(`ws://${location.host}/ws/download`);wsDownload.onmessage=e=>appendLog('downloadLog',e.data);wsDownload.onclose=()=>setTimeout(connectDownloadWS,3000)}
+function appendLog(boxId,text){const box=document.getElementById(boxId);const line=document.createElement('div');line.style.marginBottom='1px';if(text.includes('ERROR')||text.includes('error'))line.style.color='#f87171';if(text.includes('[manager]')||text.includes('[download]'))line.style.color='#4ade80';line.textContent=text;box.appendChild(line);if(boxId==='serverLog'){const full=document.getElementById('fullLog');const l2=line.cloneNode(true);full.appendChild(l2);if(document.getElementById('autoScroll2')?.checked)full.scrollTop=full.scrollHeight}if(document.getElementById('autoScroll')?.checked)box.scrollTop=box.scrollHeight}
+async function clearLogs(){await api('/api/server/logs/clear',{method:'POST'});['serverLog','fullLog'].forEach(id=>document.getElementById(id).innerHTML='')}
+function downloadLogs(){const t=document.getElementById('fullLog').innerText;const b=new Blob([t],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`llama-server-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.log`;a.click()}
+
+// ── Chat ──
+async function loadChatModels(){try{const r=await api('/api/chat/models');const s=document.getElementById('chatModel');if(r.data&&r.data.length){s.innerHTML=r.data.map(m=>`<option value="${m.id}">${m.id}</option>`).join('')}else{s.innerHTML='<option>服务器未启动</option>'}}catch{document.getElementById('chatModel').innerHTML='<option>服务器未启动</option>'}}
+function appendChatMsg(role,content){const box=document.getElementById('chatMessages');if(box.querySelector('[style*="text-align:center"]'))box.innerHTML='';const d=document.createElement('div');d.className='chat-msg '+(role==='user'?'chat-user':'chat-ai');d.textContent=content;box.appendChild(d);box.scrollTop=box.scrollHeight;return d}
+async function sendChat(){const inp=document.getElementById('chatInput');const msg=inp.value.trim();if(!msg)return;inp.value='';chatHistory.push({role:'user',content:msg});appendChatMsg('user',msg);const body={model:document.getElementById('chatModel').value,messages:chatHistory,temperature:parseFloat(document.getElementById('chatTemp').value),max_tokens:parseInt(document.getElementById('chatMaxTokens').value),stream:true};const aiDiv=appendChatMsg('assistant','⏳ 生成中...');document.getElementById('btnSend').disabled=true;try{const resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const reader=resp.body.getReader();const decoder=new TextDecoder();let full='',buffer='';while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();for(const line of lines){if(!line.startsWith('data: '))continue;const data=line.slice(6).trim();if(data==='[DONE]')continue;try{const j=JSON.parse(data);const d=j.choices?.[0]?.delta?.content||'';full+=d;aiDiv.textContent=full;document.getElementById('chatMessages').scrollTop=999999}catch{}}}if(!full)aiDiv.textContent='(空回复)';chatHistory.push({role:'assistant',content:full})}catch(e){aiDiv.textContent='❌ '+e.message}document.getElementById('btnSend').disabled=false}
+function clearChat(){chatHistory=[];document.getElementById('chatMessages').innerHTML='<div style="text-align:center;color:var(--fg-muted);padding:60px 0">对话已清空</div>'}
+document.addEventListener('DOMContentLoaded',()=>{const ci=document.getElementById('chatInput');if(ci)ci.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}})});
+
+// ── WebUI ──
+function refreshWebUI(){const s=cfgFromUI().server;const url=`http://${s.host==='0.0.0.0'?location.hostname:s.host}:${s.port}`;document.getElementById('webuiFrame').src=url}
+function openWebUI(){const s=cfgFromUI().server;window.open(`http://${s.host==='0.0.0.0'?location.hostname:s.host}:${s.port}`,'_blank')}
+
+// ── Update ──
+async function checkUpdate(){const r=await api('/api/update/check');const el=document.getElementById('updateInfo');if(r.error){el.textContent='❌ '+r.error;el.style.color='var(--red)';return}if(r.has_update){el.innerHTML=`🔄 有更新: <b>${r.current_commit}</b> → <b>${r.remote_commit}</b>`;el.style.color='var(--yellow)'}else{el.innerHTML=`✅ 已是最新 (${r.current_commit})`;el.style.color='var(--green)'}}
+async function pullUpdate(force=false){const r=await api('/api/update/pull',{method:'POST',body:JSON.stringify({force}),headers:{'Content-Type':'application/json'}});const el=document.getElementById('updateInfo');if(r.success){el.textContent='✅ '+r.output;el.style.color='var(--green)'}else{el.textContent='❌ '+(r.error||r.output);el.style.color='var(--red)'}}
+async function stopCompile(){await api('/api/update/compile/stop',{method:'POST'});document.getElementById('btnCompile').disabled=false;document.getElementById('btnCompileStop').disabled=true}
+async function startCompile(){document.getElementById('btnCompile').disabled=true;document.getElementById('btnCompileStop').disabled=false;await api('/api/config',{method:'POST',body:JSON.stringify(cfgFromUI())});const r=await api('/api/update/compile',{method:'POST'});if(r.error){alert(r.error);document.getElementById('btnCompile').disabled=false;return}connectCompileWS()}
+
+// ── Download ──
+async function stopDownload(){await api('/api/download/stop',{method:'POST'});document.getElementById('btnDownload').disabled=false;document.getElementById('btnDownloadStop').disabled=true}
+async function startDownload(){const dir=document.getElementById('downloadDir').value;if(!dir){alert('请填写目标文件夹');return}document.getElementById('btnDownload').disabled=true;document.getElementById('btnDownloadStop').disabled=false;const r=await api('/api/download/start',{method:'POST',body:JSON.stringify({target_dir:dir})});if(r.error){alert(r.error);document.getElementById('btnDownload').disabled=false;return}connectDownloadWS()}
+
+// ── Param preview ──
+function buildParamPreview(){
+  const c=cfgFromUI();
+  const lines=[];
+  const add=(flag,val,comment)=>{lines.push({flag,val,comment:comment||''})};
+  const bin=c.llama_cpp_dir?(c.llama_cpp_dir+(isWindows?'\\build\\bin\\llama-server':'/build/bin/llama-server')):'llama-server';
+  add(bin,'','llama-server binary');
+  add('-m',c.model_path||'<model_path>','模型文件');
+  if(c.mmproj_path) add('--mmproj',c.mmproj_path,'mmproj 多模态');
+  add('-c',c.basic.ctx_size,'上下文长度');
+  add('-ngl',c.basic.ngl,'GPU 卸载层数');
+  add('-t',c.basic.threads,'CPU 线程数');
+  add('-np',c.basic.parallel,'并行数');
+  add(c.basic.mmap?'--mmap':'--mmap=0','','内存映射');
+  if(c.basic.mlock) add('--mlock','','锁定内存');
+  if(c.basic.n_cpu_moe>0) add('--n-cpu-moe',c.basic.n_cpu_moe,'MoE CPU 卸载层数');
+  if(c.basic.kv_cache_quant_k) add('--cache-type-k',c.basic.kv_cache_quant_k,'KV 缓存量化 K');
+  if(c.basic.kv_cache_quant_v) add('--cache-type-v',c.basic.kv_cache_quant_v,'KV 缓存量化 V');
+  if(c.basic.enable_thinking) add('--chat-template-kwargs',`'{"enable_thinking":true}'`,'思维链');
+  add('--temp',c.sampling.temperature,'');
+  add('--top-k',c.sampling.top_k,'');
+  add('--top-p',c.sampling.top_p,'');
+  if(c.sampling.min_p_enabled) add('--min-p',c.sampling.min_p,'');
+  if(c.sampling.repeat_penalty_enabled) add('--repeat-penalty',c.sampling.repeat_penalty,'');
+  if(c.sampling.presence_penalty_enabled) add('--presence-penalty',c.sampling.presence_penalty,'');
+  if(c.mtp.enabled){add('--spec-type',c.mtp.spec_type,'MTP 投机解码');add('--spec-draft-n-max',c.mtp.draft_n_max,'最大草稿 token')}
+  if(c.system_prompt) add('--system-prompt','"'+c.system_prompt.slice(0,50)+'..."','');
+  add('--host',c.server.host,'');add('--port',c.server.port,'');
+  if(c.extra_params.trim()) add('# extra:',c.extra_params,'额外参数');
+  const el=document.getElementById('paramPreview');
+  el.innerHTML=lines.map(l=>`<div class="param-line"><span class="flag">${l.flag}</span> <span class="value">${l.val}</span>${l.comment?` <span class="comment"># ${l.comment}</span>`:''}</div>`).join('\n');
+  // Also update cmdPreview
+  const cmd=lines.filter(l=>!l.flag.startsWith('#')).map(l=>l.flag+(l.val?' '+l.val:'')).join(' ');
+  document.getElementById('cmdPreview').textContent=cmd;
+}
+function copyParams(){const t=document.getElementById('paramPreview').innerText;navigator.clipboard.writeText(t);showToast('已复制到剪贴板')}
+
+// ── Optimizer ──
+let wsOptimize=null;
+let optResults=[];
+
+function connectOptimizeWS(){
+  if(wsOptimize&&wsOptimize.readyState<=1)return;
+  wsOptimize=new WebSocket(`ws://${location.host}/ws/optimize`);
+  wsOptimize.onmessage=e=>{
+    const text=e.data;
+    // Try to parse as JSON status update
+    try{
+      const data=JSON.parse(text);
+      if(data.type==='status'){
+        document.getElementById('optProgress').textContent=`进度: ${data.current_trial}/${data.total_trials}`;
+        if(data.best){
+          document.getElementById('optProgress').textContent+=` | 最优: tg=${data.best.tg} t/s`;
+        }
+      }else if(data.type==='result'){
+        optResults.push(data);
+        appendResultRow(data);
+      }
+    }catch{
+      // Plain text log line
+      appendLog('optimizeLog',text);
+    }
+  };
+  wsOptimize.onclose=()=>{if(document.getElementById('btnOptStop').disabled===false)wsOptimize=null};
+}
+
+function appendResultRow(r){
+  const tbody=document.getElementById('optResultBody');
+  // Remove "no results" placeholder
+  if(tbody.querySelector('td[colspan]'))tbody.innerHTML='';
+  const tr=document.createElement('tr');
+  tr.style.borderBottom='1px solid var(--border)';
+  tr.innerHTML=`<td style="padding:6px 10px">${r.trial}</td>
+    <td style="padding:6px 10px">${r.ngl}</td>
+    <td style="padding:6px 10px">${r.n_cpu_moe}</td>
+    <td style="padding:6px 10px">${r.ctx}</td>
+    <td style="padding:6px 10px">${r.kv}</td>
+    <td style="padding:6px 10px;font-weight:600">${r.pp}</td>
+    <td style="padding:6px 10px;font-weight:600;color:var(--accent)">${r.tg}</td>
+    <td style="padding:6px 10px">${r.status==='ok'?'✅':'❌'}</td>
+    <td style="padding:6px 10px"><button class="btn btn-secondary" style="padding:2px 8px;font-size:11px" onclick="applyOptResult(${JSON.stringify(r).replace(/"/g,'&quot;')})">应用</button></td>`;
+  tbody.appendChild(tr);
+  // Sort by tg descending
+  const rows=Array.from(tbody.querySelectorAll('tr'));
+  rows.sort((a,b)=>{
+    const tgA=parseFloat(a.querySelectorAll('td')[6]?.textContent||'0');
+    const tgB=parseFloat(b.querySelectorAll('td')[6]?.textContent||'0');
+    return tgB-tgA;
+  });
+  tbody.innerHTML='';
+  rows.forEach(r=>tbody.appendChild(r));
+}
+
+function applyOptResult(r){
+  // Apply the result to config page
+  document.getElementById('ngl').value=r.ngl;
+  document.getElementById('nCpuMoe').value=r.n_cpu_moe;
+  document.getElementById('ctxSize').value=r.ctx;
+  document.getElementById('kvCacheQuantK').value=r.kv;
+  document.getElementById('kvCacheQuantV').value=r.kv;
+  showToast(`已应用: ngl=${r.ngl}, n_cpu_moe=${r.n_cpu_moe}, ctx=${r.ctx}, kv=${r.kv}`);
+  // Switch to config tab
+  document.querySelector('[data-page="config"]').click();
+}
+
+async function startOptimize(){
+  const ctxOptions=Array.from(document.querySelectorAll('.opt-ctx:checked')).map(e=>+e.value);
+  const kvOptions=Array.from(document.querySelectorAll('.opt-kv:checked')).map(e=>e.value);
+  if(!ctxOptions.length){alert('请至少选择一个上下文长度');return}
+  if(!kvOptions.length){alert('请至少选择一个KV缓存类型');return}
+  // 先保存当前配置，确保模型路径等是最新的
+  await api('/api/config',{method:'POST',body:JSON.stringify(cfgFromUI())});
+  const body={
+    ngl_range:[+document.getElementById('optNglMin').value,+document.getElementById('optNglMax').value],
+    n_cpu_moe_range:[+document.getElementById('optMoeMin').value,+document.getElementById('optMoeMax').value],
+    ctx_options:ctxOptions,
+    kv_options:kvOptions,
+    n_trials:+document.getElementById('optTrials').value,
+  };
+  document.getElementById('btnOptStart').disabled=true;
+  document.getElementById('btnOptStop').disabled=false;
+  document.getElementById('optResultBody').innerHTML='<tr><td colspan="9" style="padding:12px;text-align:center;color:var(--fg-muted)">运行中...</td></tr>';
+  optResults=[];
+  const r=await api('/api/optimize/start',{method:'POST',body:JSON.stringify(body)});
+  if(r.error){alert(r.error);document.getElementById('btnOptStart').disabled=false;document.getElementById('btnOptStop').disabled=true;return}
+  connectOptimizeWS();
+}
+
+async function stopOptimize(){
+  await api('/api/optimize/stop',{method:'POST'});
+  document.getElementById('btnOptStart').disabled=false;
+  document.getElementById('btnOptStop').disabled=true;
+}
+
+// ── Init ──
+loadInitCfg();
+statusTimer=setInterval(refreshStatus,5000);
+refreshStatus();
