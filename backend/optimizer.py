@@ -82,8 +82,9 @@ class Optimizer:
             "-m", model,
             "-ngl", str(ngl),
             "-t", str(threads),
-            "-p", str(ctx),
-            "-n", "0",  # 0 = use default output tokens
+            "-c", str(ctx),      # context size (KV cache window)
+            "-p", "512",         # prompt size for pp benchmark
+            "-n", "128",         # tokens to generate for tg benchmark
             "--output", "json",  # force JSON for reliable parsing
         ]
         if kv_k:
