@@ -237,8 +237,10 @@ textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); fo
         </div>
       </div>
 
-      <div style="display:flex;gap:8px;margin-top:12px">
+      <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+        <input type="text" id="configName" placeholder="配置名称" value="default" style="width:160px">
         <button class="btn btn-primary" onclick="saveConfig()">💾 保存配置</button>
+        <button class="btn btn-danger" onclick="deleteConfig()" style="font-size:12px">🗑️ 删除</button>
         <button class="btn btn-secondary" onclick="exportConfig()">📤 导出</button>
         <button class="btn btn-secondary" onclick="importConfig()">📥 导入</button>
         <select id="configList" onchange="loadSavedConfig()" style="margin-left:auto;background:var(--bg-input);color:var(--fg);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font-size:13px"><option value="">-- 已保存配置 --</option></select>
@@ -635,9 +637,20 @@ function uiFromCfg(c){
 }
 
 async function loadInitCfg(){const c=await api('/api/config');uiFromCfg(c);refreshCfgList()}
-async function saveConfig(){await api('/api/config',{method:'POST',body:JSON.stringify(cfgFromUI())});showToast('配置已保存');refreshCfgList()}
+async function saveConfig(){
+  const name=document.getElementById('configName').value.trim()||'default';
+  await api('/api/config/save-as',{method:'POST',body:JSON.stringify({name,config:cfgFromUI()})});
+  showToast('配置已保存: '+name);refreshCfgList()
+}
 async function refreshCfgList(){const{configs}=await api('/api/config/list');const s=document.getElementById('configList');s.innerHTML='<option value="">-- 已保存配置 --</option>';configs.forEach(n=>{s.innerHTML+=`<option value="${n}">${n}</option>`})}
-async function loadSavedConfig(){const n=document.getElementById('configList').value;if(!n)return;const c=await api('/api/config/load',{method:'POST',body:JSON.stringify({name:n})});uiFromCfg(c)}
+async function loadSavedConfig(){const n=document.getElementById('configList').value;if(!n)return;const c=await api('/api/config/load',{method:'POST',body:JSON.stringify({name:n})});uiFromCfg(c);document.getElementById('configName').value=n}
+async function deleteConfig(){
+  const name=document.getElementById('configName').value.trim()||'default';
+  if(name==='default'){alert('不能删除默认配置');return}
+  if(!confirm('确定删除配置 "'+name+'" ?'))return;
+  await api('/api/config/delete',{method:'POST',body:JSON.stringify({name})});
+  showToast('已删除: '+name);document.getElementById('configName').value='default';refreshCfgList()
+}
 function exportConfig(){const b=new Blob([JSON.stringify(cfgFromUI(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='llama-manager-config.json';a.click()}
 function importConfig(){document.getElementById('importFile').click()}
 async function handleImport(e){const f=e.target.files[0];if(!f)return;const t=await f.text();const c=await api('/api/config/import',{method:'POST',body:JSON.stringify({content:t})});uiFromCfg(c);e.target.value=''}

@@ -51,6 +51,18 @@ def load_config(body: dict):
     return config.model_dump()
 
 
+@app.post("/api/config/delete")
+def delete_config(body: dict):
+    name = body.get("name", "default")
+    if name == "default":
+        return JSONResponse(status_code=400, content={"error": "Cannot delete default config"})
+    path = cfg.CONFIG_DIR / f"{name}.json"
+    if path.exists():
+        path.unlink()
+        return {"ok": True}
+    return JSONResponse(status_code=404, content={"error": "Config not found"})
+
+
 @app.post("/api/config/import")
 async def import_config(body: dict):
     content = body.get("content", "{}")
