@@ -76,6 +76,9 @@ function cfgFromUI(){
       enabled:document.getElementById('mtpEnabled').checked,
       spec_type:document.getElementById('mtpSpecType').value,
       draft_n_max:+document.getElementById('mtpDraftNMax').value,
+      draft_n_min:+document.getElementById('mtpDraftNMin').value||0,
+      p_min:+document.getElementById('mtpPMin').value,
+      p_split:+document.getElementById('mtpPSplit').value,
     },
     system_prompt:document.getElementById('systemPrompt').value,
     extra_params:document.getElementById('extraParams').value,
@@ -120,6 +123,8 @@ function uiFromCfg(c){
   document.getElementById('mtpEnabled').checked=m.enabled??false;
   document.getElementById('mtpSpecType').value=m.spec_type||'draft-mtp';
   document.getElementById('mtpDraftNMax').value=m.draft_n_max??3;
+  document.getElementById('mtpPMin').value=m.p_min??0.75;
+  document.getElementById('mtpPSplit').value=m.p_split??0.10;
   toggleMTP();
   document.getElementById('systemPrompt').value=c.system_prompt||'';
   document.getElementById('extraParams').value=c.extra_params||'';
@@ -402,7 +407,13 @@ function buildParamPreview(){
   if(c.sampling.min_p_enabled) add('--min-p',c.sampling.min_p,'');
   if(c.sampling.repeat_penalty_enabled) add('--repeat-penalty',c.sampling.repeat_penalty,'');
   if(c.sampling.presence_penalty_enabled) add('--presence-penalty',c.sampling.presence_penalty,'');
-  if(c.mtp.enabled){add('--spec-type',c.mtp.spec_type,'MTP 投机解码');add('--spec-draft-n-max',c.mtp.draft_n_max,'最大草稿 token')}
+  if(c.mtp.enabled){
+    add('--spec-type',c.mtp.spec_type,'MTP 投机解码');
+    add('--spec-draft-n-max',c.mtp.draft_n_max,'最大草稿 token');
+    if(c.mtp.draft_n_min>0) add('--spec-draft-n-min',c.mtp.draft_n_min,'最小草稿 token');
+    if(c.mtp.p_min!==0.75) add('--spec-draft-p-min',c.mtp.p_min,'最小接受概率');
+    if(c.mtp.p_split!==0.10) add('--spec-draft-p-split',c.mtp.p_split,'分裂概率阈值');
+  }
   if(c.system_prompt) add('--system-prompt','"'+c.system_prompt.slice(0,50)+'..."','');
   add('--host',c.server.host,'');add('--port',c.server.port,'');
   if(c.extra_params.trim()) add('# extra:',c.extra_params,'额外参数');

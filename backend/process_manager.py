@@ -120,7 +120,14 @@ class ProcessManager:
         # MTP speculative decoding
         mtp = config.mtp
         if mtp.enabled:
-            cmd += ["--spec-type", mtp.spec_type, "--spec-draft-n-max", str(mtp.draft_n_max)]
+            cmd += ["--spec-type", mtp.spec_type]
+            cmd += ["--spec-draft-n-max", str(mtp.draft_n_max)]
+            if mtp.draft_n_min > 0:
+                cmd += ["--spec-draft-n-min", str(mtp.draft_n_min)]
+            if mtp.p_min != 0.75:
+                cmd += ["--spec-draft-p-min", str(mtp.p_min)]
+            if mtp.p_split != 0.10:
+                cmd += ["--spec-draft-p-split", str(mtp.p_split)]
 
         if config.extra_params.strip():
             cmd += config.extra_params.strip().split()

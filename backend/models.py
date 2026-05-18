@@ -41,6 +41,9 @@ class MTPSettings(BaseModel):
     enabled: bool = False
     spec_type: str = "draft-mtp"  # draft-mtp
     draft_n_max: int = 3  # max draft tokens (2 or 3 typical)
+    draft_n_min: int = 0  # min draft tokens (default: 0)
+    p_min: float = 0.75  # minimum acceptance probability (greedy), 1.0 = lossless
+    p_split: float = 0.10  # split probability threshold
 
 
 class ServerSettings(BaseModel):
