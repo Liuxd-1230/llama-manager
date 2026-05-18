@@ -69,7 +69,7 @@ class ProcessManager:
             cmd += ["--cache-type-v", b.kv_cache_quant_v]
 
         if b.enable_thinking:
-            cmd.append("--reasoning")
+            cmd += ["--reasoning", "on"]
 
         # KV cache offload to GPU
         if not b.kv_offload:
