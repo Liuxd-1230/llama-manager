@@ -248,7 +248,12 @@ class Optimizer:
         mmap: bool = True,
         mlock: bool = False,
     ):
-        """Run Bayesian optimization."""
+        """Run Bayesian optimization.
+
+        Tests different combinations of ngl, n_cpu_moe, ctx, and kv to find
+        the best tg (text generation) speed. Context size is simulated via
+        -p (n-prompt) in llama-bench.
+        """
         import optuna
 
         if self._is_running:
@@ -273,10 +278,13 @@ class Optimizer:
         self._append(f"📊 参数范围:")
         self._append(f"  ngl: {ngl_range[0]}~{ngl_range[1]}")
         self._append(f"  n_cpu_moe: {n_cpu_moe_range[0]}~{n_cpu_moe_range[1]}")
-        self._append(f"  ctx: {ctx_options}")
+        self._append(f"  ctx (n-prompt): {ctx_options}")
         self._append(f"  kv: {kv_options}")
         self._append(f"📊 总试验次数: {n_trials}")
         self._append(f"📊 线程数: {threads}")
+        self._append(f"")
+        self._append(f"💡 提示: -p 值模拟上下文大小，8GB显存+35B模型建议 -p 4096~8192")
+        self._append(f"   大上下文需配合 --n-cpu-moe 卸载专家到CPU")
         self._append(f"")
 
         # Suppress optuna logs
