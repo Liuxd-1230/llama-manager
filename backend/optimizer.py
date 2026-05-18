@@ -91,9 +91,9 @@ class Optimizer:
             "-r", "3",             # 重复 3 次取平均
         ]
         if kv_k:
-            cmd += ["--cache-type-k", kv_k]
+            cmd += ["-ctk", kv_k]
         if kv_v:
-            cmd += ["--cache-type-v", kv_v]
+            cmd += ["-ctv", kv_v]
         if n_cpu_moe > 0:
             cmd += ["--n-cpu-moe", str(n_cpu_moe)]
         if mmap:
@@ -103,8 +103,9 @@ class Optimizer:
         # KV cache offload to GPU (default: offloaded, -nkvo 1 to disable)
         if not kv_offload:
             cmd += ["-nkvo", "1"]
-        # Flash attention
-        if flash_attn:
+        # Flash attention - required for quantized V cache
+        is_quantized = kv_v and kv_v not in ("f16", "f32", "bf16")
+        if flash_attn or is_quantized:
             cmd += ["-fa", "1"]
         # Fit model to GPU memory with margin
         if fit_target > 0:
