@@ -83,6 +83,7 @@ class Optimizer:
             "-t", str(threads),
             "-p", str(ctx),
             "-n", "0",  # 0 = use default output tokens
+            "--output", "json",  # force JSON for reliable parsing
         ]
         if kv_k:
             cmd += ["--cache-type-k", kv_k]
@@ -98,62 +99,62 @@ class Optimizer:
         self._append(f"  $ {' '.join(cmd)}")
 
         try:
-            # Run with timeout
+            # Dynamic timeout: base 300s + scale with ctx size (256k ctx needs ~15min)
+            timeout = max(300, 60 + ctx // 50)
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=300,  # 5 min max per run
+                timeout=timeout,
                 cwd=str(Path(bench_bin).parent.parent.parent),  # llama.cpp root
             )
             output = result.stdout + result.stderr
 
             # Check for OOM
-            if any(kw in output.lower() for kw in ["out of memory", "oom", "cuda error", "memory allocation failed"]):
+            oom_keywords = ["out of memory", "oom", "cuda error", "memory allocation failed"]
+            if any(kw in output.lower() for kw in oom_keywords):
                 self._append(f"  ❌ OOM / Memory error")
                 return None
 
             # Parse llama-bench output
-            # Modern llama-bench prints a markdown table:
-            # | model | ... | test |              t/s |
-            # |-------|-----|------|-----------------|
-            # | ...   | ... | pp512| 1234.56 ± 12.34 |
-            # | ...   | ... | tg128|   45.67 ±  1.23 |
-            #
-            # Also supports CSV mode (--output csv) and JSON (--output json)
             pp_tok_s = None
             tg_tok_s = None
 
-            # Strategy 1: Try JSON output (llama-bench --output json)
-            # Not used here since we don't pass --output json, but parse if present
-            json_match = re.search(r'\{.*"n_pp".*"n_tg".*\}', output, re.DOTALL)
-            if json_match:
-                try:
-                    j = json.loads(json_match.group())
-                    pp_tok_s = float(j.get("avg_ts_pp", 0))
-                    tg_tok_s = float(j.get("avg_ts_tg", 0))
-                except (json.JSONDecodeError, ValueError, TypeError):
-                    pass
+            # Strategy 1: Parse JSON (--output json)
+            # Format: {"results": [{"test": "pp512", "avg_ts": 1234.56}, ...]}
+            try:
+                json_start = output.find('{')
+                json_end = output.rfind('}') + 1
+                if json_start >= 0 and json_end > json_start:
+                    j = json.loads(output[json_start:json_end])
+                    results_list = j.get("results", [])
+                    if isinstance(results_list, list):
+                        for r in results_list:
+                            test = str(r.get("test", "")).lower()
+                            ts = r.get("avg_ts", 0)
+                            if "pp" in test and pp_tok_s is None:
+                                pp_tok_s = float(ts)
+                            elif "tg" in test and tg_tok_s is None:
+                                tg_tok_s = float(ts)
+                    # Also try flat keys
+                    if pp_tok_s is None and "avg_ts_pp" in j:
+                        pp_tok_s = float(j["avg_ts_pp"])
+                    if tg_tok_s is None and "avg_ts_tg" in j:
+                        tg_tok_s = float(j["avg_ts_tg"])
+            except (json.JSONDecodeError, ValueError, TypeError, KeyError):
+                pass
 
-            # Strategy 2: Parse markdown table rows
-            # Look for rows containing pp/tg test labels, extract the t/s value
+            # Strategy 2: Parse markdown table rows (fallback)
             if pp_tok_s is None or tg_tok_s is None:
                 for line in output.split("\n"):
                     line = line.strip()
                     if not line.startswith("|"):
                         continue
-                    cells = [c.strip() for c in line.split("|")]
-                    cells = [c for c in cells if c]  # remove empty
-                    if len(cells) < 2:
-                        continue
-                    # Check if any cell contains pp or tg test label
                     row_text = line.lower()
-                    # Extract numbers (possibly with ± stddev): "1234.56 ± 12.34"
                     num_match = re.findall(r'(\d+\.?\d*)\s*(?:±|$)', line)
                     if not num_match:
                         continue
                     val = float(num_match[0])
-                    # Detect pp or tg from test label cell
                     has_pp = bool(re.search(r'\bpp\b|\bpp\d+', row_text))
                     has_tg = bool(re.search(r'\btg\b|\btg\d+', row_text))
                     if has_pp and pp_tok_s is None:
@@ -161,7 +162,7 @@ class Optimizer:
                     elif has_tg and tg_tok_s is None:
                         tg_tok_s = val
 
-            # Strategy 3: Look for "prompt eval" / "eval" lines (llama-bench older or server)
+            # Strategy 3: Look for "prompt eval" / "eval" lines
             if pp_tok_s is None or tg_tok_s is None:
                 for line in output.split("\n"):
                     ll = line.lower()
@@ -200,12 +201,12 @@ class Optimizer:
                 return {"pp": pp_tok_s, "tg": 0.0}
             else:
                 self._append(f"  ⚠️ 无法解析输出")
-                # Log first 500 chars of output for debugging
-                self._append(f"  输出: {output[:500]}")
+                # Log first 800 chars of output for debugging
+                self._append(f"  输出: {output[:800]}")
                 return None
 
         except subprocess.TimeoutExpired:
-            self._append(f"  ❌ 超时 (>300s)")
+            self._append(f"  ❌ 超时 (>{timeout}s)")
             return None
         except Exception as e:
             self._append(f"  ❌ 错误: {e}")

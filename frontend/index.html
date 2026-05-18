@@ -489,7 +489,7 @@ textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); fo
 </div>
 
 
-<!-- ═══ 文件夹浏览器弹窗 ═══ -->
+<!-- ═══ 文件/文件夹浏览器弹窗 ═══ -->
 <div class="modal-overlay" id="folderModal">
   <div class="modal">
     <h3 id="folderModalTitle">📂 浏览文件夹</h3>
@@ -503,25 +503,10 @@ textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); fo
       <button class="btn btn-secondary" onclick="browseTo()">前往</button>
     </div>
     <div class="file-list" id="folderList"></div>
+    <div id="selectedFileInfo" style="display:none;padding:6px 10px;background:var(--accent-light);border-radius:var(--radius-sm);font-size:12px;color:var(--accent);margin-bottom:8px"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeFolderModal()">取消</button>
-      <button class="btn btn-primary" onclick="selectFolder()">选择此文件夹</button>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ 模型选择弹窗 ═══ -->
-<div class="modal-overlay" id="modelModal">
-  <div class="modal">
-    <h3>🧠 选择模型</h3>
-    <div class="form-row" style="margin-bottom:10px">
-      <input type="text" id="modelBrowseDir" placeholder="模型目录" style="flex:1">
-      <button class="btn btn-secondary" onclick="scanModels()">🔍 扫描</button>
-    </div>
-    <div class="file-list" id="modelFileList"></div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModelModal()">取消</button>
-      <button class="btn btn-primary" onclick="selectModel()">选择</button>
+      <button class="btn btn-primary" id="folderSelectBtn" onclick="selectFolder()">选择此文件夹</button>
     </div>
   </div>
 </div>
@@ -535,6 +520,7 @@ textarea { resize: vertical; min-height: 80px; font-family: var(--font-mono); fo
 // ── State ──
 let ws=null, wsCompile=null, wsDownload=null, statusTimer=null, chatHistory=[];
 let folderCallback=null, currentBrowsePath='';
+let browseMode='folder', browseFilter='.gguf', selectedFilePath='';
 let isWindows = navigator.platform.indexOf('Win')>=0;
 
 // ── Navigation ──
@@ -663,23 +649,26 @@ function showToast(msg){
   t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);
 }
 
-// ── Folder browser ──
+// ── Folder / File browser ──
 let nativePickerTarget='';
 function openFolderPicker(targetInput){
-  // Open the custom browser modal instead — native picker says "Upload" which is confusing
+  browseMode='folder';
+  browseFilter='';
+  selectedFilePath='';
+  document.getElementById('folderModalTitle').textContent='📂 浏览文件夹';
+  document.getElementById('folderSelectBtn').textContent='选择此文件夹';
+  document.getElementById('selectedFileInfo').style.display='none';
   folderCallback=(path)=>{document.getElementById(targetInput).value=path;if(targetInput==='llamaCppDir')setTimeout(detectServer,200)};
   currentBrowsePath=document.getElementById(targetInput).value||'';
   document.getElementById('folderModal').classList.add('show');
   loadDriveList();
-  if(currentBrowsePath) browseTo(currentBrowsePath); else browseTo(isWindows?'E:\\':'/');
+  if(currentBrowsePath) browseTo(currentBrowsePath); else browseTo(isWindows?'C:\\':'/');
 }
 function handleNativeFolder(e){
   const files=e.target.files;
   if(files&&files.length>0){
-    // Extract folder path from first file's webkitRelativePath
     const fp=files[0].webkitRelativePath;
     const fullPath=files[0].path||'';
-    // Try to get directory path
     let dir='';
     if(fullPath){dir=fullPath.replace(/[\\/][^\\/]*$/,'')}
     else if(fp){dir=fp.split('/')[0]}
@@ -702,22 +691,28 @@ function handleNativeFile(e){
   }
   e.target.value='';
 }
-// File browser (for mmproj etc.) — same modal but picks files not dirs
-function openFileBrowser(targetInput){
+// File browser (for model/mmproj) — same modal but picks files
+function openFileBrowser(targetInput, filter){
+  browseMode='file';
+  browseFilter=filter||'.gguf';
+  selectedFilePath='';
+  const title=targetInput==='modelPath'?'🧠 选择模型':'🖼️ 选择 mmproj 文件';
+  document.getElementById('folderModalTitle').textContent=title;
+  document.getElementById('folderSelectBtn').textContent='选择此文件';
+  document.getElementById('selectedFileInfo').style.display='none';
   folderCallback=(path)=>{document.getElementById(targetInput).value=path};
-  currentBrowsePath=document.getElementById(targetInput).value||'';
+  // Start from current path's parent, or default to common model locations
+  const currentVal=document.getElementById(targetInput).value;
+  if(currentVal){
+    let p=currentVal.replace(/[\\/][^\\/]*$/,'');
+    currentBrowsePath=p||currentVal;
+  }else{
+    // Default to common model locations instead of llamaCppDir
+    currentBrowsePath=isWindows?'C:\\':'/';
+  }
   document.getElementById('folderModal').classList.add('show');
   loadDriveList();
-  if(currentBrowsePath){let p=currentBrowsePath.replace(/[\\/][^\\/]*$/,'');browseTo(p||currentBrowsePath)}
-  else browseTo(isWindows?'E:\\':'/');
-}
-// Keep custom browser as fallback
-function openCustomFolderPicker(targetInput){
-  folderCallback=(path)=>{document.getElementById(targetInput).value=path};
-  currentBrowsePath=document.getElementById(targetInput).value||'';
-  document.getElementById('folderModal').classList.add('show');
-  loadDriveList();
-  if(currentBrowsePath) browseTo(currentBrowsePath); else browseTo(isWindows?'C:\\':'/');
+  browseTo(currentBrowsePath);
 }
 function closeFolderModal(){document.getElementById('folderModal').classList.remove('show')}
 async function loadDriveList(){
@@ -735,9 +730,25 @@ async function browseTo(path){
   const r=await api('/api/browse?dir='+encodeURIComponent(currentBrowsePath));
   const list=document.getElementById('folderList');
   if(!r.entries||!r.entries.length){list.innerHTML='<div style="color:var(--fg-muted);padding:12px;text-align:center">空目录</div>';return}
-  list.innerHTML=r.entries.filter(e=>e.is_dir).map(e=>{
+  // Always show directories
+  let html=r.entries.filter(e=>e.is_dir).map(e=>{
     return '<div class="file-item" data-browse="'+e.path.replace(/"/g,'&quot;')+'"><span class="file-icon">📁</span><span>'+e.name+'</span></div>';
   }).join('');
+  // In file mode, also show .gguf files
+  if(browseMode==='file'){
+    const files=r.entries.filter(e=>!e.is_dir && e.name.toLowerCase().endsWith(browseFilter));
+    if(files.length){
+      html+=files.map(e=>{
+        const sizeMB=(e.size_mb||(e.size||0)/(1024*1024)).toFixed(0);
+        return '<div class="file-item" data-file="'+e.path.replace(/"/g,'&quot;')+'" data-name="'+e.name.replace(/"/g,'&quot;')+'"><span class="file-icon">📄</span><span style="flex:1">'+e.name+'</span><span class="file-size">'+sizeMB+' MB</span></div>';
+      }).join('');
+    }
+    // Auto-scan hint if no gguf found
+    if(!files.length && r.entries.length>0){
+      html+='<div style="color:var(--fg-muted);padding:8px 10px;font-size:12px;text-align:center">此目录无 '+browseFilter+' 文件</div>';
+    }
+  }
+  list.innerHTML=html;
 }
 function updateBreadcrumb(){
   const bc=document.getElementById('folderBreadcrumb');
@@ -751,8 +762,48 @@ function updateBreadcrumb(){
 document.addEventListener('click',function(e){
   const el=e.target.closest('[data-browse]');
   if(el){e.preventDefault();browseTo(el.dataset.browse)}
+  const fileEl=e.target.closest('[data-file]');
+  if(fileEl){
+    e.preventDefault();
+    // Select this file
+    selectedFilePath=fileEl.dataset.file;
+    // Highlight
+    document.querySelectorAll('#folderList .file-item').forEach(i=>i.classList.remove('selected'));
+    fileEl.classList.add('selected');
+    // Show selection info
+    const info=document.getElementById('selectedFileInfo');
+    info.textContent='✅ 已选择: '+fileEl.dataset.name;
+    info.style.display='block';
+  }
 });
-function selectFolder(){if(folderCallback)folderCallback(currentBrowsePath);closeFolderModal()}
+function selectFolder(){
+  if(browseMode==='file'){
+    // In file mode, use selected file or try to find .gguf in current dir
+    if(selectedFilePath){
+      if(folderCallback)folderCallback(selectedFilePath);
+    }else{
+      // Auto-scan current directory for .gguf files
+      scanAndPickFile();
+      return;
+    }
+  }else{
+    if(folderCallback)folderCallback(currentBrowsePath);
+  }
+  closeFolderModal();
+}
+async function scanAndPickFile(){
+  const r=await api('/api/scan-models?dir='+encodeURIComponent(currentBrowsePath));
+  if(r.models&&r.models.length){
+    // Auto-select if only one, otherwise pick first
+    const picked=r.models[0].path;
+    if(folderCallback)folderCallback(picked);
+    showToast('自动检测到 '+r.models.length+' 个模型，已选择: '+r.models[0].name);
+  }else{
+    showToast('⚠️ 此目录未找到 .gguf 文件');
+    return;
+  }
+  closeFolderModal();
+}
 function goUpOneLevel(){
   let p=currentBrowsePath.replace(/\\/g,'/').replace(/\/$/,'');
   let idx=p.lastIndexOf('/');
@@ -760,21 +811,10 @@ function goUpOneLevel(){
   else if(isWindows&&p.length>=2){browseTo(p.substring(0,2)+'\\')}
 }
 
-// ── Model picker ──
+// ── Model picker (uses unified file browser) ──
 function openModelPicker(){
-  const dir=document.getElementById('llamaCppDir').value;
-  if(dir) document.getElementById('modelBrowseDir').value=dir+(isWindows?'\\models':'/models');
-  document.getElementById('modelModal').classList.add('show');
+  openFileBrowser('modelPath', '.gguf');
 }
-function closeModelModal(){document.getElementById('modelModal').classList.remove('show')}
-async function scanModels(){
-  const dir=document.getElementById('modelBrowseDir').value;
-  const r=await api('/api/scan-models?dir='+encodeURIComponent(dir));
-  const list=document.getElementById('modelFileList');
-  if(!r.models||!r.models.length){list.innerHTML='<div style="color:var(--fg-muted);padding:12px;text-align:center">未找到 .gguf 文件</div>';return}
-  list.innerHTML=r.models.map(m=>`<label class="file-item"><input type="radio" name="modelPick" value="${m.path}" style="margin-right:6px"><span style="flex:1">${m.name}</span><span class="file-size">${m.size_mb} MB</span></label>`).join('');
-}
-function selectModel(){const p=document.querySelector('input[name="modelPick"]:checked');if(p)document.getElementById('modelPath').value=p.value;closeModelModal()}
 
 // ── Server detect ──
 async function detectServer(){

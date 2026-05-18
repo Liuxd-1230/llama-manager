@@ -68,6 +68,7 @@ class DirEntry(BaseModel):
     name: str
     path: str
     is_dir: bool
+    size_mb: float = 0
 
 
 class ServerStatus(BaseModel):

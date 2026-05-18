@@ -81,7 +81,13 @@ def browse_directory(directory: str) -> list[dict]:
         for item in sorted(d.iterdir()):
             if item.name.startswith('.'):
                 continue
-            entries.append({"name": item.name, "path": str(item), "is_dir": item.is_dir()})
+            size_mb = 0
+            if item.is_file():
+                try:
+                    size_mb = round(item.stat().st_size / (1024 * 1024), 1)
+                except OSError:
+                    pass
+            entries.append({"name": item.name, "path": str(item), "is_dir": item.is_dir(), "size_mb": size_mb})
     except PermissionError:
         pass
     return entries
