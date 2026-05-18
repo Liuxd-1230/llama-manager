@@ -153,7 +153,11 @@ class Optimizer:
                     if any(kw in ll for kw in error_keywords) and ll:
                         err_line = line.strip()
                         break
-                self._append(f"  ❌ 错误: {err_line or f'退出码 {proc.returncode}'}")
+                # Check if it's likely OOM (common with high ngl + large ctx)
+                if "failed to create context" in output_lower:
+                    self._append(f"  ❌ OOM / 显存不足 (ngl={ngl} 太大)")
+                else:
+                    self._append(f"  ❌ 错误: {err_line or f'退出码 {proc.returncode}'}")
                 return None
 
             # Parse llama-bench output
