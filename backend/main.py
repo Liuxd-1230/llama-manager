@@ -312,6 +312,9 @@ async def optimize_start(request: Request):
             n_trials=body.get("n_trials", 50),
             mmap=config.basic.mmap,
             mlock=config.basic.mlock,
+            kv_offload=config.basic.kv_offload,
+            flash_attn=config.basic.flash_attn,
+            fit_target=config.basic.fit_target,
         )
         return {"ok": True}
     except Exception as e:
