@@ -123,10 +123,24 @@ class Optimizer:
                 return None
             output = (stdout or b'').decode('utf-8', errors='replace') + (stderr or b'').decode('utf-8', errors='replace')
 
-            # Check for OOM
+            # Check for errors (OOM, CUDA, load failures, non-zero exit)
             oom_keywords = ["out of memory", "oom", "cuda error", "memory allocation failed"]
-            if any(kw in output.lower() for kw in oom_keywords):
-                self._append(f"  ❌ OOM / Memory error")
+            error_keywords = ["error", "failed", "assert", "abort", "segmentation fault"]
+            output_lower = output.lower()
+
+            if any(kw in output_lower for kw in oom_keywords):
+                self._append(f"  ❌ OOM / 显存不足")
+                return None
+
+            if proc.returncode != 0 or any(kw in output_lower for kw in error_keywords):
+                # Extract the error line for display
+                err_line = ""
+                for line in output.split("\n"):
+                    ll = line.lower().strip()
+                    if any(kw in ll for kw in error_keywords) and ll:
+                        err_line = line.strip()
+                        break
+                self._append(f"  ❌ 错误: {err_line or f'退出码 {proc.returncode}'}")
                 return None
 
             # Parse llama-bench output
