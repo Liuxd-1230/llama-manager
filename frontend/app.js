@@ -1,5 +1,7 @@
 // ── State ──
 let ws=null, wsCompile=null, wsDownload=null, statusTimer=null, chatHistory=[];
+let wsReconnectDelay=3000, wsCompileReconnectDelay=3000, wsDownloadReconnectDelay=3000;
+const WS_MAX_DELAY=30000;
 let folderCallback=null, currentBrowsePath='';
 let browseMode='folder', browseFilter='.gguf', selectedFilePath='';
 let isWindows = navigator.platform.indexOf('Win')>=0;
@@ -64,7 +66,7 @@ function toggleSamp(n){
 }
 function toggleMTP(){const e=document.getElementById('mtpEnabled'),g=document.getElementById('mtpGroup');g.classList.toggle('group-disabled',!e.checked)}
 function onModeChange(){const m=document.getElementById('serverMode').value;document.getElementById('serverHost').value=m==='lan'?'0.0.0.0':'127.0.0.1'}
-async function api(u,o={}){const r=await fetch(u,{headers:{'Content-Type':'application/json'},...o});return r.json()}
+async function api(u,o={}){try{const r=await fetch(u,{headers:{'Content-Type':'application/json'},...o});if(!r.ok)return{error:`HTTP ${r.status}`};return await r.json()}catch(e){return{error:e.message}}}
 
 // ── Config <-> UI ──
 function cfgFromUI(){
@@ -443,7 +445,7 @@ function startHealthPoll(){
         }
         return;
       }
-    }catch{}
+    }catch(e){console.warn('Health check failed:',e.message)}
     if(attempts>=maxAttempts){
       stopHealthPoll();
       showToast('⚠️ 健康检查超时，请查看日志确认服务状态');
@@ -454,9 +456,9 @@ function stopHealthPoll(){if(healthPollTimer){clearInterval(healthPollTimer);hea
 async function refreshStatus(){const s=await api('/api/server/status');const b=document.getElementById('statusBadge'),info=document.getElementById('serverInfo');b.className='status-pill';if(s.state==='running'){b.classList.add('st-running');b.textContent='● 运行中';document.getElementById('btnStart').disabled=true;document.getElementById('btnStop').disabled=false;info.textContent=`PID ${s.pid} | ${Math.floor(s.uptime_seconds/60)}m${Math.floor(s.uptime_seconds%60)}s`}else{b.classList.add('st-stopped');b.textContent='● 已停止';document.getElementById('btnStart').disabled=false;document.getElementById('btnStop').disabled=true;info.textContent=s.error||''}}
 
 // ── WebSocket logs ──
-function connectLogWS(){if(ws&&ws.readyState<=1)return;ws=new WebSocket(`ws://${location.host}/ws/logs`);ws.onmessage=e=>appendLog('serverLog',e.data);ws.onclose=()=>setTimeout(connectLogWS,3000)}
-function connectCompileWS(){if(wsCompile&&wsCompile.readyState<=1)return;wsCompile=new WebSocket(`ws://${location.host}/ws/compile`);wsCompile.onmessage=e=>appendLog('compileLog',e.data);wsCompile.onclose=()=>setTimeout(connectCompileWS,3000)}
-function connectDownloadWS(){if(wsDownload&&wsDownload.readyState<=1)return;wsDownload=new WebSocket(`ws://${location.host}/ws/download`);wsDownload.onmessage=e=>appendLog('downloadLog',e.data);wsDownload.onclose=()=>setTimeout(connectDownloadWS,3000)}
+function connectLogWS(){if(ws&&ws.readyState<=1)return;ws=new WebSocket(`ws://${location.host}/ws/logs`);ws.onmessage=e=>{wsReconnectDelay=3000;appendLog('serverLog',e.data)};ws.onclose=()=>setTimeout(connectLogWS,wsReconnectDelay=Math.min(wsReconnectDelay*2,WS_MAX_DELAY))}
+function connectCompileWS(){if(wsCompile&&wsCompile.readyState<=1)return;wsCompile=new WebSocket(`ws://${location.host}/ws/compile`);wsCompile.onmessage=e=>{wsCompileReconnectDelay=3000;appendLog('compileLog',e.data)};wsCompile.onclose=()=>setTimeout(connectCompileWS,wsCompileReconnectDelay=Math.min(wsCompileReconnectDelay*2,WS_MAX_DELAY))}
+function connectDownloadWS(){if(wsDownload&&wsDownload.readyState<=1)return;wsDownload=new WebSocket(`ws://${location.host}/ws/download`);wsDownload.onmessage=e=>{wsDownloadReconnectDelay=3000;appendLog('downloadLog',e.data)};wsDownload.onclose=()=>setTimeout(connectDownloadWS,wsDownloadReconnectDelay=Math.min(wsDownloadReconnectDelay*2,WS_MAX_DELAY))}
 function appendLog(boxId,text){const box=document.getElementById(boxId);const line=document.createElement('div');line.style.marginBottom='1px';if(text.includes('ERROR')||text.includes('error'))line.className='log-error';if(text.includes('[manager]')||text.includes('[download]'))line.className='log-info';line.textContent=text;box.appendChild(line);if(boxId==='serverLog'){const full=document.getElementById('fullLog');const l2=line.cloneNode(true);full.appendChild(l2);if(document.getElementById('autoScroll2')?.checked)full.scrollTop=full.scrollHeight}if(document.getElementById('autoScroll')?.checked)box.scrollTop=box.scrollHeight}
 async function clearLogs(){await api('/api/server/logs/clear',{method:'POST'});['serverLog','fullLog'].forEach(id=>document.getElementById(id).innerHTML='')}
 function downloadLogs(){const t=document.getElementById('fullLog').innerText;const b=new Blob([t],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`llama-server-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.log`;a.click()}
@@ -559,7 +561,7 @@ function connectOptimizeWS(){
       appendLog('optimizeLog',text);
     }
   };
-  wsOptimize.onclose=()=>{if(document.getElementById('btnOptStop').disabled===false)wsOptimize=null};
+  wsOptimize.onclose=()=>{if(document.getElementById('btnOptStop').disabled===false)setTimeout(connectOptimizeWS,3000);else wsOptimize=null};
 }
 
 function appendResultRow(r){
