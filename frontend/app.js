@@ -385,8 +385,39 @@ async function detectServer(){
 async function onDirChange(){setTimeout(detectServer,100)}
 
 // ── Server control ──
-async function startServer(){document.getElementById('btnStart').disabled=true;await api('/api/config',{method:'POST',body:JSON.stringify(cfgFromUI())});const r=await api('/api/server/start',{method:'POST'});if(r.error){alert('启动失败: '+r.error);document.getElementById('btnStart').disabled=false;return}connectLogWS();refreshStatus()}
-async function stopServer(){document.getElementById('btnStop').disabled=true;await api('/api/server/stop',{method:'POST'});refreshStatus()}
+let healthPollTimer=null;
+async function startServer(){document.getElementById('btnStart').disabled=true;await api('/api/config',{method:'POST',body:JSON.stringify(cfgFromUI())});const r=await api('/api/server/start',{method:'POST'});if(r.error){alert('启动失败: '+r.error);document.getElementById('btnStart').disabled=false;return}connectLogWS();refreshStatus();startHealthPoll()}
+async function stopServer(){document.getElementById('btnStop').disabled=true;stopHealthPoll();await api('/api/server/stop',{method:'POST'});refreshStatus()}
+function startHealthPoll(){
+  stopHealthPoll();
+  const badge=document.getElementById('statusBadge');
+  badge.textContent='● 启动中...';
+  badge.className='status-pill st-starting';
+  let attempts=0;
+  const maxAttempts=60;
+  healthPollTimer=setInterval(async()=>{
+    attempts++;
+    try{
+      const r=await api('/api/server/health');
+      if(r.ready){
+        stopHealthPoll();
+        badge.className='status-pill st-running';
+        badge.textContent='● 就绪';
+        showToast('✅ llama-server 已就绪，可以开始对话');
+        refreshStatus();
+        if('Notification' in window&&Notification.permission==='granted'){
+          new Notification('llama-server 已就绪',{body:'服务启动成功，可以开始对话',icon:'🖥️'});
+        }
+        return;
+      }
+    }catch{}
+    if(attempts>=maxAttempts){
+      stopHealthPoll();
+      showToast('⚠️ 健康检查超时，请查看日志确认服务状态');
+    }
+  },2000);
+}
+function stopHealthPoll(){if(healthPollTimer){clearInterval(healthPollTimer);healthPollTimer=null}}
 async function refreshStatus(){const s=await api('/api/server/status');const b=document.getElementById('statusBadge'),info=document.getElementById('serverInfo');b.className='status-pill';if(s.state==='running'){b.classList.add('st-running');b.textContent='● 运行中';document.getElementById('btnStart').disabled=true;document.getElementById('btnStop').disabled=false;info.textContent=`PID ${s.pid} | ${Math.floor(s.uptime_seconds/60)}m${Math.floor(s.uptime_seconds%60)}s`}else{b.classList.add('st-stopped');b.textContent='● 已停止';document.getElementById('btnStart').disabled=false;document.getElementById('btnStop').disabled=true;info.textContent=s.error||''}}
 
 // ── WebSocket logs ──
