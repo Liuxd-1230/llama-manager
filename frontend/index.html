@@ -4,46 +4,54 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>llama.cpp Run Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@latest/font/lucide.css">
 <link rel="stylesheet" href="/static/style.css">
+<script>
+(function(){try{var t=localStorage.getItem('theme')||'light';if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})();
+</script>
 </head>
 <body>
 <header>
   <div class="logo">
-    <span class="logo-icon">🦙</span>
-    <span class="logo-text">llama.cpp Run Manager</span>
+    <i class="icon icon-lg logo-icon lucide-zap"></i>
+    <span class="logo-text">llama.cpp Manager</span>
   </div>
   <div class="header-right">
     <span id="listenAddr" class="listen-addr"></span>
-    <span id="statusBadge" class="status-pill st-stopped">● 已停止</span>
+    <span id="statusBadge" class="status-pill st-stopped"><i class="icon icon-sm lucide-circle-dot"></i> 已停止</span>
+    <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()" title="切换主题" role="switch" aria-checked="false" aria-label="切换深色模式">
+      <i class="icon lucide-moon" id="themeIcon"></i>
+    </button>
   </div>
 </header>
 
 <div class="main-wrap">
   <nav id="sidebar">
-    <button class="active" data-page="config">⚙️ 配置</button>
-    <button data-page="sampling">🎲 采样器</button>
-    <button data-page="prompt">📝 提示词</button>
-    <button data-page="server">🖥️ 服务器</button>
-    <button data-page="optimize">🔬 自动优化</button>
-    <button data-page="params">📋 参数预览</button>
-    <button data-page="chat">💬 对话</button>
-    <button data-page="webui">🌐 原生 WebUI</button>
-    <button data-page="update">🔄 更新</button>
-    <button data-page="download">📥 下载</button>
-    <button data-page="logs">📜 日志</button>
+    <button class="active" data-page="config"><i class="icon lucide-settings"></i> 配置</button>
+    <button data-page="sampling"><i class="icon lucide-sliders-horizontal"></i> 采样器</button>
+    <button data-page="prompt"><i class="icon lucide-file-text"></i> 提示词</button>
+    <button data-page="server"><i class="icon lucide-server"></i> 服务器</button>
+    <button data-page="optimize"><i class="icon lucide-flask-conical"></i> 自动优化</button>
+    <button data-page="params"><i class="icon lucide-terminal"></i> 参数预览</button>
+    <button data-page="chat"><i class="icon lucide-message-square"></i> 对话</button>
+    <button data-page="webui"><i class="icon lucide-globe"></i> 原生 WebUI</button>
+    <button data-page="update"><i class="icon lucide-refresh-cw"></i> 更新</button>
+    <button data-page="download"><i class="icon lucide-download"></i> 下载</button>
+    <button data-page="logs"><i class="icon lucide-scroll-text"></i> 日志</button>
   </nav>
   <div class="content">
 
     <!-- ═══ 配置页 ═══ -->
     <div id="page-config" class="page active">
       <div class="card">
-        <div class="card-title"><span class="icon">📁</span> 路径配置</div>
+        <div class="card-title"><i class="icon lucide-folder-open"></i> 路径配置</div>
         <div class="form-group">
           <label>llama.cpp 目录</label>
           <div class="form-row">
             <div class="form-group" style="flex:3"><input type="text" id="llamaCppDir" placeholder="C:\llama.cpp" onchange="onDirChange()"></div>
-            <button class="btn btn-secondary" onclick="detectServer()">🔍 检测</button>
-            <button class="btn btn-secondary" onclick="openFolderPicker('llamaCppDir')">📂 浏览</button>
+            <button class="btn btn-secondary" onclick="detectServer()"><i class="icon icon-sm lucide-search"></i> 检测</button>
+            <button class="btn btn-secondary" onclick="openFolderPicker('llamaCppDir')"><i class="icon icon-sm lucide-folder-open"></i> 浏览</button>
           </div>
           <div class="inline-help" id="serverBinStatus"></div>
         </div>
@@ -51,26 +59,26 @@
           <label>模型文件</label>
           <div class="form-row">
             <div class="form-group" style="flex:3"><input type="text" id="modelPath" placeholder="选择模型 .gguf 文件"></div>
-            <button class="btn btn-secondary" onclick="openModelPicker()">📂 浏览</button>
+            <button class="btn btn-secondary" onclick="openModelPicker()"><i class="icon icon-sm lucide-folder-open"></i> 浏览</button>
           </div>
         </div>
         <div class="form-group">
           <label>mmproj 路径 (可选，多模态)</label>
           <div class="form-row">
             <div class="form-group" style="flex:3"><input type="text" id="mmprojPath" placeholder="mmproj-*.gguf"></div>
-            <button class="btn btn-secondary" onclick="openFileBrowser('mmprojPath')">📂 浏览</button>
+            <button class="btn btn-secondary" onclick="openFileBrowser('mmprojPath')"><i class="icon icon-sm lucide-folder-open"></i> 浏览</button>
           </div>
         </div>
       </div>
 
       <div class="card">
-        <div class="card-title"><span class="icon">🔧</span> 基础设置</div>
+        <div class="card-title"><i class="icon lucide-wrench"></i> 基础设置</div>
         <div class="grid-3">
           <div class="form-group"><label>上下文长度 (-c)</label><input type="number" id="ctxSize" value="4096" min="128" step="128"></div>
           <div class="form-group"><label>GPU 卸载层数 (-ngl)</label><input type="number" id="ngl" value="99" min="0"></div>
           <div class="form-group"><label>CPU 线程数 (-t)</label><input type="number" id="threads" value="8" min="1"></div>
           <div class="form-group"><label>并行数 (-np)</label><input type="number" id="parallel" value="1" min="1"></div>
-          <div class="form-group"><label>MoE CPU 卸载层数 (--n-cpu-moe)</label><input type="number" id="nCpuMoe" value="0" min="0"><div class="inline-help">0 = 关闭，>0 = 卸载到CPU的专家层数</div></div>
+          <div class="form-group"><label>MoE CPU 卸载 (--n-cpu-moe)</label><input type="number" id="nCpuMoe" value="0" min="0"><div class="inline-help">0 = 关闭，>0 = 卸载到CPU的专家层数</div></div>
           <div class="form-group"><label>KV 缓存量化 K</label>
             <select id="kvCacheQuantK"><option value="">默认 (f16)</option><option value="f32">f32</option><option value="f16">f16</option><option value="bf16">bf16</option><option value="q8_0">q8_0</option><option value="q4_0">q4_0</option><option value="q4_1">q4_1</option><option value="iq4_nl">iq4_nl</option><option value="q5_0">q5_0</option><option value="q5_1">q5_1</option></select>
           </div>
@@ -78,40 +86,40 @@
             <select id="kvCacheQuantV"><option value="">默认 (f16)</option><option value="f32">f32</option><option value="f16">f16</option><option value="bf16">bf16</option><option value="q8_0">q8_0</option><option value="q4_0">q4_0</option><option value="q4_1">q4_1</option><option value="iq4_nl">iq4_nl</option><option value="q5_0">q5_0</option><option value="q5_1">q5_1</option></select>
           </div>
         </div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="mmap" checked><span class="slider"></span></label><span>内存映射 (--mmap)</span></div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="mlock"><span class="slider"></span></label><span>锁定内存 (--mlock)</span></div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="enableThinking"><span class="slider"></span></label><span>思维链 (--reasoning)</span></div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="kvOffload" checked><span class="slider"></span></label><span>KV 缓存卸载到 GPU (--no-kv-offload 取消)</span></div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="flashAttn"><span class="slider"></span></label><span>Flash Attention (--flash-attn)</span></div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="kvUnified" checked><span class="slider"></span></label><span>Unified KV 缓存 (--kv-unified)</span></div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="contextShift"><span class="slider"></span></label><span>上下文自动切换 (--context-shift)</span></div>
-        <div class="form-group" style="margin-top:8px"><label>GPU 显存余量限制 (--fit-target MiB)</label><input type="number" id="fitTarget" value="0" min="0" step="100"><div class="inline-help">0 = 关闭，>0 = 限制模型卸载到 GPU 的显存余量（MiB）</div></div>
+        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="mmap" checked><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">内存映射 (--mmap)</span></div>
+        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="mlock"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">锁定内存 (--mlock)</span></div>
+        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="enableThinking"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">思维链 (--reasoning)</span></div>
+        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="kvOffload" checked><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">KV 缓存卸载到 GPU</span></div>
+        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="flashAttn"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">Flash Attention</span></div>
+        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="kvUnified" checked><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">Unified KV 缓存</span></div>
+        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="contextShift"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">上下文自动切换</span></div>
+        <div class="form-group" style="margin-top:8px"><label>GPU 显存余量 (--fit-target MiB)</label><input type="number" id="fitTarget" value="0" min="0" step="100"><div class="inline-help">0 = 关闭，>0 = 限制模型卸载到 GPU 的显存余量</div></div>
         <div class="grid-2" style="margin-top:8px">
           <div class="form-group"><label>逻辑批大小 (-b)</label><input type="number" id="batchSize" value="2048" min="32" step="32"><div class="inline-help">默认 2048，调小可跑更大上下文</div></div>
           <div class="form-group"><label>物理批大小 (-ub)</label><input type="number" id="ubatchSize" value="512" min="32" step="32"><div class="inline-help">默认 512</div></div>
         </div>
-        <div class="form-group"><label>缓存 RAM 上限 (-cram MiB)</label><input type="number" id="cacheRam" value="-1" min="-1" step="100"><div class="inline-help">-1 = 不限制，0 = 禁用，>0 = 限制最大缓存（MiB）</div></div>
+        <div class="form-group"><label>缓存 RAM 上限 (-cram MiB)</label><input type="number" id="cacheRam" value="-1" min="-1" step="100"><div class="inline-help">-1 = 不限制，0 = 禁用，>0 = 限制最大缓存</div></div>
       </div>
 
       <div class="card">
-        <div class="card-title"><span class="icon">🚀</span> MTP 投机解码</div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="mtpEnabled" onchange="toggleMTP()"><span class="slider"></span></label><span>启用 MTP (Multi-Token Prediction)</span></div>
+        <div class="card-title"><i class="icon lucide-rocket"></i> MTP 投机解码</div>
+        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="mtpEnabled" onchange="toggleMTP()"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">启用 MTP (Multi-Token Prediction)</span></div>
         <div id="mtpGroup" style="opacity:.4;pointer-events:none">
-          <div class="inline-help" style="margin-bottom:10px">适用于 Qwen3.6 等支持 MTP 的模型，可实现 2x+ 推理加速 (PR #22673)</div>
+          <div class="inline-help" style="margin-bottom:10px">适用于 Qwen3.6 等支持 MTP 的模型，可实现 2x+ 推理加速</div>
           <div class="grid-2">
             <div class="form-group"><label>投机类型</label><select id="mtpSpecType"><option value="draft-mtp">draft-mtp</option></select></div>
-            <div class="form-group"><label>最大草稿 token 数</label><input type="number" id="mtpDraftNMax" value="3" min="1" max="5"><div class="inline-help">通常 2-3，越大加速越明显但需验证准确率</div></div>
-            <div class="form-group"><label>最小草稿 token 数</label><input type="number" id="mtpDraftNMin" value="0" min="0" max="5"><div class="inline-help">0 = 自动，>0 = 强制最少生成的草稿 token</div></div>
+            <div class="form-group"><label>最大草稿 token 数</label><input type="number" id="mtpDraftNMax" value="3" min="1" max="5"><div class="inline-help">通常 2-3，越大加速越明显</div></div>
+            <div class="form-group"><label>最小草稿 token 数</label><input type="number" id="mtpDraftNMin" value="0" min="0" max="5"><div class="inline-help">0 = 自动</div></div>
           </div>
           <div class="grid-2">
-            <div class="form-group"><label>草稿置信阈值 (p_min)</label><input type="number" id="mtpPMin" value="0.0" min="0" max="1" step="0.05"><div class="inline-help">0.0 = 收集所有草稿（默认，最快），越高草稿越保守</div></div>
+            <div class="form-group"><label>草稿置信阈值 (p_min)</label><input type="number" id="mtpPMin" value="0.0" min="0" max="1" step="0.05"><div class="inline-help">0.0 = 收集所有草稿（默认，最快）</div></div>
             <div class="form-group"><label>分裂概率阈值 (p_split)</label><input type="number" id="mtpPSplit" value="0.10" min="0" max="1" step="0.05"><div class="inline-help">默认 0.10</div></div>
           </div>
         </div>
       </div>
 
       <div class="card">
-        <div class="card-title"><span class="icon">🌐</span> 服务器模式</div>
+        <div class="card-title"><i class="icon lucide-globe"></i> 服务器模式</div>
         <div class="grid-3">
           <div class="form-group"><label>监听模式</label><select id="serverMode" onchange="onModeChange()"><option value="local">本地 (127.0.0.1)</option><option value="lan">局域网 (0.0.0.0)</option></select></div>
           <div class="form-group"><label>监听地址</label><input type="text" id="serverHost" value="127.0.0.1"></div>
@@ -119,21 +127,21 @@
         </div>
       </div>
 
-      <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
-        <input type="text" id="configName" placeholder="配置名称" value="default" style="width:160px">
-        <button class="btn btn-primary" onclick="saveConfig()">💾 保存配置</button>
-        <span id="configDirtyBadge" style="display:none;color:var(--yellow);font-size:12px;font-weight:600;margin-left:6px">● 未保存</span>
-        <button class="btn btn-danger" onclick="deleteConfig()" style="font-size:12px">🗑️ 删除</button>
-        <button class="btn btn-secondary" onclick="exportConfig()">📤 导出</button>
-        <button class="btn btn-secondary" onclick="importConfig()">📥 导入</button>
-        <select id="configList" onchange="loadSavedConfig()" style="margin-left:auto;background:var(--bg-input);color:var(--fg);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font-size:13px"><option value="">-- 已保存配置 --</option></select>
+      <div class="config-toolbar">
+        <input type="text" id="configName" placeholder="配置名称" value="default">
+        <button class="btn btn-primary" onclick="saveConfig()"><i class="icon icon-sm lucide-save"></i> 保存</button>
+        <span id="configDirtyBadge" class="dirty-badge" style="display:none"><i class="icon icon-sm lucide-circle-dot"></i> 未保存</span>
+        <button class="btn btn-danger btn-sm" onclick="deleteConfig()"><i class="icon icon-sm lucide-trash-2"></i> 删除</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportConfig()"><i class="icon icon-sm lucide-upload"></i> 导出</button>
+        <button class="btn btn-secondary btn-sm" onclick="importConfig()"><i class="icon icon-sm lucide-download"></i> 导入</button>
+        <select id="configList" onchange="loadSavedConfig()" style="margin-left:auto"><option value="">-- 已保存配置 --</option></select>
       </div>
     </div>
 
     <!-- ═══ 采样器页 ═══ -->
     <div id="page-sampling" class="page">
       <div class="card">
-        <div class="card-title"><span class="icon">🎲</span> 采样器设置</div>
+        <div class="card-title"><i class="icon lucide-sliders-horizontal"></i> 采样器设置</div>
         <div class="form-group"><label>温度 (temperature)</label>
           <div class="range-display"><input type="range" id="tempRange" min="0" max="2" step="0.05" value="0.7" oninput="syncR('temp')"><input type="number" id="tempVal" value="0.7" min="0" max="2" step="0.05" style="width:80px" oninput="syncV('temp')"></div>
         </div>
@@ -143,35 +151,23 @@
         <div class="form-group"><label>Top-P</label>
           <div class="range-display"><input type="range" id="toppRange" min="0" max="1" step="0.01" value="0.95" oninput="syncR('topp')"><input type="number" id="toppVal" value="0.95" min="0" max="1" step="0.01" style="width:80px" oninput="syncV('topp')"></div>
         </div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="minpEnabled" onchange="toggleSamp('minp')"><span class="slider"></span></label><span>Min-P</span></div>
-        <div id="minpGroup" style="opacity:.4;pointer-events:none">
-          <div class="form-group">
-            <div class="range-display"><input type="range" id="minpRange" min="0" max="1" step="0.01" value="0.05" style="accent-color:#999" oninput="syncR('minp')"><input type="number" id="minpVal" value="0.05" min="0" max="1" step="0.01" style="width:80px" oninput="syncV('minp')"></div>
-          </div>
-        </div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="repeatEnabled" onchange="toggleSamp('repeat')"><span class="slider"></span></label><span>重复惩罚 (repeat penalty)</span></div>
-        <div id="repeatGroup" style="opacity:.4;pointer-events:none">
-          <div class="form-group">
-            <div class="range-display"><input type="range" id="repeatRange" min="1" max="2" step="0.05" value="1.1" style="accent-color:#999" oninput="syncR('repeat')"><input type="number" id="repeatVal" value="1.1" min="1" max="2" step="0.05" style="width:80px" oninput="syncV('repeat')"></div>
-          </div>
-        </div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="presenceEnabled" onchange="toggleSamp('presence')"><span class="slider"></span></label><span>存在惩罚 (presence penalty)</span></div>
-        <div id="presenceGroup" style="opacity:.4;pointer-events:none">
-          <div class="form-group">
-            <div class="range-display"><input type="range" id="presenceRange" min="-2" max="2" step="0.1" value="0" style="accent-color:#999" oninput="syncR('presence')"><input type="number" id="presenceVal" value="0" min="-2" max="2" step="0.1" style="width:80px" oninput="syncV('presence')"></div>
-          </div>
-        </div>
+        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="minpEnabled" onchange="toggleSamp('minp')"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">Min-P</span></div>
+        <div id="minpGroup" style="opacity:.4;pointer-events:none"><div class="form-group"><div class="range-display"><input type="range" id="minpRange" min="0" max="1" step="0.01" value="0.05" oninput="syncR('minp')"><input type="number" id="minpVal" value="0.05" min="0" max="1" step="0.01" style="width:80px" oninput="syncV('minp')"></div></div></div>
+        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="repeatEnabled" onchange="toggleSamp('repeat')"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">重复惩罚 (repeat penalty)</span></div>
+        <div id="repeatGroup" style="opacity:.4;pointer-events:none"><div class="form-group"><div class="range-display"><input type="range" id="repeatRange" min="1" max="2" step="0.05" value="1.1" oninput="syncR('repeat')"><input type="number" id="repeatVal" value="1.1" min="1" max="2" step="0.05" style="width:80px" oninput="syncV('repeat')"></div></div></div>
+        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="presenceEnabled" onchange="toggleSamp('presence')"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">存在惩罚 (presence penalty)</span></div>
+        <div id="presenceGroup" style="opacity:.4;pointer-events:none"><div class="form-group"><div class="range-display"><input type="range" id="presenceRange" min="-2" max="2" step="0.1" value="0" oninput="syncR('presence')"><input type="number" id="presenceVal" value="0" min="-2" max="2" step="0.1" style="width:80px" oninput="syncV('presence')"></div></div></div>
       </div>
     </div>
 
     <!-- ═══ 提示词页 ═══ -->
     <div id="page-prompt" class="page">
       <div class="card">
-        <div class="card-title"><span class="icon">📝</span> 系统提示词</div>
+        <div class="card-title"><i class="icon lucide-file-text"></i> 系统提示词</div>
         <div class="form-group"><textarea id="systemPrompt" rows="8" placeholder="输入系统提示词..."></textarea></div>
       </div>
       <div class="card">
-        <div class="card-title"><span class="icon">⚙️</span> 额外参数</div>
+        <div class="card-title"><i class="icon lucide-settings"></i> 额外参数</div>
         <div class="form-group"><textarea id="extraParams" rows="3" placeholder="每行一个额外参数，如: --flash-attn"></textarea><div class="inline-help">高级用户：直接添加 llama-server 命令行参数</div></div>
       </div>
     </div>
@@ -179,15 +175,15 @@
     <!-- ═══ 服务器页 ═══ -->
     <div id="page-server" class="page">
       <div class="card">
-        <div class="card-title"><span class="icon">🖥️</span> 服务器控制</div>
-        <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
-          <button class="btn btn-success" id="btnStart" onclick="startServer()">▶ 启动</button>
-          <button class="btn btn-danger" id="btnStop" onclick="stopServer()" disabled>⏹ 停止</button>
-          <span id="serverInfo" style="font-size:12px;color:var(--fg-muted)"></span>
+        <div class="card-title"><i class="icon lucide-server"></i> 服务器控制</div>
+        <div class="control-row">
+          <button class="btn btn-success" id="btnStart" onclick="startServer()"><i class="icon icon-sm lucide-play"></i> 启动</button>
+          <button class="btn btn-danger" id="btnStop" onclick="stopServer()" disabled><i class="icon icon-sm lucide-square"></i> 停止</button>
+          <span id="serverInfo" class="info"></span>
         </div>
         <div class="log-toolbar">
           <label><input type="checkbox" id="autoScroll" checked> 自动滚动</label>
-          <button class="btn btn-secondary" style="padding:3px 10px;font-size:11px" onclick="clearLogs()">清空</button>
+          <button class="btn btn-secondary btn-sm" onclick="clearLogs()"><i class="icon icon-sm lucide-trash-2"></i> 清空</button>
         </div>
         <div class="log-box" id="serverLog"></div>
       </div>
@@ -196,7 +192,7 @@
     <!-- ═══ 自动优化页 ═══ -->
     <div id="page-optimize" class="page">
       <div class="card">
-        <div class="card-title"><span class="icon">🔬</span> 贝叶斯自动优化</div>
+        <div class="card-title"><i class="icon lucide-flask-conical"></i> 贝叶斯自动优化</div>
         <div class="inline-help" style="margin-bottom:14px">使用 Optuna 贝叶斯优化自动搜索最优 llama.cpp 参数组合（ngl × n_cpu_moe × ctx × kv）</div>
         <div class="grid-3">
           <div class="form-group"><label>ngl 最小值</label><input type="number" id="optNglMin" value="0" min="0"></div>
@@ -205,59 +201,44 @@
           <div class="form-group"><label>n_cpu_moe 最小</label><input type="number" id="optMoeMin" value="0" min="0"></div>
           <div class="form-group"><label>n_cpu_moe 最大</label><input type="number" id="optMoeMax" value="99" min="0"></div>
         </div>
-
         <div class="form-group">
-          <label>上下文深度 (n-depth) — 勾选要测试的值</label>
-          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-ctx" value="4096" checked> 4K</label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-ctx" value="8192"> 8K</label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-ctx" value="16384"> 16K</label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-ctx" value="32768"> 32K</label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-ctx" value="65536"> 64K</label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-ctx" value="131072"> 128K</label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-ctx" value="262144"> 256K</label>
+          <label>上下文深度 (n-depth)</label>
+          <div class="checkbox-group">
+            <label><input type="checkbox" class="opt-ctx" value="4096" checked> 4K</label>
+            <label><input type="checkbox" class="opt-ctx" value="8192"> 8K</label>
+            <label><input type="checkbox" class="opt-ctx" value="16384"> 16K</label>
+            <label><input type="checkbox" class="opt-ctx" value="32768"> 32K</label>
+            <label><input type="checkbox" class="opt-ctx" value="65536"> 64K</label>
+            <label><input type="checkbox" class="opt-ctx" value="131072"> 128K</label>
+            <label><input type="checkbox" class="opt-ctx" value="262144"> 256K</label>
           </div>
         </div>
-
         <div class="form-group">
-          <label>KV 缓存量化 — 勾选要测试的值</label>
-          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-kv" value="f16" checked> f16</label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-kv" value="bf16"> bf16</label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-kv" value="q8_0"> q8_0</label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="opt-kv" value="q4_0"> q4_0</label>
+          <label>KV 缓存量化</label>
+          <div class="checkbox-group">
+            <label><input type="checkbox" class="opt-kv" value="f16" checked> f16</label>
+            <label><input type="checkbox" class="opt-kv" value="bf16"> bf16</label>
+            <label><input type="checkbox" class="opt-kv" value="q8_0"> q8_0</label>
+            <label><input type="checkbox" class="opt-kv" value="q4_0"> q4_0</label>
           </div>
         </div>
-
-        <div style="display:flex;gap:10px;align-items:center;margin-top:14px">
-          <button class="btn btn-success" id="btnOptStart" onclick="startOptimize()">▶ 开始优化</button>
-          <button class="btn btn-danger" id="btnOptStop" onclick="stopOptimize()" disabled>⏹ 停止</button>
-          <span id="optProgress" style="font-size:12px;color:var(--fg-muted)"></span>
+        <div class="control-row" style="margin-top:14px">
+          <button class="btn btn-success" id="btnOptStart" onclick="startOptimize()"><i class="icon icon-sm lucide-play"></i> 开始优化</button>
+          <button class="btn btn-danger" id="btnOptStop" onclick="stopOptimize()" disabled><i class="icon icon-sm lucide-square"></i> 停止</button>
+          <span id="optProgress" class="info"></span>
         </div>
       </div>
-
       <div class="card">
-        <div class="card-title"><span class="icon">📊</span> 优化结果</div>
+        <div class="card-title"><i class="icon lucide-bar-chart-3"></i> 优化结果</div>
         <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:13px">
-            <thead><tr style="border-bottom:2px solid var(--border);text-align:left">
-              <th style="padding:6px 10px">#</th>
-              <th style="padding:6px 10px">ngl</th>
-              <th style="padding:6px 10px">n_cpu_moe</th>
-              <th style="padding:6px 10px">ctx</th>
-              <th style="padding:6px 10px">kv</th>
-              <th style="padding:6px 10px">pp (t/s)</th>
-              <th style="padding:6px 10px">tg (t/s)</th>
-              <th style="padding:6px 10px">状态</th>
-              <th style="padding:6px 10px"></th>
-            </tr></thead>
+          <table class="data-table">
+            <thead><tr><th>#</th><th>ngl</th><th>n_cpu_moe</th><th>ctx</th><th>kv</th><th>pp (t/s)</th><th>tg (t/s)</th><th>状态</th><th></th></tr></thead>
             <tbody id="optResultBody"><tr><td colspan="9" style="padding:12px;text-align:center;color:var(--fg-muted)">暂无结果</td></tr></tbody>
           </table>
         </div>
       </div>
-
       <div class="card">
-        <div class="card-title"><span class="icon">📜</span> 优化日志</div>
+        <div class="card-title"><i class="icon lucide-scroll-text"></i> 优化日志</div>
         <div class="log-box" id="optimizeLog" style="height:300px"></div>
       </div>
     </div>
@@ -265,34 +246,32 @@
     <!-- ═══ 参数预览页 ═══ -->
     <div id="page-params" class="page">
       <div class="card">
-        <div class="card-title"><span class="icon">📋</span> 启动参数预览</div>
-        <div style="display:flex;gap:8px;margin-bottom:10px">
-          <button class="btn btn-secondary" onclick="copyParams()">📋 复制</button>
-          <button class="btn btn-secondary" onclick="buildParamPreview()">🔄 刷新</button>
+        <div class="card-title"><i class="icon lucide-terminal"></i> 启动参数预览</div>
+        <div class="control-row">
+          <button class="btn btn-secondary btn-sm" onclick="copyParams()"><i class="icon icon-sm lucide-copy"></i> 复制</button>
+          <button class="btn btn-secondary btn-sm" onclick="buildParamPreview()"><i class="icon icon-sm lucide-refresh-cw"></i> 刷新</button>
         </div>
         <div class="param-preview" id="paramPreview"></div>
       </div>
       <div class="card">
-        <div class="card-title"><span class="icon">💻</span> 完整命令</div>
-        <div style="background:var(--bg-input);padding:12px;border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:12px;word-break:break-all;border:1px solid var(--border)">
-          <code id="cmdPreview"></code>
-        </div>
+        <div class="card-title"><i class="icon lucide-code-2"></i> 完整命令</div>
+        <div class="code-block"><code id="cmdPreview"></code></div>
       </div>
     </div>
 
     <!-- ═══ 对话页 ═══ -->
     <div id="page-chat" class="page">
       <div class="card" style="padding:12px">
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-          <select id="chatModel" style="flex:1;background:var(--bg-input);color:var(--fg);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font-size:13px"><option>服务器未启动</option></select>
-          <div class="form-group" style="margin:0"><label style="margin:0;font-size:11px">温度</label><input type="number" id="chatTemp" value="0.7" min="0" max="2" step="0.1" style="width:70px;padding:4px 8px"></div>
-          <div class="form-group" style="margin:0"><label style="margin:0;font-size:11px">最大 tokens</label><input type="number" id="chatMaxTokens" value="2048" min="1" max="32768" style="width:90px;padding:4px 8px"></div>
-          <button class="btn btn-secondary" onclick="clearChat()">🗑️ 清空</button>
+        <div class="chat-toolbar">
+          <select id="chatModel"><option>服务器未启动</option></select>
+          <div class="form-group"><label>温度</label><input type="number" id="chatTemp" value="0.7" min="0" max="2" step="0.1"></div>
+          <div class="form-group max-tokens"><label>最大 tokens</label><input type="number" id="chatMaxTokens" value="2048" min="1" max="32768"></div>
+          <button class="btn btn-secondary btn-sm" onclick="clearChat()"><i class="icon icon-sm lucide-trash-2"></i> 清空</button>
         </div>
         <div class="chat-box" id="chatMessages"><div style="text-align:center;color:var(--fg-muted);padding:60px 0">启动服务器后开始对话</div></div>
         <div class="chat-input-wrap">
           <textarea id="chatInput" placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"></textarea>
-          <button class="btn btn-primary" id="btnSend" onclick="sendChat()">发送</button>
+          <button class="btn btn-primary" id="btnSend" onclick="sendChat()"><i class="icon icon-sm lucide-send"></i> 发送</button>
         </div>
       </div>
     </div>
@@ -300,20 +279,20 @@
     <!-- ═══ 更新页 ═══ -->
     <div id="page-update" class="page">
       <div class="card">
-        <div class="card-title"><span class="icon">🔄</span> llama.cpp 更新</div>
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
-          <button class="btn btn-secondary" onclick="checkUpdate()">🔍 检查更新</button>
-          <button class="btn btn-primary" onclick="pullUpdate()">⬇️ 拉取更新</button>
-          <button class="btn btn-danger" onclick="pullUpdate(true)" style="font-size:11px">⚠️ 强制重置</button>
-          <span id="updateInfo" style="font-size:12px"></span>
+        <div class="card-title"><i class="icon lucide-refresh-cw"></i> llama.cpp 更新</div>
+        <div class="control-row">
+          <button class="btn btn-secondary" onclick="checkUpdate()"><i class="icon icon-sm lucide-search"></i> 检查更新</button>
+          <button class="btn btn-primary" onclick="pullUpdate()"><i class="icon icon-sm lucide-download"></i> 拉取更新</button>
+          <button class="btn btn-danger btn-sm" onclick="pullUpdate(true)"><i class="icon icon-sm lucide-alert-triangle"></i> 强制重置</button>
+          <span id="updateInfo" class="info"></span>
         </div>
       </div>
       <div class="card">
-        <div class="card-title"><span class="icon">🔨</span> 编译</div>
+        <div class="card-title"><i class="icon lucide-hammer"></i> 编译</div>
         <div class="form-group"><label>编译命令</label><input type="text" id="compileCmd" value='cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="89" && cmake --build build --config Release -j12'></div>
-        <div style="display:flex;gap:8px;margin-bottom:10px">
-          <button class="btn btn-success" id="btnCompile" onclick="startCompile()">🔨 编译</button>
-          <button class="btn btn-danger" id="btnCompileStop" onclick="stopCompile()" disabled>⏹ 停止</button>
+        <div class="control-row">
+          <button class="btn btn-success" id="btnCompile" onclick="startCompile()"><i class="icon icon-sm lucide-hammer"></i> 编译</button>
+          <button class="btn btn-danger" id="btnCompileStop" onclick="stopCompile()" disabled><i class="icon icon-sm lucide-square"></i> 停止</button>
         </div>
         <div class="log-box" id="compileLog" style="height:300px"></div>
       </div>
@@ -322,11 +301,11 @@
     <!-- ═══ 下载页 ═══ -->
     <div id="page-download" class="page">
       <div class="card">
-        <div class="card-title"><span class="icon">📥</span> 下载 llama.cpp</div>
-        <div class="form-group"><label>目标目录</label><div class="form-row"><div class="form-group" style="flex:3"><input type="text" id="downloadDir" placeholder="选择下载目录"></div><button class="btn btn-secondary" onclick="openFolderPicker('downloadDir')">📂 浏览</button></div></div>
-        <div style="display:flex;gap:8px;margin-bottom:10px">
-          <button class="btn btn-success" id="btnDownload" onclick="startDownload()">⬇️ 下载</button>
-          <button class="btn btn-danger" id="btnDownloadStop" onclick="stopDownload()" disabled>⏹ 停止</button>
+        <div class="card-title"><i class="icon lucide-download"></i> 下载 llama.cpp</div>
+        <div class="form-group"><label>目标目录</label><div class="form-row"><div class="form-group" style="flex:3"><input type="text" id="downloadDir" placeholder="选择下载目录"></div><button class="btn btn-secondary" onclick="openFolderPicker('downloadDir')"><i class="icon icon-sm lucide-folder-open"></i> 浏览</button></div></div>
+        <div class="control-row">
+          <button class="btn btn-success" id="btnDownload" onclick="startDownload()"><i class="icon icon-sm lucide-download"></i> 下载</button>
+          <button class="btn btn-danger" id="btnDownloadStop" onclick="stopDownload()" disabled><i class="icon icon-sm lucide-square"></i> 停止</button>
         </div>
         <div class="log-box" id="downloadLog" style="height:300px"></div>
       </div>
@@ -335,11 +314,11 @@
     <!-- ═══ 日志页 ═══ -->
     <div id="page-logs" class="page">
       <div class="card">
-        <div class="card-title"><span class="icon">📜</span> 完整日志</div>
+        <div class="card-title"><i class="icon lucide-scroll-text"></i> 完整日志</div>
         <div class="log-toolbar">
           <label><input type="checkbox" id="autoScroll2" checked> 自动滚动</label>
-          <button class="btn btn-secondary" style="padding:3px 10px;font-size:11px" onclick="clearLogs()">清空</button>
-          <button class="btn btn-secondary" style="padding:3px 10px;font-size:11px" onclick="downloadLogs()">💾 下载</button>
+          <button class="btn btn-secondary btn-sm" onclick="clearLogs()"><i class="icon icon-sm lucide-trash-2"></i> 清空</button>
+          <button class="btn btn-secondary btn-sm" onclick="downloadLogs()"><i class="icon icon-sm lucide-download"></i> 下载</button>
         </div>
         <div class="log-box" id="fullLog" style="height:calc(100vh - 200px)"></div>
       </div>
@@ -347,23 +326,23 @@
 
     <!-- ═══ WebUI 页 ═══ -->
     <div id="page-webui" class="page">
-      <div style="display:flex;gap:8px;margin-bottom:10px">
-        <button class="btn btn-secondary" onclick="refreshWebUI()">🔄 刷新</button>
-        <button class="btn btn-secondary" onclick="openWebUI()">↗️ 新窗口打开</button>
+      <div class="control-row">
+        <button class="btn btn-secondary" onclick="refreshWebUI()"><i class="icon icon-sm lucide-refresh-cw"></i> 刷新</button>
+        <button class="btn btn-secondary" onclick="openWebUI()"><i class="icon icon-sm lucide-external-link"></i> 新窗口打开</button>
       </div>
-      <iframe id="webuiFrame" style="width:100%;height:calc(100vh - 120px);border:1px solid var(--border);border-radius:var(--radius)"></iframe>
+      <iframe id="webuiFrame" style="width:100%;height:calc(100vh - 120px);border:1px solid var(--border-subtle);border-radius:var(--radius)"></iframe>
     </div>
 
   </div>
 </div>
 
-<!-- ═══ 文件/文件夹浏览器弹窗 ═══ -->
+<!-- ═══ 文件浏览器弹窗 ═══ -->
 <div class="modal-overlay" id="folderModal">
   <div class="modal">
-    <h3 id="folderModalTitle">📂 浏览文件夹</h3>
+    <h3 id="folderModalTitle"><i class="icon lucide-folder-open"></i> 浏览文件夹</h3>
     <div class="breadcrumb" id="folderBreadcrumb"></div>
     <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
-      <button class="btn btn-secondary" onclick="goUpOneLevel()" style="padding:3px 10px;font-size:12px">⬆ 上一级</button>
+      <button class="btn btn-secondary btn-sm" onclick="goUpOneLevel()"><i class="icon icon-sm lucide-arrow-up"></i> 上一级</button>
       <div id="driveList" style="display:none;gap:6px;flex-wrap:wrap"></div>
     </div>
     <div class="form-row" style="margin-bottom:10px">
@@ -371,7 +350,7 @@
       <button class="btn btn-secondary" onclick="browseTo()">前往</button>
     </div>
     <div class="file-list" id="folderList"></div>
-    <div id="selectedFileInfo" style="display:none;padding:6px 10px;background:var(--accent-light);border-radius:var(--radius-sm);font-size:12px;color:var(--accent);margin-bottom:8px"></div>
+    <div id="selectedFileInfo" style="display:none;padding:6px 10px;background:var(--accent-soft);border-radius:var(--radius-sm);font-size:12px;color:var(--accent);margin-bottom:8px"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeFolderModal()">取消</button>
       <button class="btn btn-primary" id="folderSelectBtn" onclick="selectFolder()">选择此文件夹</button>
@@ -379,7 +358,6 @@
   </div>
 </div>
 
-<!-- ═══ 导入文件 input ═══ -->
 <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImport(event)">
 <input type="file" id="nativeFolderPicker" webkitdirectory style="display:none" onchange="handleNativeFolder(event)">
 <input type="file" id="nativeFilePicker" accept=".gguf" style="display:none" onchange="handleNativeFile(event)">

@@ -180,8 +180,9 @@ async function handleImport(e){const f=e.target.files[0];if(!f)return;const t=aw
 // ── Toast ──
 function showToast(msg){
   const t=document.createElement('div');
-  t.style.cssText='position:fixed;top:20px;right:20px;background:var(--green);color:#fff;padding:10px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;z-index:200;box-shadow:var(--shadow-lg);';
-  t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);
+  t.className='toast';
+  t.innerHTML='<i class="icon icon-sm lucide-check-circle"></i> '+esc(msg);
+  document.body.appendChild(t);
 }
 
 // ── Folder / File browser ──
@@ -445,7 +446,7 @@ async function refreshStatus(){const s=await api('/api/server/status');const b=d
 function connectLogWS(){if(ws&&ws.readyState<=1)return;ws=new WebSocket(`ws://${location.host}/ws/logs`);ws.onmessage=e=>appendLog('serverLog',e.data);ws.onclose=()=>setTimeout(connectLogWS,3000)}
 function connectCompileWS(){if(wsCompile&&wsCompile.readyState<=1)return;wsCompile=new WebSocket(`ws://${location.host}/ws/compile`);wsCompile.onmessage=e=>appendLog('compileLog',e.data);wsCompile.onclose=()=>setTimeout(connectCompileWS,3000)}
 function connectDownloadWS(){if(wsDownload&&wsDownload.readyState<=1)return;wsDownload=new WebSocket(`ws://${location.host}/ws/download`);wsDownload.onmessage=e=>appendLog('downloadLog',e.data);wsDownload.onclose=()=>setTimeout(connectDownloadWS,3000)}
-function appendLog(boxId,text){const box=document.getElementById(boxId);const line=document.createElement('div');line.style.marginBottom='1px';if(text.includes('ERROR')||text.includes('error'))line.style.color='#f87171';if(text.includes('[manager]')||text.includes('[download]'))line.style.color='#4ade80';line.textContent=text;box.appendChild(line);if(boxId==='serverLog'){const full=document.getElementById('fullLog');const l2=line.cloneNode(true);full.appendChild(l2);if(document.getElementById('autoScroll2')?.checked)full.scrollTop=full.scrollHeight}if(document.getElementById('autoScroll')?.checked)box.scrollTop=box.scrollHeight}
+function appendLog(boxId,text){const box=document.getElementById(boxId);const line=document.createElement('div');line.style.marginBottom='1px';if(text.includes('ERROR')||text.includes('error'))line.className='log-error';if(text.includes('[manager]')||text.includes('[download]'))line.className='log-info';line.textContent=text;box.appendChild(line);if(boxId==='serverLog'){const full=document.getElementById('fullLog');const l2=line.cloneNode(true);full.appendChild(l2);if(document.getElementById('autoScroll2')?.checked)full.scrollTop=full.scrollHeight}if(document.getElementById('autoScroll')?.checked)box.scrollTop=box.scrollHeight}
 async function clearLogs(){await api('/api/server/logs/clear',{method:'POST'});['serverLog','fullLog'].forEach(id=>document.getElementById(id).innerHTML='')}
 function downloadLogs(){const t=document.getElementById('fullLog').innerText;const b=new Blob([t],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`llama-server-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.log`;a.click()}
 
@@ -554,19 +555,17 @@ function appendResultRow(r){
   const tbody=document.getElementById('optResultBody');
   if(tbody.querySelector('td[colspan]'))tbody.innerHTML='';
   const tr=document.createElement('tr');
-  tr.style.borderBottom='1px solid var(--border)';
-  const fields=[r.trial,r.ngl,r.n_cpu_moe,r.ctx,r.kv,r.pp,r.tg,r.status==='ok'?'✅':'❌'];
+  const fields=[r.trial,r.ngl,r.n_cpu_moe,r.ctx,r.kv,r.pp,r.tg,r.status==='ok'?'✓':'✗'];
   fields.forEach((v,i)=>{
     const td=document.createElement('td');
-    td.style.cssText='padding:6px 10px'+(i===5?'font-weight:600':'')+(i===6?'font-weight:600;color:var(--accent)':'');
+    if(i===5)td.style.fontWeight='600';
+    if(i===6)td.style.cssText='font-weight:600;color:var(--accent)';
     td.textContent=v;
     tr.appendChild(td);
   });
   const td=document.createElement('td');
-  td.style.cssText='padding:6px 10px';
   const btn=document.createElement('button');
-  btn.className='btn btn-secondary';
-  btn.style.cssText='padding:2px 8px;font-size:11px';
+  btn.className='btn btn-secondary btn-sm';
   btn.textContent='应用';
   btn.addEventListener('click',()=>applyOptResult(r));
   td.appendChild(btn);
@@ -626,6 +625,14 @@ async function stopOptimize(){
 }
 
 // ── Init ──
+// Set theme icon on load
+(function(){
+  const isDark=document.documentElement.getAttribute('data-theme')==='dark';
+  const icon=document.getElementById('themeIcon');
+  const btn=document.getElementById('themeBtn');
+  if(icon) icon.className=isDark?'icon lucide-sun':'icon lucide-moon';
+  if(btn) btn.setAttribute('aria-checked',isDark?'true':'false');
+})();
 loadInitCfg();
 statusTimer=setInterval(refreshStatus,5000);
 refreshStatus();
