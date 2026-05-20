@@ -131,7 +131,10 @@ class ProcessManager:
                 cmd += ["--spec-draft-p-split", str(mtp.p_split)]
 
         if config.extra_params.strip():
-            cmd += shlex.split(config.extra_params)
+            try:
+                cmd += shlex.split(config.extra_params, posix=(not IS_WINDOWS))
+            except ValueError as e:
+                raise ValueError(f"extra_params 语法错误: {e}") from e
 
         return cmd
 
