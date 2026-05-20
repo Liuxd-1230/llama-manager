@@ -123,7 +123,7 @@ function uiFromCfg(c){
   document.getElementById('mtpEnabled').checked=m.enabled??false;
   document.getElementById('mtpSpecType').value=m.spec_type||'draft-mtp';
   document.getElementById('mtpDraftNMax').value=m.draft_n_max??3;
-  document.getElementById('mtpPMin').value=m.p_min??0.75;
+  document.getElementById('mtpPMin').value=m.p_min??0.0;
   document.getElementById('mtpPSplit').value=m.p_split??0.10;
   toggleMTP();
   document.getElementById('systemPrompt').value=c.system_prompt||'';
@@ -411,7 +411,7 @@ function buildParamPreview(){
     add('--spec-type',c.mtp.spec_type,'MTP 投机解码');
     add('--spec-draft-n-max',c.mtp.draft_n_max,'最大草稿 token');
     if(c.mtp.draft_n_min>0) add('--spec-draft-n-min',c.mtp.draft_n_min,'最小草稿 token');
-    if(c.mtp.p_min!==0.75) add('--spec-draft-p-min',c.mtp.p_min,'最小接受概率');
+    if(c.mtp.p_min!==0.0) add('--spec-draft-p-min',c.mtp.p_min,'草稿置信阈值');
     if(c.mtp.p_split!==0.10) add('--spec-draft-p-split',c.mtp.p_split,'分裂概率阈值');
   }
   if(c.system_prompt) add('--system-prompt','"'+c.system_prompt.slice(0,50)+'..."','');
