@@ -5,6 +5,14 @@ let browseMode='folder', browseFilter='.gguf', selectedFilePath='';
 let isWindows = navigator.platform.indexOf('Win')>=0;
 let configDirty=false, lastSavedSnapshot='';
 
+// ── Theme ──
+function toggleTheme(){
+  const html=document.documentElement;
+  const isDark=html.getAttribute('data-theme')==='dark';
+  if(isDark){html.removeAttribute('data-theme');localStorage.setItem('theme','light')}
+  else{html.setAttribute('data-theme','dark');localStorage.setItem('theme','dark')}
+}
+
 // ── Navigation ──
 document.querySelectorAll('#sidebar button').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -180,8 +188,9 @@ async function handleImport(e){const f=e.target.files[0];if(!f)return;const t=aw
 // ── Toast ──
 function showToast(msg){
   const t=document.createElement('div');
-  t.style.cssText='position:fixed;top:20px;right:20px;background:var(--green);color:#fff;padding:10px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;z-index:200;box-shadow:var(--shadow-lg);';
-  t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);
+  t.className='toast';
+  t.textContent=msg;document.body.appendChild(t);
+  setTimeout(()=>{t.classList.add('hide');setTimeout(()=>t.remove(),200)},2500);
 }
 
 // ── Folder / File browser ──
