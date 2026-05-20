@@ -51,7 +51,7 @@ a{color:var(--blue);text-decoration:none}
 a:hover{text-decoration:underline}
 
 /* ── Lucide icon base ── */
-.icon{width:16px;height:16px;stroke-width:2;flex-shrink:0;vertical-align:middle}
+.icon{width:16px;height:16px;min-width:16px;stroke-width:2;flex-shrink:0;vertical-align:middle}
 .icon-sm{width:14px;height:14px}
 .icon-lg{width:20px;height:20px}
 

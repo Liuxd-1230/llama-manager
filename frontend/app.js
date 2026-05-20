@@ -5,6 +5,17 @@ let browseMode='folder', browseFilter='.gguf', selectedFilePath='';
 let isWindows = navigator.platform.indexOf('Win')>=0;
 let configDirty=false, lastSavedSnapshot='';
 
+// ── Theme ──
+function toggleTheme(){
+  const html=document.documentElement;
+  const isDark=html.getAttribute('data-theme')==='dark';
+  if(isDark){html.removeAttribute('data-theme');localStorage.setItem('theme','light')}
+  else{html.setAttribute('data-theme','dark');localStorage.setItem('theme','dark')}
+  const icon=document.getElementById('themeIcon');
+  if(icon) icon.className=isDark?'icon lucide-moon':'icon lucide-sun';
+  document.getElementById('themeBtn')?.setAttribute('aria-checked',isDark?'false':'true');
+}
+
 // ── Navigation ──
 document.querySelectorAll('#sidebar button').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -183,6 +194,7 @@ function showToast(msg){
   t.className='toast';
   t.innerHTML='<i class="icon icon-sm lucide-check-circle"></i> '+esc(msg);
   document.body.appendChild(t);
+  setTimeout(()=>{t.classList.add('hide');setTimeout(()=>t.remove(),150)},2500);
 }
 
 // ── Folder / File browser ──
