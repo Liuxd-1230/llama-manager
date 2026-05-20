@@ -8,7 +8,8 @@ let configDirty=false, lastSavedSnapshot='';
 // ── Navigation ──
 document.querySelectorAll('#sidebar button').forEach(btn => {
   btn.addEventListener('click', () => {
-    if(configDirty && !confirm('配置已修改但未保存，确定离开？'))return;
+    const leavingConfig=document.querySelector('#page-config.active,#page-sampling.active,#page-prompt.active');
+    if(configDirty && leavingConfig && !confirm('配置已修改但未保存，确定离开？'))return;
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('#sidebar button').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -34,16 +35,12 @@ function updateDirtyIndicator(){
 }
 function checkDirtyBeforeUnload(e){if(configDirty){e.preventDefault();e.returnValue=''}}
 window.addEventListener('beforeunload',checkDirtyBeforeUnload);
-// Watch all config inputs for changes
+// Watch config inputs — just flag dirty, no expensive comparison
 document.addEventListener('input',e=>{
-  if(e.target.closest('#page-config')||e.target.closest('#page-sampling')||e.target.closest('#page-prompt')){
-    if(lastSavedSnapshot&&JSON.stringify(cfgFromUI())!==lastSavedSnapshot)markDirty();
-  }
+  if(e.target.closest('#page-config')||e.target.closest('#page-sampling')||e.target.closest('#page-prompt'))markDirty();
 });
 document.addEventListener('change',e=>{
-  if(e.target.closest('#page-config')||e.target.closest('#page-sampling')||e.target.closest('#page-prompt')){
-    if(lastSavedSnapshot&&JSON.stringify(cfgFromUI())!==lastSavedSnapshot)markDirty();
-  }
+  if(e.target.closest('#page-config')||e.target.closest('#page-sampling')||e.target.closest('#page-prompt'))markDirty();
 });
 
 // ── Helpers ──
@@ -174,7 +171,7 @@ async function deleteConfig(){
   if(name==='default'){alert('不能删除默认配置');return}
   if(!confirm('确定删除配置 "'+name+'" ?'))return;
   await api('/api/config/delete',{method:'POST',body:JSON.stringify({name})});
-  showToast('已删除: '+name);document.getElementById('configName').value='default';refreshCfgList()
+  showToast('已删除: '+name);document.getElementById('configName').value='default';refreshCfgList();clearDirty()
 }
 function exportConfig(){const b=new Blob([JSON.stringify(cfgFromUI(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='llama-manager-config.json';a.click()}
 function importConfig(){document.getElementById('importFile').click()}
@@ -594,6 +591,7 @@ function applyOptResult(r){
   document.getElementById('kvCacheQuantK').value=r.kv;
   document.getElementById('kvCacheQuantV').value=r.kv;
   showToast(`已应用: ngl=${r.ngl}, n_cpu_moe=${r.n_cpu_moe}, ctx=${r.ctx}, kv=${r.kv}`);
+  markDirty();
   // Switch to config tab
   document.querySelector('[data-page="config"]').click();
 }
