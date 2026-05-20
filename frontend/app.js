@@ -3,10 +3,13 @@ let ws=null, wsCompile=null, wsDownload=null, statusTimer=null, chatHistory=[];
 let folderCallback=null, currentBrowsePath='';
 let browseMode='folder', browseFilter='.gguf', selectedFilePath='';
 let isWindows = navigator.platform.indexOf('Win')>=0;
+let configDirty=false, lastSavedSnapshot='';
 
 // ── Navigation ──
 document.querySelectorAll('#sidebar button').forEach(btn => {
   btn.addEventListener('click', () => {
+    const leavingConfig=document.querySelector('#page-config.active,#page-sampling.active,#page-prompt.active');
+    if(configDirty && leavingConfig && !confirm('配置已修改但未保存，确定离开？'))return;
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('#sidebar button').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -21,6 +24,23 @@ document.querySelectorAll('#sidebar button').forEach(btn => {
     if(page==='logs') connectLogWS();
     if(page==='params') buildParamPreview();
   });
+});
+
+// ── Unsaved changes tracking ──
+function markDirty(){configDirty=true;updateDirtyIndicator()}
+function clearDirty(){configDirty=false;lastSavedSnapshot=JSON.stringify(cfgFromUI());updateDirtyIndicator()}
+function updateDirtyIndicator(){
+  const el=document.getElementById('configDirtyBadge');
+  if(el)el.style.display=configDirty?'inline':'none';
+}
+function checkDirtyBeforeUnload(e){if(configDirty){e.preventDefault();e.returnValue=''}}
+window.addEventListener('beforeunload',checkDirtyBeforeUnload);
+// Watch config inputs — just flag dirty, no expensive comparison
+document.addEventListener('input',e=>{
+  if(e.target.closest('#page-config')||e.target.closest('#page-sampling')||e.target.closest('#page-prompt'))markDirty();
+});
+document.addEventListener('change',e=>{
+  if(e.target.closest('#page-config')||e.target.closest('#page-sampling')||e.target.closest('#page-prompt'))markDirty();
 });
 
 // ── Helpers ──
@@ -137,24 +157,25 @@ function uiFromCfg(c){
   document.getElementById('listenAddr').textContent=sv.host+':'+sv.port;
 }
 
-async function loadInitCfg(){const c=await api('/api/config');uiFromCfg(c);refreshCfgList()}
+async function loadInitCfg(){const c=await api('/api/config');uiFromCfg(c);refreshCfgList();clearDirty()}
 async function saveConfig(){
   const name=document.getElementById('configName').value.trim()||'default';
   await api('/api/config/save-as',{method:'POST',body:JSON.stringify({name,config:cfgFromUI()})});
+  clearDirty();
   showToast('配置已保存: '+name);refreshCfgList()
 }
 async function refreshCfgList(){const{configs}=await api('/api/config/list');const s=document.getElementById('configList');s.innerHTML='<option value="">-- 已保存配置 --</option>';configs.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;s.appendChild(o)})}
-async function loadSavedConfig(){const n=document.getElementById('configList').value;if(!n)return;const c=await api('/api/config/load',{method:'POST',body:JSON.stringify({name:n})});uiFromCfg(c);document.getElementById('configName').value=n}
+async function loadSavedConfig(){const n=document.getElementById('configList').value;if(!n)return;const c=await api('/api/config/load',{method:'POST',body:JSON.stringify({name:n})});uiFromCfg(c);document.getElementById('configName').value=n;clearDirty()}
 async function deleteConfig(){
   const name=document.getElementById('configName').value.trim()||'default';
   if(name==='default'){alert('不能删除默认配置');return}
   if(!confirm('确定删除配置 "'+name+'" ?'))return;
   await api('/api/config/delete',{method:'POST',body:JSON.stringify({name})});
-  showToast('已删除: '+name);document.getElementById('configName').value='default';refreshCfgList()
+  showToast('已删除: '+name);document.getElementById('configName').value='default';refreshCfgList();clearDirty()
 }
 function exportConfig(){const b=new Blob([JSON.stringify(cfgFromUI(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='llama-manager-config.json';a.click()}
 function importConfig(){document.getElementById('importFile').click()}
-async function handleImport(e){const f=e.target.files[0];if(!f)return;const t=await f.text();const c=await api('/api/config/import',{method:'POST',body:JSON.stringify({content:t})});uiFromCfg(c);e.target.value=''}
+async function handleImport(e){const f=e.target.files[0];if(!f)return;const t=await f.text();const c=await api('/api/config/import',{method:'POST',body:JSON.stringify({content:t})});uiFromCfg(c);clearDirty();e.target.value=''}
 
 // ── Toast ──
 function showToast(msg){
@@ -570,6 +591,7 @@ function applyOptResult(r){
   document.getElementById('kvCacheQuantK').value=r.kv;
   document.getElementById('kvCacheQuantV').value=r.kv;
   showToast(`已应用: ngl=${r.ngl}, n_cpu_moe=${r.n_cpu_moe}, ctx=${r.ctx}, kv=${r.kv}`);
+  markDirty();
   // Switch to config tab
   document.querySelector('[data-page="config"]').click();
 }
