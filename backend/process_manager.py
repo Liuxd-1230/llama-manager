@@ -1,6 +1,7 @@
 """llama-server process management with real-time log streaming."""
 from __future__ import annotations
 import asyncio
+import shlex
 import time
 import sys
 import os
@@ -130,7 +131,10 @@ class ProcessManager:
                 cmd += ["--spec-draft-p-split", str(mtp.p_split)]
 
         if config.extra_params.strip():
-            cmd += config.extra_params.strip().split()
+            try:
+                cmd += shlex.split(config.extra_params, posix=(not IS_WINDOWS))
+            except ValueError as e:
+                raise ValueError(f"extra_params 语法错误: {e}") from e
 
         return cmd
 
