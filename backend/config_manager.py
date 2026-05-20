@@ -12,10 +12,10 @@ CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _sanitize_name(name: str) -> str:
-    """Strip path traversal and非法字符 from config name."""
+    """Strip path traversal and illegal chars from config name."""
     name = name.replace("..", "").replace("/", "").replace("\\", "").strip()
     name = re.sub(r'[^\w\-. ]', '', name)
-    return name or "default"
+    return name[:100] or "default"
 
 
 _current_config: AppConfig = AppConfig()

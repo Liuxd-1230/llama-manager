@@ -53,10 +53,9 @@ def load_config(body: dict):
 
 @app.post("/api/config/delete")
 def delete_config(body: dict):
-    name = body.get("name", "default")
+    name = cfg._sanitize_name(body.get("name", "default"))
     if name == "default":
         return JSONResponse(status_code=400, content={"error": "Cannot delete default config"})
-    name = cfg._sanitize_name(name)
     path = cfg.CONFIG_DIR / f"{name}.json"
     if path.exists():
         path.unlink()

@@ -398,7 +398,7 @@ async function clearLogs(){await api('/api/server/logs/clear',{method:'POST'});[
 function downloadLogs(){const t=document.getElementById('fullLog').innerText;const b=new Blob([t],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`llama-server-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.log`;a.click()}
 
 // ── Chat ──
-async function loadChatModels(){try{const r=await api('/api/chat/models');const s=document.getElementById('chatModel');if(r.data&&r.data.length){s.innerHTML=r.data.map(m=>`<option value="${m.id}">${m.id}</option>`).join('')}else{s.innerHTML='<option>服务器未启动</option>'}}catch{document.getElementById('chatModel').innerHTML='<option>服务器未启动</option>'}}
+async function loadChatModels(){try{const r=await api('/api/chat/models');const s=document.getElementById('chatModel');s.innerHTML='';if(r.data&&r.data.length){r.data.forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.id;s.appendChild(o)})}else{s.innerHTML='<option>服务器未启动</option>'}}catch{document.getElementById('chatModel').innerHTML='<option>服务器未启动</option>'}}
 function appendChatMsg(role,content){const box=document.getElementById('chatMessages');if(box.querySelector('[style*="text-align:center"]'))box.innerHTML='';const d=document.createElement('div');d.className='chat-msg '+(role==='user'?'chat-user':'chat-ai');d.textContent=content;box.appendChild(d);box.scrollTop=box.scrollHeight;return d}
 async function sendChat(){const inp=document.getElementById('chatInput');const msg=inp.value.trim();if(!msg)return;inp.value='';chatHistory.push({role:'user',content:msg});appendChatMsg('user',msg);const body={model:document.getElementById('chatModel').value,messages:chatHistory,temperature:parseFloat(document.getElementById('chatTemp').value),max_tokens:parseInt(document.getElementById('chatMaxTokens').value),stream:true};const aiDiv=appendChatMsg('assistant','⏳ 生成中...');document.getElementById('btnSend').disabled=true;try{const resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const reader=resp.body.getReader();const decoder=new TextDecoder();let full='',buffer='';while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();for(const line of lines){if(!line.startsWith('data: '))continue;const data=line.slice(6).trim();if(data==='[DONE]')continue;try{const j=JSON.parse(data);const d=j.choices?.[0]?.delta?.content||'';full+=d;aiDiv.textContent=full;document.getElementById('chatMessages').scrollTop=999999}catch{}}}if(!full)aiDiv.textContent='(空回复)';chatHistory.push({role:'assistant',content:full})}catch(e){aiDiv.textContent='❌ '+e.message}document.getElementById('btnSend').disabled=false}
 function clearChat(){chatHistory=[];document.getElementById('chatMessages').innerHTML='<div style="text-align:center;color:var(--fg-muted);padding:60px 0">对话已清空</div>'}
@@ -409,7 +409,7 @@ function refreshWebUI(){const s=cfgFromUI().server;const url=`http://${s.host===
 function openWebUI(){const s=cfgFromUI().server;window.open(`http://${s.host==='0.0.0.0'?location.hostname:s.host}:${s.port}`,'_blank')}
 
 // ── Update ──
-async function checkUpdate(){const r=await api('/api/update/check');const el=document.getElementById('updateInfo');if(r.error){el.textContent='❌ '+r.error;el.style.color='var(--red)';return}if(r.has_update){el.innerHTML=`🔄 有更新: <b>${r.current_commit}</b> → <b>${r.remote_commit}</b>`;el.style.color='var(--yellow)'}else{el.innerHTML=`✅ 已是最新 (${r.current_commit})`;el.style.color='var(--green)'}}
+async function checkUpdate(){const r=await api('/api/update/check');const el=document.getElementById('updateInfo');if(r.error){el.textContent='❌ '+r.error;el.style.color='var(--red)';return}if(r.has_update){el.innerHTML=`🔄 有更新: <b>${esc(r.current_commit)}</b> → <b>${esc(r.remote_commit)}</b>`;el.style.color='var(--yellow)'}else{el.textContent=`✅ 已是最新 (${r.current_commit})`;el.style.color='var(--green)'}}
 async function pullUpdate(force=false){const r=await api('/api/update/pull',{method:'POST',body:JSON.stringify({force}),headers:{'Content-Type':'application/json'}});const el=document.getElementById('updateInfo');if(r.success){el.textContent='✅ '+r.output;el.style.color='var(--green)'}else{el.textContent='❌ '+(r.error||r.output);el.style.color='var(--red)'}}
 async function stopCompile(){await api('/api/update/compile/stop',{method:'POST'});document.getElementById('btnCompile').disabled=false;document.getElementById('btnCompileStop').disabled=true}
 async function startCompile(){document.getElementById('btnCompile').disabled=true;document.getElementById('btnCompileStop').disabled=false;await api('/api/config',{method:'POST',body:JSON.stringify(cfgFromUI())});const r=await api('/api/update/compile',{method:'POST'});if(r.error){alert(r.error);document.getElementById('btnCompile').disabled=false;return}connectCompileWS()}
@@ -462,7 +462,7 @@ function buildParamPreview(){
   add('--host',c.server.host,'');add('--port',c.server.port,'');
   if(c.extra_params.trim()) add('# extra:',c.extra_params,'额外参数');
   const el=document.getElementById('paramPreview');
-  el.innerHTML=lines.map(l=>`<div class="param-line"><span class="flag">${l.flag}</span> <span class="value">${l.val}</span>${l.comment?` <span class="comment"># ${l.comment}</span>`:''}</div>`).join('\n');
+  el.innerHTML=lines.map(l=>`<div class="param-line"><span class="flag">${esc(l.flag)}</span> <span class="value">${esc(l.val)}</span>${l.comment?` <span class="comment"># ${esc(l.comment)}</span>`:''}</div>`).join('\n');
   // Also update cmdPreview
   const cmd=lines.filter(l=>!l.flag.startsWith('#')).map(l=>l.flag+(l.val?' '+l.val:'')).join(' ');
   document.getElementById('cmdPreview').textContent=cmd;
@@ -500,19 +500,25 @@ function connectOptimizeWS(){
 
 function appendResultRow(r){
   const tbody=document.getElementById('optResultBody');
-  // Remove "no results" placeholder
   if(tbody.querySelector('td[colspan]'))tbody.innerHTML='';
   const tr=document.createElement('tr');
   tr.style.borderBottom='1px solid var(--border)';
-  tr.innerHTML=`<td style="padding:6px 10px">${r.trial}</td>
-    <td style="padding:6px 10px">${r.ngl}</td>
-    <td style="padding:6px 10px">${r.n_cpu_moe}</td>
-    <td style="padding:6px 10px">${r.ctx}</td>
-    <td style="padding:6px 10px">${r.kv}</td>
-    <td style="padding:6px 10px;font-weight:600">${r.pp}</td>
-    <td style="padding:6px 10px;font-weight:600;color:var(--accent)">${r.tg}</td>
-    <td style="padding:6px 10px">${r.status==='ok'?'✅':'❌'}</td>
-    <td style="padding:6px 10px"><button class="btn btn-secondary" style="padding:2px 8px;font-size:11px" onclick="applyOptResult(${JSON.stringify(r).replace(/"/g,'&quot;')})">应用</button></td>`;
+  const fields=[r.trial,r.ngl,r.n_cpu_moe,r.ctx,r.kv,r.pp,r.tg,r.status==='ok'?'✅':'❌'];
+  fields.forEach((v,i)=>{
+    const td=document.createElement('td');
+    td.style.cssText='padding:6px 10px'+(i===5?'font-weight:600':'')+(i===6?'font-weight:600;color:var(--accent)':'');
+    td.textContent=v;
+    tr.appendChild(td);
+  });
+  const td=document.createElement('td');
+  td.style.cssText='padding:6px 10px';
+  const btn=document.createElement('button');
+  btn.className='btn btn-secondary';
+  btn.style.cssText='padding:2px 8px;font-size:11px';
+  btn.textContent='应用';
+  btn.addEventListener('click',()=>applyOptResult(r));
+  td.appendChild(btn);
+  tr.appendChild(td);
   tbody.appendChild(tr);
   // Sort by tg descending
   const rows=Array.from(tbody.querySelectorAll('tr'));
