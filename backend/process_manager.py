@@ -124,7 +124,7 @@ class ProcessManager:
             cmd += ["--spec-draft-n-max", str(mtp.draft_n_max)]
             if mtp.draft_n_min > 0:
                 cmd += ["--spec-draft-n-min", str(mtp.draft_n_min)]
-            if mtp.p_min != 0.75:
+            if mtp.p_min != 0.0:
                 cmd += ["--spec-draft-p-min", str(mtp.p_min)]
             if mtp.p_split != 0.10:
                 cmd += ["--spec-draft-p-split", str(mtp.p_split)]
