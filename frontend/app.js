@@ -15,10 +15,12 @@ function toggleTheme(){
   else{html.setAttribute('data-theme','dark');localStorage.setItem('theme','dark')}
   const btn=document.getElementById('themeBtn');
   if(btn){
-    const iconName=isDark?'moon':'sun';
-    btn.innerHTML=`<i data-lucide="${iconName}"></i>`;
-    lucide.createIcons({nameAttr:'data-lucide'});
     btn.setAttribute('aria-checked',isDark?'false':'true');
+    try{
+      const iconName=isDark?'moon':'sun';
+      btn.innerHTML=`<i data-lucide="${iconName}"></i>`;
+      if(typeof lucide!=='undefined') lucide.createIcons();
+    }catch(e){console.warn('Icon swap failed:',e)}
   }
 }
 
