@@ -145,44 +145,44 @@
 </svg>
 <header>
   <div class="logo">
-    <svg class="icon icon-lg logo-icon"><use href="#i-zap"></use></svg>
+    <svg class="icon icon-lg logo-icon" width="20" height="20"><use href="#i-zap"></use></svg>
     <span class="logo-text">llama.cpp Manager</span>
   </div>
   <div class="header-right">
     <span id="listenAddr" class="listen-addr"></span>
-    <span id="statusBadge" class="status-pill st-stopped"><svg class="icon icon-sm"><use href="#i-circle-dot"></use></svg> 已停止</span>
+    <span id="statusBadge" class="status-pill st-stopped"><svg class="icon icon-sm" width="14" height="14"><use href="#i-circle-dot"></use></svg> 已停止</span>
     <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()" title="切换主题" role="switch" aria-checked="false" aria-label="切换深色模式">
-      <svg class="icon"><use href="#i-moon"></use></svg>
+      <svg class="icon" width="16" height="16"><use href="#i-moon"></use></svg>
     </button>
   </div>
 </header>
 
 <div class="main-wrap">
   <nav id="sidebar">
-    <button class="active" data-page="config"><svg class="icon"><use href="#i-settings"></use></svg> 配置</button>
-    <button data-page="sampling"><svg class="icon"><use href="#i-sliders-horizontal"></use></svg> 采样器</button>
-    <button data-page="prompt"><svg class="icon"><use href="#i-file-text"></use></svg> 提示词</button>
-    <button data-page="server"><svg class="icon"><use href="#i-server"></use></svg> 服务器</button>
-    <button data-page="optimize"><svg class="icon"><use href="#i-flask-conical"></use></svg> 自动优化</button>
-    <button data-page="params"><svg class="icon"><use href="#i-terminal"></use></svg> 参数预览</button>
-    <button data-page="chat"><svg class="icon"><use href="#i-message-square"></use></svg> 对话</button>
-    <button data-page="webui"><svg class="icon"><use href="#i-globe"></use></svg> 原生 WebUI</button>
-    <button data-page="update"><svg class="icon"><use href="#i-refresh-cw"></use></svg> 更新</button>
-    <button data-page="download"><svg class="icon"><use href="#i-download"></use></svg> 下载</button>
-    <button data-page="logs"><svg class="icon"><use href="#i-scroll-text"></use></svg> 日志</button>
+    <button class="active" data-page="config"><svg class="icon" width="16" height="16"><use href="#i-settings"></use></svg> 配置</button>
+    <button data-page="sampling"><svg class="icon" width="16" height="16"><use href="#i-sliders-horizontal"></use></svg> 采样器</button>
+    <button data-page="prompt"><svg class="icon" width="16" height="16"><use href="#i-file-text"></use></svg> 提示词</button>
+    <button data-page="server"><svg class="icon" width="16" height="16"><use href="#i-server"></use></svg> 服务器</button>
+    <button data-page="optimize"><svg class="icon" width="16" height="16"><use href="#i-flask-conical"></use></svg> 自动优化</button>
+    <button data-page="params"><svg class="icon" width="16" height="16"><use href="#i-terminal"></use></svg> 参数预览</button>
+    <button data-page="chat"><svg class="icon" width="16" height="16"><use href="#i-message-square"></use></svg> 对话</button>
+    <button data-page="webui"><svg class="icon" width="16" height="16"><use href="#i-globe"></use></svg> 原生 WebUI</button>
+    <button data-page="update"><svg class="icon" width="16" height="16"><use href="#i-refresh-cw"></use></svg> 更新</button>
+    <button data-page="download"><svg class="icon" width="16" height="16"><use href="#i-download"></use></svg> 下载</button>
+    <button data-page="logs"><svg class="icon" width="16" height="16"><use href="#i-scroll-text"></use></svg> 日志</button>
   </nav>
   <div class="content">
 
     <!-- ═══ 配置页 ═══ -->
     <div id="page-config" class="page active">
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-folder-open"></use></svg> 路径配置</div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-folder-open"></use></svg> 路径配置</div>
         <div class="form-group">
           <label>llama.cpp 目录</label>
           <div class="form-row">
             <div class="form-group form-group-wide"><input type="text" id="llamaCppDir" placeholder="C:\llama.cpp" onchange="onDirChange()"></div>
-            <button class="btn btn-secondary" onclick="detectServer()"><svg class="icon icon-sm"><use href="#i-search"></use></svg> 检测</button>
-            <button class="btn btn-secondary" onclick="openFolderPicker('llamaCppDir')"><svg class="icon icon-sm"><use href="#i-folder-open"></use></svg> 浏览</button>
+            <button class="btn btn-secondary" onclick="detectServer()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-search"></use></svg> 检测</button>
+            <button class="btn btn-secondary" onclick="openFolderPicker('llamaCppDir')"><svg class="icon icon-sm" width="14" height="14"><use href="#i-folder-open"></use></svg> 浏览</button>
           </div>
           <div class="inline-help" id="serverBinStatus"></div>
         </div>
@@ -190,20 +190,20 @@
           <label>模型文件</label>
           <div class="form-row">
             <div class="form-group form-group-wide"><input type="text" id="modelPath" placeholder="选择模型 .gguf 文件"></div>
-            <button class="btn btn-secondary" onclick="openModelPicker()"><svg class="icon icon-sm"><use href="#i-folder-open"></use></svg> 浏览</button>
+            <button class="btn btn-secondary" onclick="openModelPicker()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-folder-open"></use></svg> 浏览</button>
           </div>
         </div>
         <div class="form-group">
           <label>mmproj 路径 (可选，多模态)</label>
           <div class="form-row">
             <div class="form-group form-group-wide"><input type="text" id="mmprojPath" placeholder="mmproj-*.gguf"></div>
-            <button class="btn btn-secondary" onclick="openFileBrowser('mmprojPath')"><svg class="icon icon-sm"><use href="#i-folder-open"></use></svg> 浏览</button>
+            <button class="btn btn-secondary" onclick="openFileBrowser('mmprojPath')"><svg class="icon icon-sm" width="14" height="14"><use href="#i-folder-open"></use></svg> 浏览</button>
           </div>
         </div>
       </div>
 
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-wrench"></use></svg> 基础设置</div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-wrench"></use></svg> 基础设置</div>
         <div class="grid-3">
           <div class="form-group"><label>上下文长度 (-c)</label><input type="number" id="ctxSize" value="4096" min="128" step="128"></div>
           <div class="form-group"><label>GPU 卸载层数 (-ngl)</label><input type="number" id="ngl" value="99" min="0"></div>
@@ -233,7 +233,7 @@
       </div>
 
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-rocket"></use></svg> MTP 投机解码</div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-rocket"></use></svg> MTP 投机解码</div>
         <div class="toggle-row"><label class="toggle"><input type="checkbox" id="mtpEnabled" onchange="toggleMTP()"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">启用 MTP (Multi-Token Prediction)</span></div>
         <div id="mtpGroup" class="group-disabled">
           <div class="inline-help mb-2">适用于 Qwen3.6 等支持 MTP 的模型，可实现 2x+ 推理加速</div>
@@ -250,7 +250,7 @@
       </div>
 
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-globe"></use></svg> 服务器模式</div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-globe"></use></svg> 服务器模式</div>
         <div class="grid-3">
           <div class="form-group"><label>监听模式</label><select id="serverMode" onchange="onModeChange()"><option value="local">本地 (127.0.0.1)</option><option value="lan">局域网 (0.0.0.0)</option></select></div>
           <div class="form-group"><label>监听地址</label><input type="text" id="serverHost" value="127.0.0.1"></div>
@@ -260,11 +260,11 @@
 
       <div class="config-toolbar">
         <input type="text" id="configName" placeholder="配置名称" value="default">
-        <button class="btn btn-primary" onclick="saveConfig()"><svg class="icon icon-sm"><use href="#i-save"></use></svg> 保存</button>
-        <span id="configDirtyBadge" class="dirty-badge" style="display:none"><svg class="icon icon-sm"><use href="#i-circle-dot"></use></svg> 未保存</span>
-        <button class="btn btn-danger btn-sm" onclick="deleteConfig()"><svg class="icon icon-sm"><use href="#i-trash-2"></use></svg> 删除</button>
-        <button class="btn btn-secondary btn-sm" onclick="exportConfig()"><svg class="icon icon-sm"><use href="#i-upload"></use></svg> 导出</button>
-        <button class="btn btn-secondary btn-sm" onclick="importConfig()"><svg class="icon icon-sm"><use href="#i-download"></use></svg> 导入</button>
+        <button class="btn btn-primary" onclick="saveConfig()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-save"></use></svg> 保存</button>
+        <span id="configDirtyBadge" class="dirty-badge" style="display:none"><svg class="icon icon-sm" width="14" height="14"><use href="#i-circle-dot"></use></svg> 未保存</span>
+        <button class="btn btn-danger btn-sm" onclick="deleteConfig()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-trash-2"></use></svg> 删除</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportConfig()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-upload"></use></svg> 导出</button>
+        <button class="btn btn-secondary btn-sm" onclick="importConfig()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-download"></use></svg> 导入</button>
         <select id="configList" onchange="loadSavedConfig()" ><option value="">-- 已保存配置 --</option></select>
       </div>
     </div>
@@ -272,7 +272,7 @@
     <!-- ═══ 采样器页 ═══ -->
     <div id="page-sampling" class="page">
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-sliders-horizontal"></use></svg> 采样器设置</div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-sliders-horizontal"></use></svg> 采样器设置</div>
         <div class="form-group"><label>温度 (temperature)</label>
           <div class="range-display"><input type="range" id="tempRange" min="0" max="2" step="0.05" value="0.7" oninput="syncR('temp')"><input type="number" id="tempVal" value="0.7" min="0" max="2" step="0.05" class="range-input" oninput="syncV('temp')"></div>
         </div>
@@ -294,11 +294,11 @@
     <!-- ═══ 提示词页 ═══ -->
     <div id="page-prompt" class="page">
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-file-text"></use></svg> 系统提示词</div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-file-text"></use></svg> 系统提示词</div>
         <div class="form-group"><textarea id="systemPrompt" rows="8" placeholder="输入系统提示词..."></textarea></div>
       </div>
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-settings"></use></svg> 额外参数</div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-settings"></use></svg> 额外参数</div>
         <div class="form-group"><textarea id="extraParams" rows="3" placeholder="每行一个额外参数，如: --flash-attn"></textarea><div class="inline-help">高级用户：直接添加 llama-server 命令行参数</div></div>
       </div>
     </div>
@@ -306,15 +306,15 @@
     <!-- ═══ 服务器页 ═══ -->
     <div id="page-server" class="page">
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-server"></use></svg> 服务器控制</div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-server"></use></svg> 服务器控制</div>
         <div class="control-row">
-          <button class="btn btn-success" id="btnStart" onclick="startServer()"><svg class="icon icon-sm"><use href="#i-play"></use></svg> 启动</button>
-          <button class="btn btn-danger" id="btnStop" onclick="stopServer()" disabled><svg class="icon icon-sm"><use href="#i-square"></use></svg> 停止</button>
+          <button class="btn btn-success" id="btnStart" onclick="startServer()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-play"></use></svg> 启动</button>
+          <button class="btn btn-danger" id="btnStop" onclick="stopServer()" disabled><svg class="icon icon-sm" width="14" height="14"><use href="#i-square"></use></svg> 停止</button>
           <span id="serverInfo" class="info"></span>
         </div>
         <div class="log-toolbar">
           <label><input type="checkbox" id="autoScroll" checked> 自动滚动</label>
-          <button class="btn btn-secondary btn-sm" onclick="clearLogs()"><svg class="icon icon-sm"><use href="#i-trash-2"></use></svg> 清空</button>
+          <button class="btn btn-secondary btn-sm" onclick="clearLogs()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-trash-2"></use></svg> 清空</button>
         </div>
         <div class="log-box" id="serverLog"></div>
       </div>
@@ -323,7 +323,7 @@
     <!-- ═══ 自动优化页 ═══ -->
     <div id="page-optimize" class="page">
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-flask-conical"></use></svg> 贝叶斯自动优化</div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-flask-conical"></use></svg> 贝叶斯自动优化</div>
         <div class="inline-help mb-3">使用 Optuna 贝叶斯优化自动搜索最优 llama.cpp 参数组合（ngl × n_cpu_moe × ctx × kv）</div>
         <div class="grid-3">
           <div class="form-group"><label>ngl 最小值</label><input type="number" id="optNglMin" value="0" min="0"></div>
@@ -354,13 +354,13 @@
           </div>
         </div>
         <div class="control-row mt-3">
-          <button class="btn btn-success" id="btnOptStart" onclick="startOptimize()"><svg class="icon icon-sm"><use href="#i-play"></use></svg> 开始优化</button>
-          <button class="btn btn-danger" id="btnOptStop" onclick="stopOptimize()" disabled><svg class="icon icon-sm"><use href="#i-square"></use></svg> 停止</button>
+          <button class="btn btn-success" id="btnOptStart" onclick="startOptimize()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-play"></use></svg> 开始优化</button>
+          <button class="btn btn-danger" id="btnOptStop" onclick="stopOptimize()" disabled><svg class="icon icon-sm" width="14" height="14"><use href="#i-square"></use></svg> 停止</button>
           <span id="optProgress" class="info"></span>
         </div>
       </div>
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-bar-chart-3"></use></svg> 优化结果</div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-bar-chart-3"></use></svg> 优化结果</div>
         <div class="table-scroll">
           <table class="data-table">
             <thead><tr><th>#</th><th>ngl</th><th>n_cpu_moe</th><th>ctx</th><th>kv</th><th>pp (t/s)</th><th>tg (t/s)</th><th>状态</th><th></th></tr></thead>
@@ -369,7 +369,7 @@
         </div>
       </div>
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-scroll-text"></use></svg> 优化日志</div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-scroll-text"></use></svg> 优化日志</div>
         <div class="log-box log-sm" id="optimizeLog"></div>
       </div>
     </div>
@@ -377,15 +377,15 @@
     <!-- ═══ 参数预览页 ═══ -->
     <div id="page-params" class="page">
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-terminal"></use></svg> 启动参数预览</div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-terminal"></use></svg> 启动参数预览</div>
         <div class="control-row">
-          <button class="btn btn-secondary btn-sm" onclick="copyParams()"><svg class="icon icon-sm"><use href="#i-copy"></use></svg> 复制</button>
-          <button class="btn btn-secondary btn-sm" onclick="buildParamPreview()"><svg class="icon icon-sm"><use href="#i-refresh-cw"></use></svg> 刷新</button>
+          <button class="btn btn-secondary btn-sm" onclick="copyParams()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-copy"></use></svg> 复制</button>
+          <button class="btn btn-secondary btn-sm" onclick="buildParamPreview()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-refresh-cw"></use></svg> 刷新</button>
         </div>
         <div class="param-preview" id="paramPreview"></div>
       </div>
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-code-2"></use></svg> 完整命令</div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-code-2"></use></svg> 完整命令</div>
         <div class="code-block"><code id="cmdPreview"></code></div>
       </div>
     </div>
@@ -397,12 +397,12 @@
           <select id="chatModel"><option>服务器未启动</option></select>
           <div class="form-group"><label>温度</label><input type="number" id="chatTemp" value="0.7" min="0" max="2" step="0.1"></div>
           <div class="form-group max-tokens"><label>最大 tokens</label><input type="number" id="chatMaxTokens" value="2048" min="1" max="32768"></div>
-          <button class="btn btn-secondary btn-sm" onclick="clearChat()"><svg class="icon icon-sm"><use href="#i-trash-2"></use></svg> 清空</button>
+          <button class="btn btn-secondary btn-sm" onclick="clearChat()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-trash-2"></use></svg> 清空</button>
         </div>
         <div class="chat-box" id="chatMessages"><div class="chat-empty">启动服务器后开始对话</div></div>
         <div class="chat-input-wrap">
           <textarea id="chatInput" placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"></textarea>
-          <button class="btn btn-primary" id="btnSend" onclick="sendChat()"><svg class="icon icon-sm"><use href="#i-send"></use></svg> 发送</button>
+          <button class="btn btn-primary" id="btnSend" onclick="sendChat()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-send"></use></svg> 发送</button>
         </div>
       </div>
     </div>
@@ -410,20 +410,20 @@
     <!-- ═══ 更新页 ═══ -->
     <div id="page-update" class="page">
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-refresh-cw"></use></svg> llama.cpp 更新</div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-refresh-cw"></use></svg> llama.cpp 更新</div>
         <div class="control-row">
-          <button class="btn btn-secondary" onclick="checkUpdate()"><svg class="icon icon-sm"><use href="#i-search"></use></svg> 检查更新</button>
-          <button class="btn btn-primary" onclick="pullUpdate()"><svg class="icon icon-sm"><use href="#i-download"></use></svg> 拉取更新</button>
-          <button class="btn btn-danger btn-sm" onclick="pullUpdate(true)"><svg class="icon icon-sm"><use href="#i-alert-triangle"></use></svg> 强制重置</button>
+          <button class="btn btn-secondary" onclick="checkUpdate()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-search"></use></svg> 检查更新</button>
+          <button class="btn btn-primary" onclick="pullUpdate()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-download"></use></svg> 拉取更新</button>
+          <button class="btn btn-danger btn-sm" onclick="pullUpdate(true)"><svg class="icon icon-sm" width="14" height="14"><use href="#i-alert-triangle"></use></svg> 强制重置</button>
           <span id="updateInfo" class="info"></span>
         </div>
       </div>
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-hammer"></use></svg> 编译</div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-hammer"></use></svg> 编译</div>
         <div class="form-group"><label>编译命令</label><input type="text" id="compileCmd" value='cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="89" && cmake --build build --config Release -j12'></div>
         <div class="control-row">
-          <button class="btn btn-success" id="btnCompile" onclick="startCompile()"><svg class="icon icon-sm"><use href="#i-hammer"></use></svg> 编译</button>
-          <button class="btn btn-danger" id="btnCompileStop" onclick="stopCompile()" disabled><svg class="icon icon-sm"><use href="#i-square"></use></svg> 停止</button>
+          <button class="btn btn-success" id="btnCompile" onclick="startCompile()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-hammer"></use></svg> 编译</button>
+          <button class="btn btn-danger" id="btnCompileStop" onclick="stopCompile()" disabled><svg class="icon icon-sm" width="14" height="14"><use href="#i-square"></use></svg> 停止</button>
         </div>
         <div class="log-box log-sm" id="compileLog"></div>
       </div>
@@ -432,11 +432,11 @@
     <!-- ═══ 下载页 ═══ -->
     <div id="page-download" class="page">
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-download"></use></svg> 下载 llama.cpp</div>
-        <div class="form-group"><label>目标目录</label><div class="form-row"><div class="form-group form-group-wide"><input type="text" id="downloadDir" placeholder="选择下载目录"></div><button class="btn btn-secondary" onclick="openFolderPicker('downloadDir')"><svg class="icon icon-sm"><use href="#i-folder-open"></use></svg> 浏览</button></div></div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-download"></use></svg> 下载 llama.cpp</div>
+        <div class="form-group"><label>目标目录</label><div class="form-row"><div class="form-group form-group-wide"><input type="text" id="downloadDir" placeholder="选择下载目录"></div><button class="btn btn-secondary" onclick="openFolderPicker('downloadDir')"><svg class="icon icon-sm" width="14" height="14"><use href="#i-folder-open"></use></svg> 浏览</button></div></div>
         <div class="control-row">
-          <button class="btn btn-success" id="btnDownload" onclick="startDownload()"><svg class="icon icon-sm"><use href="#i-download"></use></svg> 下载</button>
-          <button class="btn btn-danger" id="btnDownloadStop" onclick="stopDownload()" disabled><svg class="icon icon-sm"><use href="#i-square"></use></svg> 停止</button>
+          <button class="btn btn-success" id="btnDownload" onclick="startDownload()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-download"></use></svg> 下载</button>
+          <button class="btn btn-danger" id="btnDownloadStop" onclick="stopDownload()" disabled><svg class="icon icon-sm" width="14" height="14"><use href="#i-square"></use></svg> 停止</button>
         </div>
         <div class="log-box log-sm" id="downloadLog"></div>
       </div>
@@ -445,11 +445,11 @@
     <!-- ═══ 日志页 ═══ -->
     <div id="page-logs" class="page">
       <div class="card">
-        <div class="card-title"><svg class="icon"><use href="#i-scroll-text"></use></svg> 完整日志</div>
+        <div class="card-title"><svg class="icon" width="16" height="16"><use href="#i-scroll-text"></use></svg> 完整日志</div>
         <div class="log-toolbar">
           <label><input type="checkbox" id="autoScroll2" checked> 自动滚动</label>
-          <button class="btn btn-secondary btn-sm" onclick="clearLogs()"><svg class="icon icon-sm"><use href="#i-trash-2"></use></svg> 清空</button>
-          <button class="btn btn-secondary btn-sm" onclick="downloadLogs()"><svg class="icon icon-sm"><use href="#i-download"></use></svg> 下载</button>
+          <button class="btn btn-secondary btn-sm" onclick="clearLogs()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-trash-2"></use></svg> 清空</button>
+          <button class="btn btn-secondary btn-sm" onclick="downloadLogs()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-download"></use></svg> 下载</button>
         </div>
         <div class="log-box" id="fullLog" style="height:calc(100vh - 200px)"></div>
       </div>
@@ -458,8 +458,8 @@
     <!-- ═══ WebUI 页 ═══ -->
     <div id="page-webui" class="page">
       <div class="control-row">
-        <button class="btn btn-secondary" onclick="refreshWebUI()"><svg class="icon icon-sm"><use href="#i-refresh-cw"></use></svg> 刷新</button>
-        <button class="btn btn-secondary" onclick="openWebUI()"><svg class="icon icon-sm"><use href="#i-external-link"></use></svg> 新窗口打开</button>
+        <button class="btn btn-secondary" onclick="refreshWebUI()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-refresh-cw"></use></svg> 刷新</button>
+        <button class="btn btn-secondary" onclick="openWebUI()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-external-link"></use></svg> 新窗口打开</button>
       </div>
       <iframe id="webuiFrame" style="width:100%;height:calc(100vh - 120px);border:1px solid var(--border-subtle);border-radius:var(--radius)"></iframe>
     </div>
@@ -470,10 +470,10 @@
 <!-- ═══ 文件浏览器弹窗 ═══ -->
 <div class="modal-overlay" id="folderModal">
   <div class="modal">
-    <h3 id="folderModalTitle"><svg class="icon"><use href="#i-folder-open"></use></svg> 浏览文件夹</h3>
+    <h3 id="folderModalTitle"><svg class="icon" width="16" height="16"><use href="#i-folder-open"></use></svg> 浏览文件夹</h3>
     <div class="breadcrumb" id="folderBreadcrumb"></div>
     <div class="control-row">
-      <button class="btn btn-secondary btn-sm" onclick="goUpOneLevel()"><svg class="icon icon-sm"><use href="#i-arrow-up"></use></svg> 上一级</button>
+      <button class="btn btn-secondary btn-sm" onclick="goUpOneLevel()"><svg class="icon icon-sm" width="14" height="14"><use href="#i-arrow-up"></use></svg> 上一级</button>
       <div id="driveList" style="display:none;gap:6px;flex-wrap:wrap"></div>
     </div>
     <div class="form-row mb-2">
