@@ -2,12 +2,21 @@
 from __future__ import annotations
 import json
 import os
+import re
 from pathlib import Path
 from typing import List
 from .models import AppConfig, ModelInfo
 
 CONFIG_DIR = Path.home() / "llama-manager" / "config"
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _sanitize_name(name: str) -> str:
+    """Strip path traversal and非法字符 from config name."""
+    name = name.replace("..", "").replace("/", "").replace("\\", "").strip()
+    name = re.sub(r'[^\w\-. ]', '', name)
+    return name or "default"
+
 
 _current_config: AppConfig = AppConfig()
 
@@ -19,6 +28,7 @@ def get_config() -> AppConfig:
 def save_config(config: AppConfig, name: str = "default") -> Path:
     global _current_config
     _current_config = config
+    name = _sanitize_name(name)
     path = CONFIG_DIR / f"{name}.json"
     path.write_text(json.dumps(config.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
     return path
@@ -26,6 +36,7 @@ def save_config(config: AppConfig, name: str = "default") -> Path:
 
 def load_config(name: str = "default") -> AppConfig:
     global _current_config
+    name = _sanitize_name(name)
     path = CONFIG_DIR / f"{name}.json"
     if path.exists():
         data = json.loads(path.read_text(encoding="utf-8"))

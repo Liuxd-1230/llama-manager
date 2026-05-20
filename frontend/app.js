@@ -24,6 +24,7 @@ document.querySelectorAll('#sidebar button').forEach(btn => {
 });
 
 // ── Helpers ──
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function syncR(n){document.getElementById(n+'Val').value=document.getElementById(n+'Range').value}
 function syncV(n){document.getElementById(n+'Range').value=document.getElementById(n+'Val').value}
 function toggleSamp(n){
@@ -142,7 +143,7 @@ async function saveConfig(){
   await api('/api/config/save-as',{method:'POST',body:JSON.stringify({name,config:cfgFromUI()})});
   showToast('配置已保存: '+name);refreshCfgList()
 }
-async function refreshCfgList(){const{configs}=await api('/api/config/list');const s=document.getElementById('configList');s.innerHTML='<option value="">-- 已保存配置 --</option>';configs.forEach(n=>{s.innerHTML+=`<option value="${n}">${n}</option>`})}
+async function refreshCfgList(){const{configs}=await api('/api/config/list');const s=document.getElementById('configList');s.innerHTML='<option value="">-- 已保存配置 --</option>';configs.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;s.appendChild(o)})}
 async function loadSavedConfig(){const n=document.getElementById('configList').value;if(!n)return;const c=await api('/api/config/load',{method:'POST',body:JSON.stringify({name:n})});uiFromCfg(c);document.getElementById('configName').value=n}
 async function deleteConfig(){
   const name=document.getElementById('configName').value.trim()||'default';
@@ -232,7 +233,15 @@ async function loadDriveList(){
   const r=await api('/api/drives');
   const dl=document.getElementById('driveList');
   if(r.drives&&r.drives.length>1){
-    dl.innerHTML=r.drives.map(d=>'<button class="btn btn-secondary" style="padding:3px 10px;font-size:12px" data-browse="'+d+'\\">'+d+'</button>').join('');
+    dl.innerHTML='';
+    r.drives.forEach(d=>{
+      const btn=document.createElement('button');
+      btn.className='btn btn-secondary';
+      btn.style.cssText='padding:3px 10px;font-size:12px';
+      btn.dataset.browse=d+'\\';
+      btn.textContent=d;
+      dl.appendChild(btn);
+    });
     dl.style.display='flex';
   }else{dl.style.display='none'}
 }
@@ -244,32 +253,67 @@ async function browseTo(path){
   const list=document.getElementById('folderList');
   if(!r.entries||!r.entries.length){list.innerHTML='<div style="color:var(--fg-muted);padding:12px;text-align:center">空目录</div>';return}
   // Always show directories
-  let html=r.entries.filter(e=>e.is_dir).map(e=>{
-    return '<div class="file-item" data-browse="'+e.path.replace(/"/g,'&quot;')+'"><span class="file-icon">📁</span><span>'+e.name+'</span></div>';
-  }).join('');
+  list.innerHTML='';
+  r.entries.filter(e=>e.is_dir).forEach(e=>{
+    const div=document.createElement('div');
+    div.className='file-item';
+    div.dataset.browse=e.path;
+    div.innerHTML='<span class="file-icon">📁</span>';
+    const span=document.createElement('span');
+    span.textContent=e.name;
+    div.appendChild(span);
+    list.appendChild(div);
+  });
   // In file mode, also show .gguf files
   if(browseMode==='file'){
     const files=r.entries.filter(e=>!e.is_dir && e.name.toLowerCase().endsWith(browseFilter));
     if(files.length){
-      html+=files.map(e=>{
+      files.forEach(e=>{
         const sizeMB=(e.size_mb||(e.size||0)/(1024*1024)).toFixed(0);
-        return '<div class="file-item" data-file="'+e.path.replace(/"/g,'&quot;')+'" data-name="'+e.name.replace(/"/g,'&quot;')+'"><span class="file-icon">📄</span><span style="flex:1">'+e.name+'</span><span class="file-size">'+sizeMB+' MB</span></div>';
-      }).join('');
+        const div=document.createElement('div');
+        div.className='file-item';
+        div.dataset.file=e.path;
+        div.dataset.name=e.name;
+        const icon=document.createElement('span');
+        icon.className='file-icon';
+        icon.textContent='📄';
+        const nameSpan=document.createElement('span');
+        nameSpan.style.flex='1';
+        nameSpan.textContent=e.name;
+        const sizeSpan=document.createElement('span');
+        sizeSpan.className='file-size';
+        sizeSpan.textContent=sizeMB+' MB';
+        div.append(icon, nameSpan, sizeSpan);
+        list.appendChild(div);
+      });
     }
     // Auto-scan hint if no gguf found
     if(!files.length && r.entries.length>0){
-      html+='<div style="color:var(--fg-muted);padding:8px 10px;font-size:12px;text-align:center">此目录无 '+browseFilter+' 文件</div>';
+      const hint=document.createElement('div');
+      hint.style.cssText='color:var(--fg-muted);padding:8px 10px;font-size:12px;text-align:center';
+      hint.textContent='此目录无 '+browseFilter+' 文件';
+      list.appendChild(hint);
     }
   }
-  list.innerHTML=html;
 }
 function updateBreadcrumb(){
   const bc=document.getElementById('folderBreadcrumb');
   const parts=currentBrowsePath.replace(/\\/g,'/').split('/').filter(Boolean);
-  let html='<span data-browse="/">/</span>';
+  bc.innerHTML='';
+  const root=document.createElement('span');
+  root.dataset.browse='/';
+  root.textContent='/';
+  bc.appendChild(root);
   let acc='';
-  parts.forEach(p=>{acc+='/'+p;html+='<span data-browse="'+acc+'">'+p+'</span> / '});
-  bc.innerHTML=html;
+  parts.forEach(p=>{
+    acc+='/'+p;
+    const span=document.createElement('span');
+    span.dataset.browse=acc;
+    span.textContent=p;
+    bc.appendChild(document.createTextNode(' '));
+    bc.appendChild(span);
+    bc.appendChild(document.createTextNode(' / '));
+  });
 }
 // Event delegation for all browse clicks
 document.addEventListener('click',function(e){
