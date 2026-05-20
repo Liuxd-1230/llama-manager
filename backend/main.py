@@ -105,6 +105,20 @@ def server_status():
     return process_manager.get_status().model_dump()
 
 
+@app.get("/api/server/health")
+async def server_health():
+    """Check if llama-server is accepting requests."""
+    import httpx
+    config = cfg.get_config()
+    url = f"http://{config.server.host}:{config.server.port}/health"
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            resp = await client.get(url)
+            return {"ready": resp.status_code == 200, "status": resp.status_code}
+    except Exception:
+        return {"ready": False, "status": "unreachable"}
+
+
 @app.get("/api/server/logs")
 def server_logs():
     return {"logs": process_manager.get_logs()}
