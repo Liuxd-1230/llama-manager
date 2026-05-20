@@ -13,9 +13,13 @@ function toggleTheme(){
   const isDark=html.getAttribute('data-theme')==='dark';
   if(isDark){html.removeAttribute('data-theme');localStorage.setItem('theme','light')}
   else{html.setAttribute('data-theme','dark');localStorage.setItem('theme','dark')}
-  const use=document.querySelector('#themeBtn use');
-  if(use) use.setAttribute('href',isDark?'#i-moon':'#i-sun');
-  document.getElementById('themeBtn')?.setAttribute('aria-checked',isDark?'false':'true');
+  const btn=document.getElementById('themeBtn');
+  if(btn){
+    const iconName=isDark?'moon':'sun';
+    btn.innerHTML=`<i data-lucide="${iconName}"></i>`;
+    lucide.createIcons({nameAttr:'data-lucide'});
+    btn.setAttribute('aria-checked',isDark?'false':'true');
+  }
 }
 
 // ── Navigation ──
@@ -641,11 +645,14 @@ async function stopOptimize(){
 // Set theme icon on load
 (function(){
   const isDark=document.documentElement.getAttribute('data-theme')==='dark';
-  const use=document.querySelector('#themeBtn use');
   const btn=document.getElementById('themeBtn');
-  if(use) use.setAttribute('href',isDark?'#i-sun':'#i-moon');
-  if(btn) btn.setAttribute('aria-checked',isDark?'true':'false');
+  if(btn){
+    const iconName=isDark?'sun':'moon';
+    btn.innerHTML=`<i data-lucide="${iconName}"></i>`;
+    btn.setAttribute('aria-checked',isDark?'true':'false');
+  }
 })();
 loadInitCfg();
+lucide.createIcons();
 statusTimer=setInterval(refreshStatus,5000);
 refreshStatus();
