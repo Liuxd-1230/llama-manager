@@ -11,8 +11,8 @@ function toggleTheme(){
   const isDark=html.getAttribute('data-theme')==='dark';
   if(isDark){html.removeAttribute('data-theme');localStorage.setItem('theme','light')}
   else{html.setAttribute('data-theme','dark');localStorage.setItem('theme','dark')}
-  const icon=document.getElementById('themeIcon');
-  if(icon) icon.className=isDark?'icon lucide-moon':'icon lucide-sun';
+  const use=document.querySelector('#themeBtn use');
+  if(use) use.setAttribute('href',isDark?'#i-moon':'#i-sun');
   document.getElementById('themeBtn')?.setAttribute('aria-checked',isDark?'false':'true');
 }
 
@@ -60,10 +60,9 @@ function syncR(n){document.getElementById(n+'Val').value=document.getElementById
 function syncV(n){document.getElementById(n+'Range').value=document.getElementById(n+'Val').value}
 function toggleSamp(n){
   const e=document.getElementById(n+'Enabled'),g=document.getElementById(n+'Group');
-  if(e.checked){g.style.opacity='1';g.style.pointerEvents='auto';g.querySelectorAll('input[type=range]').forEach(r=>r.style.accentColor='var(--accent)')}
-  else{g.style.opacity='.4';g.style.pointerEvents='none';g.querySelectorAll('input[type=range]').forEach(r=>r.style.accentColor='#999')}
+  g.classList.toggle('group-disabled',!e.checked);
 }
-function toggleMTP(){const e=document.getElementById('mtpEnabled'),g=document.getElementById('mtpGroup');g.style.opacity=e.checked?'1':'.4';g.style.pointerEvents=e.checked?'auto':'none'}
+function toggleMTP(){const e=document.getElementById('mtpEnabled'),g=document.getElementById('mtpGroup');g.classList.toggle('group-disabled',!e.checked)}
 function onModeChange(){const m=document.getElementById('serverMode').value;document.getElementById('serverHost').value=m==='lan'?'0.0.0.0':'127.0.0.1'}
 async function api(u,o={}){const r=await fetch(u,{headers:{'Content-Type':'application/json'},...o});return r.json()}
 
@@ -640,9 +639,9 @@ async function stopOptimize(){
 // Set theme icon on load
 (function(){
   const isDark=document.documentElement.getAttribute('data-theme')==='dark';
-  const icon=document.getElementById('themeIcon');
+  const use=document.querySelector('#themeBtn use');
   const btn=document.getElementById('themeBtn');
-  if(icon) icon.className=isDark?'icon lucide-sun':'icon lucide-moon';
+  if(use) use.setAttribute('href',isDark?'#i-sun':'#i-moon');
   if(btn) btn.setAttribute('aria-checked',isDark?'true':'false');
 })();
 loadInitCfg();
