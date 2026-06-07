@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
 <link rel="stylesheet" href="/static/style.css">
 <script>
-(function(){try{var t=localStorage.getItem('theme')||'light';if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})();
+(function(){try{var t=localStorage.getItem('theme')||'light';if(t==='dark'||t==='apple')document.documentElement.setAttribute('data-theme',t)}catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/lucide@0.462.0/dist/umd/lucide.min.js"></script>
 </head>
@@ -20,7 +20,7 @@
   <div class="header-right">
     <span id="listenAddr" class="listen-addr"></span>
     <span id="statusBadge" class="status-pill st-stopped"><i data-lucide="circle-dot" class="icon icon-sm"></i> 已停止</span>
-    <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()" title="切换主题" role="switch" aria-checked="false" aria-label="切换深色模式">
+    <button class="theme-toggle" id="themeBtn" onclick="cycleTheme()" title="切换主题" role="switch" aria-checked="false" aria-label="切换主题风格">
       <i data-lucide="moon" class="icon"></i>
     </button>
   </div>
@@ -75,7 +75,13 @@
         <div class="card-title"><i data-lucide="wrench" class="icon"></i> 基础设置</div>
         <div class="grid-3">
           <div class="form-group"><label>上下文长度 (-c)</label><input type="number" id="ctxSize" value="4096" min="128" step="128"></div>
-          <div class="form-group"><label>GPU 卸载层数 (-ngl)</label><input type="number" id="ngl" value="99" min="0"></div>
+          <div class="form-group">
+            <label>GPU 卸载层数 (-ngl)</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <label class="toggle"><input type="checkbox" id="nglEnabled" checked onchange="toggleNgl()"><span class="slider"></span></label>
+              <input type="number" id="ngl" value="99" min="0" style="flex:1">
+            </div>
+          </div>
           <div class="form-group"><label>CPU 线程数 (-t)</label><input type="number" id="threads" value="8" min="1"></div>
           <div class="form-group"><label>并行数 (-np)</label><input type="number" id="parallel" value="1" min="1"></div>
           <div class="form-group"><label>MoE CPU 卸载 (--n-cpu-moe)</label><input type="number" id="nCpuMoe" value="0" min="0"><div class="inline-help">0 = 关闭，>0 = 卸载到CPU的专家层数</div></div>
@@ -93,7 +99,14 @@
         <div class="toggle-row"><label class="toggle"><input type="checkbox" id="flashAttn"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">Flash Attention</span></div>
         <div class="toggle-row"><label class="toggle"><input type="checkbox" id="kvUnified" checked><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">Unified KV 缓存</span></div>
         <div class="toggle-row"><label class="toggle"><input type="checkbox" id="contextShift"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">上下文自动切换</span></div>
-        <div class="form-group mt-2"><label>GPU 显存余量 (--fit-target MiB)</label><input type="number" id="fitTarget" value="0" min="0" step="100"><div class="inline-help">0 = 关闭，>0 = 限制模型卸载到 GPU 的显存余量</div></div>
+        <div class="toggle-group-wrap mt-2">
+          <label class="toggle"><input type="checkbox" id="fitEnabled" onchange="toggleFit()"><span class="slider"></span></label>
+          <span class="toggle-group-label">Fit GPU (--fit-target)</span>
+          <div class="toggle-group-content group-disabled" id="fitGroup">
+            <input type="number" id="fitTarget" value="256" min="0" step="100">
+            <span class="inline-help">MiB，限制模型卸载到 GPU 的显存余量</span>
+          </div>
+        </div>
         <div class="grid-2 mt-2">
           <div class="form-group"><label>逻辑批大小 (-b)</label><input type="number" id="batchSize" value="2048" min="32" step="32"><div class="inline-help">默认 2048，调小可跑更大上下文</div></div>
           <div class="form-group"><label>物理批大小 (-ub)</label><input type="number" id="ubatchSize" value="512" min="32" step="32"><div class="inline-help">默认 512</div></div>

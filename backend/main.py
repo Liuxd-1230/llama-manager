@@ -328,7 +328,7 @@ async def optimize_start(request: Request):
             mlock=config.basic.mlock,
             kv_offload=config.basic.kv_offload,
             flash_attn=config.basic.flash_attn,
-            fit_target=config.basic.fit_target,
+            fit_target=config.basic.fit_target if config.basic.fit_enabled else 0,
         )
         return {"ok": True}
     except Exception as e:

@@ -8,21 +8,33 @@ let isWindows = navigator.platform.indexOf('Win')>=0;
 let configDirty=false, lastSavedSnapshot='';
 
 // ── Theme ──
-function toggleTheme(){
+function cycleTheme(){
   const html=document.documentElement;
-  const isDark=html.getAttribute('data-theme')==='dark';
-  if(isDark){html.removeAttribute('data-theme');localStorage.setItem('theme','light')}
-  else{html.setAttribute('data-theme','dark');localStorage.setItem('theme','dark')}
+  const themes=['light','dark','apple'];
+  const cur=html.getAttribute('data-theme')||'light';
+  const idx=themes.indexOf(cur);
+  const next=themes[(idx+1)%themes.length];
+  if(next==='light'){
+    html.removeAttribute('data-theme');
+    html.removeAttribute('data-theme-dark');
+  }else{
+    html.setAttribute('data-theme',next);
+    if(next==='dark') html.removeAttribute('data-theme-dark');
+  }
+  localStorage.setItem('theme',next);
   const btn=document.getElementById('themeBtn');
   if(btn){
-    btn.setAttribute('aria-checked',isDark?'false':'true');
-    try{
-      const iconName=isDark?'moon':'sun';
-      btn.innerHTML=`<i data-lucide="${iconName}"></i>`;
-      if(typeof lucide!=='undefined') lucide.createIcons();
-    }catch(e){console.warn('Icon swap failed:',e)}
+    const icons={'light':'moon','dark':'sun','apple':'palette'};
+    const titles={'light':'浅色模式','dark':'深色模式','apple':'Apple 风格'};
+    const aria={'light':'false','dark':'true','apple':'true'};
+    btn.innerHTML=`<i data-lucide="${icons[next]}"></i>`;
+    btn.title=titles[next];
+    btn.setAttribute('aria-checked',aria[next]);
+    try{if(typeof lucide!=='undefined') lucide.createIcons()}catch(e){console.warn('Icon swap failed:',e)}
   }
 }
+// Backward compat alias
+function toggleTheme(){cycleTheme()}
 
 // ── Navigation ──
 document.querySelectorAll('#sidebar button').forEach(btn => {
@@ -71,6 +83,16 @@ function toggleSamp(n){
   g.classList.toggle('group-disabled',!e.checked);
 }
 function toggleMTP(){const e=document.getElementById('mtpEnabled'),g=document.getElementById('mtpGroup');g.classList.toggle('group-disabled',!e.checked)}
+function toggleNgl(){
+  const on=document.getElementById('nglEnabled').checked;
+  const inp=document.getElementById('ngl');
+  inp.disabled=!on;
+  inp.style.opacity=on?'1':'0.35';
+}
+function toggleFit(){
+  const on=document.getElementById('fitEnabled').checked;
+  document.getElementById('fitGroup').classList.toggle('group-disabled',!on);
+}
 function onModeChange(){const m=document.getElementById('serverMode').value;document.getElementById('serverHost').value=m==='lan'?'0.0.0.0':'127.0.0.1'}
 async function api(u,o={}){try{const r=await fetch(u,{headers:{'Content-Type':'application/json'},...o});if(!r.ok)return{error:`HTTP ${r.status}`};return await r.json()}catch(e){return{error:e.message}}}
 
@@ -82,7 +104,8 @@ function cfgFromUI(){
     mmproj_path:document.getElementById('mmprojPath').value,
     basic:{
       ctx_size:+document.getElementById('ctxSize').value,
-      ngl:+document.getElementById('ngl').value,
+      ngl_enabled:document.getElementById('nglEnabled').checked,
+      ngl:document.getElementById('nglEnabled').checked?+document.getElementById('ngl').value:0,
       threads:+document.getElementById('threads').value,
       parallel:+document.getElementById('parallel').value,
       mmap:document.getElementById('mmap').checked,
@@ -93,7 +116,8 @@ function cfgFromUI(){
       enable_thinking:document.getElementById('enableThinking').checked,
       kv_offload:document.getElementById('kvOffload').checked,
       flash_attn:document.getElementById('flashAttn').checked,
-      fit_target:+document.getElementById('fitTarget').value,
+      fit_enabled:document.getElementById('fitEnabled').checked,
+      fit_target:document.getElementById('fitEnabled').checked?+document.getElementById('fitTarget').value:0,
       kv_unified:document.getElementById('kvUnified').checked,
       batch_size:+document.getElementById('batchSize').value,
       ubatch_size:+document.getElementById('ubatchSize').value,
@@ -132,7 +156,12 @@ function uiFromCfg(c){
   document.getElementById('mmprojPath').value=c.mmproj_path||'';
   const b=c.basic||{};
   document.getElementById('ctxSize').value=b.ctx_size??4096;
-  document.getElementById('ngl').value=b.ngl??99;
+  // NGL toggle: default ON if value > 0
+  const nglVal=b.ngl??99;
+  const nglOn=b.ngl_enabled!==undefined?b.ngl_enabled:(nglVal>0);
+  document.getElementById('nglEnabled').checked=nglOn;
+  document.getElementById('ngl').value=nglVal;
+  toggleNgl();
   document.getElementById('threads').value=b.threads??8;
   document.getElementById('parallel').value=b.parallel??1;
   document.getElementById('mmap').checked=b.mmap??true;
@@ -143,7 +172,12 @@ function uiFromCfg(c){
   document.getElementById('enableThinking').checked=b.enable_thinking??false;
   document.getElementById('kvOffload').checked=b.kv_offload??true;
   document.getElementById('flashAttn').checked=b.flash_attn??false;
-  document.getElementById('fitTarget').value=b.fit_target??0;
+  // Fit toggle: default OFF
+  const fitVal=b.fit_target??0;
+  const fitOn=b.fit_enabled!==undefined?b.fit_enabled:(fitVal>0);
+  document.getElementById('fitEnabled').checked=fitOn;
+  document.getElementById('fitTarget').value=fitVal>0?fitVal:256;
+  toggleFit();
   document.getElementById('kvUnified').checked=b.kv_unified??true;
   document.getElementById('batchSize').value=b.batch_size??2048;
   document.getElementById('ubatchSize').value=b.ubatch_size??512;
@@ -500,7 +534,8 @@ function buildParamPreview(){
   add('-m',c.model_path||'<model_path>','模型文件');
   if(c.mmproj_path) add('--mmproj',c.mmproj_path,'mmproj 多模态');
   add('-c',c.basic.ctx_size,'上下文长度');
-  add('-ngl',c.basic.ngl,'GPU 卸载层数');
+  if(c.basic.ngl_enabled!==false) add('-ngl',c.basic.ngl,'GPU 卸载层数');
+  else add('# -ngl','0','# GPU卸载已禁用');
   add('-t',c.basic.threads,'CPU 线程数');
   add('-np',c.basic.parallel,'并行数');
   add(c.basic.mmap?'--mmap':'--mmap=0','','内存映射');
@@ -511,7 +546,7 @@ function buildParamPreview(){
   if(c.basic.enable_thinking) add('--reasoning','on','思维链');
   if(!c.basic.kv_offload) add('--no-kv-offload','','KV缓存不卸载到GPU');
   if(c.basic.flash_attn) add('--flash-attn','on','Flash Attention');
-  if(c.basic.fit_target>0) add('--fit-target',c.basic.fit_target,'GPU显存余量限制(MiB)');
+  if(c.basic.fit_enabled) add('--fit-target',c.basic.fit_target,'GPU显存余量限制(MiB)');
   if(!c.basic.kv_unified) add('--no-kv-unified','','禁用Unified KV缓存');
   if(c.basic.batch_size!==2048) add('-b',c.basic.batch_size,'逻辑批大小');
   if(c.basic.ubatch_size!==512) add('-ub',c.basic.ubatch_size,'物理批大小');
@@ -646,12 +681,18 @@ async function stopOptimize(){
 // ── Init ──
 // Set theme icon on load
 (function(){
-  const isDark=document.documentElement.getAttribute('data-theme')==='dark';
+  const saved=localStorage.getItem('theme')||'light';
+  const html=document.documentElement;
+  if(saved==='dark'||saved==='apple'){
+    html.setAttribute('data-theme',saved);
+  }
   const btn=document.getElementById('themeBtn');
   if(btn){
-    const iconName=isDark?'sun':'moon';
-    btn.innerHTML=`<i data-lucide="${iconName}"></i>`;
-    btn.setAttribute('aria-checked',isDark?'true':'false');
+    const icons={'light':'moon','dark':'sun','apple':'palette'};
+    const titles={'light':'浅色模式','dark':'深色模式','apple':'Apple 风格'};
+    btn.innerHTML=`<i data-lucide="${icons[saved]}"></i>`;
+    btn.title=titles[saved];
+    btn.setAttribute('aria-checked',saved==='light'?'false':'true');
   }
 })();
 loadInitCfg();

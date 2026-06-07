@@ -6,6 +6,7 @@ from typing import Optional
 
 class BasicSettings(BaseModel):
     ctx_size: int = 4096
+    ngl_enabled: bool = True  # toggle for -ngl (GPU layer offload)
     ngl: int = 99
     threads: int = 8
     parallel: int = 1
@@ -17,6 +18,7 @@ class BasicSettings(BaseModel):
     enable_thinking: bool = False
     kv_offload: bool = True  # KV cache offload to GPU (--no-kv-offload to disable)
     flash_attn: bool = False  # Flash Attention
+    fit_enabled: bool = False  # toggle for --fit-target
     fit_target: int = 0  # --fit-target: fit model to GPU with margin in MiB (0=off)
     kv_unified: bool = True  # unified KV buffer shared across all sequences (--kv-unified)
     batch_size: int = 2048  # logical max batch size (-b)
