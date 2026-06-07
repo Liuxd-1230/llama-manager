@@ -48,6 +48,172 @@
   --glass-border: rgba(255,255,255,0.08);
 }
 
+/* ═══ Apple-Inspired Theme (DESIGN.md) ═══ */
+[data-theme="apple"] {
+  --bg: #f5f5f7; --bg-card: #ffffff; --bg-sidebar: #fafafc;
+  --bg-input: #f5f5f7; --bg-hover: #ececee; --bg-code: #f5f5f7;
+  --fg: #1d1d1f; --fg-secondary: #333333; --fg-muted: #7a7a7a;
+  --border: #e0e0e0; --border-subtle: rgba(0,0,0,0.04);
+  --accent: #0066cc; --accent-hover: #005bb5; --accent-soft: rgba(0,102,204,0.08);
+  --blue: #0066cc; --blue-soft: rgba(0,102,204,0.08);
+  --green: #30d158; --green-soft: rgba(48,209,88,0.1);
+  --red: #ff3b30; --red-soft: rgba(255,59,48,0.1);
+  --yellow: #ff9f0a; --yellow-soft: rgba(255,159,10,0.1);
+  --radius: 18px; --radius-sm: 12px; --radius-xs: 8px; --radius-pill: 9999px;
+  --shadow-sm: 0 0.5px 1px rgba(0,0,0,0.04);
+  --shadow: 0 0.5px 2px rgba(0,0,0,0.06);
+  --shadow-lg: 0 2px 12px rgba(0,0,0,0.08);
+  --shadow-ring: 0 0 0 1px rgba(0,0,0,0.06);
+  --shadow-inset: none;
+  --font: 'SF Pro Text', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'SF Mono', 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --log-bg: #1d1d1f; --log-fg: #cccccc; --log-border: #333333;
+  --transition: .2s ease;
+  --glass: rgba(250,250,252,0.8);
+  --glass-border: rgba(0,0,0,0.06);
+}
+[data-theme="apple"][data-theme-dark="true"] {
+  --bg: #000000; --bg-card: #1c1c1e; --bg-sidebar: #111111;
+  --bg-input: #2a2a2c; --bg-hover: #333335; --bg-code: #1c1c1e;
+  --fg: #f5f5f7; --fg-secondary: #cccccc; --fg-muted: #7a7a7a;
+  --border: #333335; --border-subtle: rgba(255,255,255,0.08);
+  --accent: #2997ff; --accent-hover: #4dabff; --accent-soft: rgba(41,151,255,0.12);
+  --blue: #2997ff; --blue-soft: rgba(41,151,255,0.12);
+  --shadow-sm: none; --shadow: none; --shadow-lg: 0 4px 20px rgba(0,0,0,0.4);
+  --shadow-ring: 0 0 0 1px rgba(255,255,255,0.06);
+  --shadow-inset: none;
+  --log-bg: #000000; --log-fg: #999999; --log-border: #2a2a2c;
+  --glass: rgba(17,17,17,0.8);
+  --glass-border: rgba(255,255,255,0.06);
+}
+
+/* ── Apple Theme: pill-shaped inputs ── */
+[data-theme="apple"] input[type="text"],
+[data-theme="apple"] input[type="number"],
+[data-theme="apple"] select {
+  border-radius: 980px; padding: 7px 14px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  box-shadow: none; font-size: 14px; letter-spacing: -0.01em;
+}
+[data-theme="apple"] input:focus,
+[data-theme="apple"] select:focus,
+[data-theme="apple"] textarea:focus {
+  border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+[data-theme="apple"] select { padding-right: 32px }
+[data-theme="apple"] textarea { border-radius: 12px; border: 1px solid var(--border); box-shadow: none }
+
+/* ── Apple Theme: blue pill buttons ── */
+[data-theme="apple"] .btn {
+  border-radius: 980px; border: none; box-shadow: none;
+  font-weight: 400; letter-spacing: -0.01em;
+  padding: 7px 18px;
+}
+[data-theme="apple"] .btn:active { transform: scale(0.97) }
+[data-theme="apple"] .btn-primary {
+  background: var(--accent); color: #ffffff; border: none;
+}
+[data-theme="apple"] .btn-primary:hover { background: var(--accent-hover); opacity: 1 }
+[data-theme="apple"] .btn-secondary {
+  background: var(--bg-card); color: var(--accent);
+  border: 1px solid var(--accent); box-shadow: none;
+}
+[data-theme="apple"] .btn-secondary:hover { background: var(--accent-soft) }
+[data-theme="apple"] .btn-success { border-radius: 980px }
+[data-theme="apple"] .btn-danger { border-radius: 980px }
+
+/* ── Apple Theme: card ── */
+[data-theme="apple"] .card {
+  border-radius: 18px; box-shadow: none;
+  border: 1px solid var(--border-subtle);
+}
+[data-theme="apple"] .card-title { font-weight: 600; letter-spacing: -0.01em }
+[data-theme="apple"] .card-title .icon { color: var(--accent) }
+
+/* ── Apple Theme: header ── */
+[data-theme="apple"] header {
+  background: var(--glass); border-bottom: 1px solid var(--border);
+  backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* ── Apple Theme: nav ── */
+[data-theme="apple"] nav { border-right: 1px solid var(--border); background: var(--bg-sidebar) }
+[data-theme="apple"] nav button { border-radius: 10px; letter-spacing: -0.01em }
+[data-theme="apple"] nav button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600 }
+
+/* ── Apple Theme: status pill ── */
+[data-theme="apple"] .status-pill { border-radius: 980px; letter-spacing: 0 }
+[data-theme="apple"] .st-running { background: var(--green-soft); color: var(--green) }
+[data-theme="apple"] .st-stopped { background: var(--red-soft); color: var(--red) }
+[data-theme="apple"] .st-starting { background: var(--yellow-soft); color: var(--yellow) }
+
+/* ── Apple Theme: toggle switch ── */
+[data-theme="apple"] .toggle .slider { background: #e5e5ea; border-radius: 10px }
+[data-theme="apple"][data-theme-dark="true"] .toggle .slider { background: #39393d }
+[data-theme="apple"] .toggle .slider::before { background: #ffffff }
+[data-theme="apple"] .toggle input:checked+.slider { background: #34c759 }
+
+/* ── Apple Theme: log box ── */
+[data-theme="apple"] .log-box { border-radius: 12px; border: 1px solid var(--log-border) }
+[data-theme="apple"] .param-preview { border-radius: 12px; border: 1px solid var(--log-border) }
+[data-theme="apple"] .code-block { border-radius: 10px }
+
+/* ── Apple Theme: modal ── */
+[data-theme="apple"] .modal { border-radius: 20px; box-shadow: 0 16px 48px rgba(0,0,0,0.12) }
+[data-theme="apple"] .modal-overlay { backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px) }
+
+/* ── Apple Theme: toast ── */
+[data-theme="apple"] .toast { border-radius: 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.12) }
+
+/* ── Apple Theme: scrollbar ── */
+[data-theme="apple"] ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px }
+[data-theme="apple"] ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25) }
+
+/* ── Apple Theme: range slider ── */
+[data-theme="apple"] input[type="range"] { accent-color: var(--accent) }
+[data-theme="apple"] .range-display .range-val { border-radius: 8px }
+
+/* ── Apple Theme: chat bubble ── */
+[data-theme="apple"] .chat-msg { border-radius: 18px }
+[data-theme="apple"] .chat-user { background: var(--accent-soft) }
+[data-theme="apple"] .chat-ai { background: var(--bg-code) }
+
+/* ── Apple Theme: table ── */
+[data-theme="apple"] .data-table th { letter-spacing: 0; font-size: 11px }
+[data-theme="apple"] .data-table td { border-bottom-color: var(--border-subtle) }
+
+/* ── Apple Theme: file-item ── */
+[data-theme="apple"] .file-item { border-radius: 10px }
+[data-theme="apple"] .file-item.selected { background: var(--accent-soft) }
+
+/* ── Apple Theme: breadcrumb ── */
+[data-theme="apple"] .breadcrumb span { color: var(--accent) }
+
+/* ── Apple Theme: config toolbar ── */
+[data-theme="apple"] .config-toolbar { border-radius: 14px; box-shadow: none }
+
+/* ── Theme toggle: cycling button ── */
+.theme-toggle { position: relative; overflow: hidden }
+.theme-toggle .icon { transition: transform 0.2s ease, opacity 0.15s ease }
+
+/* ── NGL / Fit toggle group ── */
+.toggle-group-wrap {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+  padding: 8px 12px; background: var(--bg-input);
+  border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);
+  transition: all var(--transition);
+}
+[data-theme="dark"] .toggle-group-wrap { border-color: var(--border) }
+.toggle-group-wrap .toggle-row { margin: 0 }
+.toggle-group-wrap .toggle-group-content {
+  flex: 1; display: flex; align-items: center; gap: 10px;
+  transition: opacity var(--transition);
+}
+.toggle-group-wrap .toggle-group-content.group-disabled { opacity: 0.35; pointer-events: none }
+.toggle-group-wrap .toggle-group-label { font-size: 13px; font-weight: 600; white-space: nowrap; min-width: 90px }
+.toggle-group-wrap input[type="number"] { width: 80px }
+.toggle-group-wrap .inline-help { margin: 0; font-size: 11px; color: var(--fg-muted) }
+
 /* ── Reset ── */
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:var(--font);background:var(--bg);color:var(--fg);height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:14px;font-weight:500;line-height:1.5;letter-spacing:0.2px;-webkit-font-smoothing:antialiased;transition:background var(--transition),color var(--transition)}

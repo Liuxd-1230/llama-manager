@@ -50,7 +50,10 @@ class ProcessManager:
 
         b = config.basic
         cmd += ["-c", str(b.ctx_size)]
-        cmd += ["-ngl", str(b.ngl)]
+        if b.ngl_enabled:
+            cmd += ["-ngl", str(b.ngl)]
+        else:
+            cmd += ["-ngl", "0"]
         cmd += ["-t", str(b.threads)]
         cmd += ["-np", str(b.parallel)]
 
@@ -81,7 +84,7 @@ class ProcessManager:
             cmd += ["--flash-attn", "on"]
 
         # Fit model to GPU memory with margin
-        if b.fit_target > 0:
+        if b.fit_enabled and b.fit_target > 0:
             cmd += ["--fit-target", str(b.fit_target)]
 
         # Unified KV buffer
