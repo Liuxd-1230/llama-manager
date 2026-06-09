@@ -3,210 +3,260 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>llama.cpp Run Manager</title>
+<title>llama.cpp Manager</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=chat-api-1">
 <script>
-(function(){try{var t=localStorage.getItem('theme')||'light';if(t==='dark'||t==='apple')document.documentElement.setAttribute('data-theme',t)}catch(e){}})();
+(function(){try{var t=localStorage.getItem('theme')||'light';if(!['light','dark'].includes(t))t='light';if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/lucide@0.462.0/dist/umd/lucide.min.js"></script>
 </head>
 <body>
-<header>
-  <div class="logo">
-    <i data-lucide="zap" class="icon icon-lg logo-icon"></i>
-    <span class="logo-text">llama.cpp Manager</span>
+<div class="aurora"></div>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark"><i data-lucide="zap" class="icon icon-lg"></i></span>
+    <div>
+      <div class="logo-text">llama.cpp Manager</div>
+      <div class="logo-subtitle">本地推理控制台</div>
+    </div>
   </div>
   <div class="header-right">
     <span id="listenAddr" class="listen-addr"></span>
     <span id="statusBadge" class="status-pill st-stopped"><i data-lucide="circle-dot" class="icon icon-sm"></i> 已停止</span>
-    <button class="theme-toggle" id="themeBtn" onclick="cycleTheme()" title="切换主题" role="switch" aria-checked="false" aria-label="切换主题风格">
-      <i data-lucide="moon" class="icon"></i>
+    <button class="theme-toggle" id="themeBtn" onclick="cycleTheme()" title="切换主题" role="switch" aria-checked="true" aria-label="切换主题风格">
+      <i data-lucide="sparkles" class="icon"></i>
     </button>
   </div>
 </header>
 
-<div class="main-wrap">
-  <nav id="sidebar">
-    <button class="active" data-page="config"><i data-lucide="settings" class="icon"></i> 配置</button>
-    <button data-page="sampling"><i data-lucide="sliders-horizontal" class="icon"></i> 采样器</button>
-    <button data-page="prompt"><i data-lucide="file-text" class="icon"></i> 提示词</button>
-    <button data-page="server"><i data-lucide="server" class="icon"></i> 服务器</button>
-    <button data-page="optimize"><i data-lucide="flask-conical" class="icon"></i> 自动优化</button>
-    <button data-page="params"><i data-lucide="terminal" class="icon"></i> 参数预览</button>
-    <button data-page="chat"><i data-lucide="message-square" class="icon"></i> 对话</button>
-    <button data-page="webui"><i data-lucide="globe" class="icon"></i> 原生 WebUI</button>
-    <button data-page="update"><i data-lucide="refresh-cw" class="icon"></i> 更新</button>
-    <button data-page="download"><i data-lucide="download" class="icon"></i> 下载</button>
-    <button data-page="logs"><i data-lucide="scroll-text" class="icon"></i> 日志</button>
+<div class="app-shell">
+  <nav id="sidebar" class="glass-panel">
+    <div class="nav-main">
+      <button class="active" data-page="config"><i data-lucide="sliders-horizontal" class="icon"></i><span>配置</span></button>
+      <button data-page="run"><i data-lucide="monitor-play" class="icon"></i><span>运行</span></button>
+      <button data-page="optimize"><i data-lucide="flask-conical" class="icon"></i><span>优化</span></button>
+      <button data-page="maintenance"><i data-lucide="wrench" class="icon"></i><span>维护</span></button>
+      <button data-page="chat"><i data-lucide="message-square" class="icon"></i><span>对话</span></button>
+    </div>
+    <button class="settings-nav" onclick="openProviderSettings()"><i data-lucide="settings" class="icon"></i><span>设置</span></button>
   </nav>
-  <div class="content">
 
-    <!-- ═══ 配置页 ═══ -->
-    <div id="page-config" class="page active">
-      <div class="card">
-        <div class="card-title"><i data-lucide="folder-open" class="icon"></i> 路径配置</div>
-        <div class="form-group">
-          <label>llama.cpp 目录</label>
-          <div class="form-row">
-            <div class="form-group form-group-wide"><input type="text" id="llamaCppDir" placeholder="C:\llama.cpp" onchange="onDirChange()"></div>
-            <button class="btn btn-secondary" onclick="detectServer()"><i data-lucide="search" class="icon icon-sm"></i> 检测</button>
-            <button class="btn btn-secondary" onclick="openFolderPicker('llamaCppDir')"><i data-lucide="folder-open" class="icon icon-sm"></i> 浏览</button>
-          </div>
-          <div class="inline-help" id="serverBinStatus"></div>
+  <main class="content">
+    <section id="page-config" class="page active">
+      <div class="workspace-head">
+        <div>
+          <h1>配置</h1>
+          <p>模型路径、性能参数、采样器和启动命令在这里统一管理。</p>
         </div>
-        <div class="form-group">
-          <label>模型文件</label>
-          <div class="form-row">
-            <div class="form-group form-group-wide"><input type="text" id="modelPath" placeholder="选择模型 .gguf 文件"></div>
-            <button class="btn btn-secondary" onclick="openModelPicker()"><i data-lucide="folder-open" class="icon icon-sm"></i> 浏览</button>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>mmproj 路径 (可选，多模态)</label>
-          <div class="form-row">
-            <div class="form-group form-group-wide"><input type="text" id="mmprojPath" placeholder="mmproj-*.gguf"></div>
-            <button class="btn btn-secondary" onclick="openFileBrowser('mmprojPath')"><i data-lucide="folder-open" class="icon icon-sm"></i> 浏览</button>
-          </div>
+        <div class="config-toolbar glass-panel">
+          <input type="text" id="configName" placeholder="配置名称" value="default">
+          <button class="btn btn-primary" onclick="saveConfig()"><i data-lucide="save" class="icon icon-sm"></i> 保存</button>
+          <span id="configDirtyBadge" class="dirty-badge" style="display:none"><i data-lucide="circle-dot" class="icon icon-sm"></i> 未保存</span>
+          <button class="btn btn-danger" onclick="deleteConfig()"><i data-lucide="trash-2" class="icon icon-sm"></i> 删除</button>
+          <button class="btn btn-secondary btn-sm" onclick="exportConfig()"><i data-lucide="upload" class="icon icon-sm"></i> 导出</button>
+          <button class="btn btn-secondary btn-sm" onclick="importConfig()"><i data-lucide="download" class="icon icon-sm"></i> 导入</button>
+          <select id="configList" onchange="loadSavedConfig()"><option value="">-- 已保存配置 --</option></select>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-title"><i data-lucide="wrench" class="icon"></i> 基础设置</div>
-        <div class="grid-3">
-          <div class="form-group"><label>上下文长度 (-c)</label><input type="number" id="ctxSize" value="4096" min="128" step="128"></div>
-          <div class="form-group">
-            <label>GPU 卸载层数 (-ngl)</label>
-            <div style="display:flex;align-items:center;gap:8px">
-              <label class="toggle"><input type="checkbox" id="nglEnabled" checked onchange="toggleNgl()"><span class="slider"></span></label>
-              <input type="number" id="ngl" value="99" min="0" style="flex:1">
+      <div class="config-layout">
+        <div class="config-main">
+          <div class="card">
+            <div class="card-title"><i data-lucide="folder-open" class="icon"></i> 路径与模型</div>
+            <div class="form-group">
+              <label>llama.cpp 目录</label>
+              <div class="form-row">
+                <div class="form-group form-group-wide"><input type="text" id="llamaCppDir" placeholder="C:\llama.cpp" onchange="onDirChange()"></div>
+                <button class="btn btn-secondary" onclick="detectServer()"><i data-lucide="search" class="icon icon-sm"></i> 检测</button>
+                <button class="btn btn-secondary" onclick="openFolderPicker('llamaCppDir')"><i data-lucide="folder-open" class="icon icon-sm"></i> 浏览</button>
+              </div>
+              <div class="inline-help" id="serverBinStatus"></div>
+            </div>
+            <div class="form-group">
+              <label>模型文件</label>
+              <div class="form-row">
+                <div class="form-group form-group-wide"><input type="text" id="modelPath" placeholder="选择模型 .gguf 文件"></div>
+                <button class="btn btn-secondary" onclick="openModelPicker()"><i data-lucide="folder-open" class="icon icon-sm"></i> 浏览</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>mmproj 路径 (可选，多模态)</label>
+              <div class="form-row">
+                <div class="form-group form-group-wide"><input type="text" id="mmprojPath" placeholder="mmproj-*.gguf"></div>
+                <button class="btn btn-secondary" onclick="openFileBrowser('mmprojPath')"><i data-lucide="folder-open" class="icon icon-sm"></i> 浏览</button>
+              </div>
             </div>
           </div>
-          <div class="form-group"><label>CPU 线程数 (-t)</label><input type="number" id="threads" value="8" min="1"></div>
-          <div class="form-group"><label>并行数 (-np)</label><input type="number" id="parallel" value="1" min="1"></div>
-          <div class="form-group"><label>MoE CPU 卸载 (--n-cpu-moe)</label><input type="number" id="nCpuMoe" value="0" min="0"><div class="inline-help">0 = 关闭，>0 = 卸载到CPU的专家层数</div></div>
-          <div class="form-group"><label>KV 缓存量化 K</label>
-            <select id="kvCacheQuantK"><option value="">默认 (f16)</option><option value="f32">f32</option><option value="f16">f16</option><option value="bf16">bf16</option><option value="q8_0">q8_0</option><option value="q4_0">q4_0</option><option value="q4_1">q4_1</option><option value="iq4_nl">iq4_nl</option><option value="q5_0">q5_0</option><option value="q5_1">q5_1</option></select>
+
+          <div class="card">
+            <div class="card-title"><i data-lucide="gauge" class="icon"></i> 性能参数</div>
+            <div class="grid-3">
+              <div class="form-group"><label>上下文长度 (-c)</label><input type="number" id="ctxSize" value="4096" min="128" step="128"></div>
+              <div class="form-group">
+                <label>GPU 卸载层数 (-ngl)</label>
+                <div class="inline-control">
+                  <label class="toggle"><input type="checkbox" id="nglEnabled" checked onchange="toggleNgl()"><span class="slider"></span></label>
+                  <input type="number" id="ngl" value="99" min="0">
+                </div>
+              </div>
+              <div class="form-group"><label>CPU 线程数 (-t)</label><input type="number" id="threads" value="8" min="1"></div>
+              <div class="form-group"><label>并行数 (-np)</label><input type="number" id="parallel" value="1" min="1"></div>
+              <div class="form-group"><label>MoE CPU 卸载</label><input type="number" id="nCpuMoe" value="0" min="0"><div class="inline-help">0 = 关闭，>0 = 卸载专家层到 CPU</div></div>
+              <div class="form-group"><label>缓存 RAM 上限 (-cram MiB)</label><input type="number" id="cacheRam" value="-1" min="-1" step="100"><div class="inline-help">-1 = 不限制</div></div>
+            </div>
+            <div class="toggle-grid">
+              <div class="toggle-row"><label class="toggle"><input type="checkbox" id="mmap" checked><span class="slider"></span></label><span>内存映射 (--mmap)</span></div>
+              <div class="toggle-row"><label class="toggle"><input type="checkbox" id="mlock"><span class="slider"></span></label><span>锁定内存 (--mlock)</span></div>
+              <div class="toggle-row"><label class="toggle"><input type="checkbox" id="enableThinking"><span class="slider"></span></label><span>思维链 (--reasoning)</span></div>
+              <div class="toggle-row"><label class="toggle"><input type="checkbox" id="kvOffload" checked><span class="slider"></span></label><span>KV 缓存卸载到 GPU</span></div>
+              <div class="toggle-row"><label class="toggle"><input type="checkbox" id="flashAttn"><span class="slider"></span></label><span>Flash Attention</span></div>
+              <div class="toggle-row"><label class="toggle"><input type="checkbox" id="kvUnified" checked><span class="slider"></span></label><span>Unified KV 缓存</span></div>
+              <div class="toggle-row"><label class="toggle"><input type="checkbox" id="contextShift"><span class="slider"></span></label><span>上下文自动切换</span></div>
+              <div class="toggle-row fit-toggle-row">
+                <label class="toggle"><input type="checkbox" id="fitEnabled" onchange="toggleFit()"><span class="slider"></span></label>
+                <span>自动适配 GPU</span>
+              </div>
+            </div>
+            <div class="toggle-group-wrap mt-2">
+              <div class="toggle-group-content group-disabled" id="fitGroup">
+                <input type="number" id="fitTarget" value="256" min="0" step="100">
+                <span class="inline-help">启用 llama.cpp --fit on，并以 MiB 设置 --fit-target 余量；开启后不再手动传 -ngl</span>
+              </div>
+            </div>
           </div>
-          <div class="form-group"><label>KV 缓存量化 V</label>
-            <select id="kvCacheQuantV"><option value="">默认 (f16)</option><option value="f32">f32</option><option value="f16">f16</option><option value="bf16">bf16</option><option value="q8_0">q8_0</option><option value="q4_0">q4_0</option><option value="q4_1">q4_1</option><option value="iq4_nl">iq4_nl</option><option value="q5_0">q5_0</option><option value="q5_1">q5_1</option></select>
+
+          <div class="card">
+            <div class="card-title"><i data-lucide="database" class="icon"></i> KV 与批处理</div>
+            <div class="grid-2">
+              <div class="form-group"><label>KV 缓存量化 K</label>
+                <select id="kvCacheQuantK"><option value="">默认 (f16)</option><option value="f32">f32</option><option value="f16">f16</option><option value="bf16">bf16</option><option value="q8_0">q8_0</option><option value="q4_0">q4_0</option><option value="q4_1">q4_1</option><option value="iq4_nl">iq4_nl</option><option value="q5_0">q5_0</option><option value="q5_1">q5_1</option></select>
+              </div>
+              <div class="form-group"><label>KV 缓存量化 V</label>
+                <select id="kvCacheQuantV"><option value="">默认 (f16)</option><option value="f32">f32</option><option value="f16">f16</option><option value="bf16">bf16</option><option value="q8_0">q8_0</option><option value="q4_0">q4_0</option><option value="q4_1">q4_1</option><option value="iq4_nl">iq4_nl</option><option value="q5_0">q5_0</option><option value="q5_1">q5_1</option></select>
+              </div>
+              <div class="form-group"><label>逻辑批大小 (-b)</label><input type="number" id="batchSize" value="2048" min="32" step="32"></div>
+              <div class="form-group"><label>物理批大小 (-ub)</label><input type="number" id="ubatchSize" value="512" min="32" step="32"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><i data-lucide="sliders-horizontal" class="icon"></i> 采样器</div>
+            <div class="grid-3">
+              <div class="form-group"><label>温度</label><div class="range-display"><input type="range" id="tempRange" min="0" max="2" step="0.05" value="0.7" oninput="syncR('temp')"><input type="number" id="tempVal" value="0.7" min="0" max="2" step="0.05" class="range-input" oninput="syncV('temp')"></div></div>
+              <div class="form-group"><label>Top-K</label><div class="range-display"><input type="range" id="topkRange" min="1" max="200" step="1" value="40" oninput="syncR('topk')"><input type="number" id="topkVal" value="40" min="1" max="200" class="range-input" oninput="syncV('topk')"></div></div>
+              <div class="form-group"><label>Top-P</label><div class="range-display"><input type="range" id="toppRange" min="0" max="1" step="0.01" value="0.95" oninput="syncR('topp')"><input type="number" id="toppVal" value="0.95" min="0" max="1" step="0.01" class="range-input" oninput="syncV('topp')"></div></div>
+            </div>
+            <div class="grid-3">
+              <div>
+                <div class="toggle-row"><label class="toggle"><input type="checkbox" id="minpEnabled" onchange="toggleSamp('minp')"><span class="slider"></span></label><span>Min-P</span></div>
+                <div id="minpGroup" class="group-disabled"><div class="range-display"><input type="range" id="minpRange" min="0" max="1" step="0.01" value="0.05" oninput="syncR('minp')"><input type="number" id="minpVal" value="0.05" min="0" max="1" step="0.01" class="range-input" oninput="syncV('minp')"></div></div>
+              </div>
+              <div>
+                <div class="toggle-row"><label class="toggle"><input type="checkbox" id="repeatEnabled" onchange="toggleSamp('repeat')"><span class="slider"></span></label><span>重复惩罚</span></div>
+                <div id="repeatGroup" class="group-disabled"><div class="range-display"><input type="range" id="repeatRange" min="1" max="2" step="0.05" value="1.1" oninput="syncR('repeat')"><input type="number" id="repeatVal" value="1.1" min="1" max="2" step="0.05" class="range-input" oninput="syncV('repeat')"></div></div>
+              </div>
+              <div>
+                <div class="toggle-row"><label class="toggle"><input type="checkbox" id="presenceEnabled" onchange="toggleSamp('presence')"><span class="slider"></span></label><span>存在惩罚</span></div>
+                <div id="presenceGroup" class="group-disabled"><div class="range-display"><input type="range" id="presenceRange" min="-2" max="2" step="0.1" value="0" oninput="syncR('presence')"><input type="number" id="presenceVal" value="0" min="-2" max="2" step="0.1" class="range-input" oninput="syncV('presence')"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><i data-lucide="rocket" class="icon"></i> MTP 投机解码</div>
+            <div class="toggle-row"><label class="toggle"><input type="checkbox" id="mtpEnabled" onchange="toggleMTP()"><span class="slider"></span></label><span>启用 MTP</span></div>
+            <div id="mtpGroup" class="group-disabled">
+              <div class="grid-3">
+                <div class="form-group"><label>投机类型</label><select id="mtpSpecType"><option value="draft-mtp">draft-mtp</option></select></div>
+                <div class="form-group"><label>最大草稿 token 数</label><input type="number" id="mtpDraftNMax" value="3" min="1" max="5"></div>
+                <div class="form-group"><label>最小草稿 token 数</label><input type="number" id="mtpDraftNMin" value="0" min="0" max="5"></div>
+                <div class="form-group"><label>草稿置信阈值</label><input type="number" id="mtpPMin" value="0.0" min="0" max="1" step="0.05"></div>
+                <div class="form-group"><label>分裂概率阈值</label><input type="number" id="mtpPSplit" value="0.10" min="0" max="1" step="0.05"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><i data-lucide="file-text" class="icon"></i> 提示词与额外参数</div>
+            <div class="grid-2">
+              <div class="form-group"><label>系统提示词</label><textarea id="systemPrompt" rows="8" placeholder="输入系统提示词..."></textarea></div>
+              <div class="form-group"><label>额外参数</label><textarea id="extraParams" rows="8" placeholder="每行一个额外参数，如: --flash-attn"></textarea><div class="inline-help">高级用户：直接添加 llama-server 命令行参数</div></div>
+            </div>
           </div>
         </div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="mmap" checked><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">内存映射 (--mmap)</span></div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="mlock"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">锁定内存 (--mlock)</span></div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="enableThinking"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">思维链 (--reasoning)</span></div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="kvOffload" checked><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">KV 缓存卸载到 GPU</span></div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="flashAttn"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">Flash Attention</span></div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="kvUnified" checked><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">Unified KV 缓存</span></div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="contextShift"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">上下文自动切换</span></div>
-        <div class="toggle-group-wrap mt-2">
-          <label class="toggle"><input type="checkbox" id="fitEnabled" onchange="toggleFit()"><span class="slider"></span></label>
-          <span class="toggle-group-label">Fit GPU (--fit-target)</span>
-          <div class="toggle-group-content group-disabled" id="fitGroup">
-            <input type="number" id="fitTarget" value="256" min="0" step="100">
-            <span class="inline-help">MiB，限制模型卸载到 GPU 的显存余量</span>
+
+        <aside class="config-side">
+          <div class="card sticky-card">
+            <div class="card-title"><i data-lucide="terminal" class="icon"></i> 命令预览</div>
+            <div class="control-row">
+              <button class="btn btn-secondary btn-sm" onclick="copyParams()"><i data-lucide="copy" class="icon icon-sm"></i> 复制</button>
+              <button class="btn btn-secondary btn-sm" onclick="buildParamPreview()"><i data-lucide="refresh-cw" class="icon icon-sm"></i> 刷新</button>
+            </div>
+            <div class="param-preview" id="paramPreview"></div>
+            <div class="code-block mt-2"><code id="cmdPreview"></code></div>
           </div>
-        </div>
-        <div class="grid-2 mt-2">
-          <div class="form-group"><label>逻辑批大小 (-b)</label><input type="number" id="batchSize" value="2048" min="32" step="32"><div class="inline-help">默认 2048，调小可跑更大上下文</div></div>
-          <div class="form-group"><label>物理批大小 (-ub)</label><input type="number" id="ubatchSize" value="512" min="32" step="32"><div class="inline-help">默认 512</div></div>
-        </div>
-        <div class="form-group"><label>缓存 RAM 上限 (-cram MiB)</label><input type="number" id="cacheRam" value="-1" min="-1" step="100"><div class="inline-help">-1 = 不限制，0 = 禁用，>0 = 限制最大缓存</div></div>
-      </div>
-
-      <div class="card">
-        <div class="card-title"><i data-lucide="rocket" class="icon"></i> MTP 投机解码</div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="mtpEnabled" onchange="toggleMTP()"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">启用 MTP (Multi-Token Prediction)</span></div>
-        <div id="mtpGroup" class="group-disabled">
-          <div class="inline-help mb-2">适用于 Qwen3.6 等支持 MTP 的模型，可实现 2x+ 推理加速</div>
-          <div class="grid-2">
-            <div class="form-group"><label>投机类型</label><select id="mtpSpecType"><option value="draft-mtp">draft-mtp</option></select></div>
-            <div class="form-group"><label>最大草稿 token 数</label><input type="number" id="mtpDraftNMax" value="3" min="1" max="5"><div class="inline-help">通常 2-3，越大加速越明显</div></div>
-            <div class="form-group"><label>最小草稿 token 数</label><input type="number" id="mtpDraftNMin" value="0" min="0" max="5"><div class="inline-help">0 = 自动</div></div>
+          <div class="card">
+            <div class="card-title"><i data-lucide="globe" class="icon"></i> 服务器监听</div>
+            <div class="grid-1">
+              <div class="form-group"><label>监听模式</label><select id="serverMode" onchange="onModeChange()"><option value="local">本地 (127.0.0.1)</option><option value="lan">局域网 (0.0.0.0)</option></select></div>
+              <div class="form-group"><label>监听地址</label><input type="text" id="serverHost" value="127.0.0.1"></div>
+              <div class="form-group"><label>端口</label><input type="number" id="serverPort" value="8080" min="1" max="65535"></div>
+            </div>
           </div>
-          <div class="grid-2">
-            <div class="form-group"><label>草稿置信阈值 (p_min)</label><input type="number" id="mtpPMin" value="0.0" min="0" max="1" step="0.05"><div class="inline-help">0.0 = 收集所有草稿（默认，最快）</div></div>
-            <div class="form-group"><label>分裂概率阈值 (p_split)</label><input type="number" id="mtpPSplit" value="0.10" min="0" max="1" step="0.05"><div class="inline-help">默认 0.10</div></div>
-          </div>
-        </div>
+        </aside>
       </div>
+    </section>
 
-      <div class="card">
-        <div class="card-title"><i data-lucide="globe" class="icon"></i> 服务器模式</div>
-        <div class="grid-3">
-          <div class="form-group"><label>监听模式</label><select id="serverMode" onchange="onModeChange()"><option value="local">本地 (127.0.0.1)</option><option value="lan">局域网 (0.0.0.0)</option></select></div>
-          <div class="form-group"><label>监听地址</label><input type="text" id="serverHost" value="127.0.0.1"></div>
-          <div class="form-group"><label>端口</label><input type="number" id="serverPort" value="8080" min="1" max="65535"></div>
+    <section id="page-run" class="page">
+      <div class="workspace-head">
+        <div>
+          <h1>运行</h1>
+          <p>启动 llama-server、查看日志，并打开原生 WebUI。</p>
         </div>
-      </div>
-
-      <div class="config-toolbar">
-        <input type="text" id="configName" placeholder="配置名称" value="default">
-        <button class="btn btn-primary" onclick="saveConfig()"><i data-lucide="save" class="icon icon-sm"></i> 保存</button>
-        <span id="configDirtyBadge" class="dirty-badge" style="display:none"><i data-lucide="circle-dot" class="icon icon-sm"></i> 未保存</span>
-        <button class="btn btn-danger btn-sm" onclick="deleteConfig()"><i data-lucide="trash-2" class="icon icon-sm"></i> 删除</button>
-        <button class="btn btn-secondary btn-sm" onclick="exportConfig()"><i data-lucide="upload" class="icon icon-sm"></i> 导出</button>
-        <button class="btn btn-secondary btn-sm" onclick="importConfig()"><i data-lucide="download" class="icon icon-sm"></i> 导入</button>
-        <select id="configList" onchange="loadSavedConfig()" ><option value="">-- 已保存配置 --</option></select>
-      </div>
-    </div>
-
-    <!-- ═══ 采样器页 ═══ -->
-    <div id="page-sampling" class="page">
-      <div class="card">
-        <div class="card-title"><i data-lucide="sliders-horizontal" class="icon"></i> 采样器设置</div>
-        <div class="form-group"><label>温度 (temperature)</label>
-          <div class="range-display"><input type="range" id="tempRange" min="0" max="2" step="0.05" value="0.7" oninput="syncR('temp')"><input type="number" id="tempVal" value="0.7" min="0" max="2" step="0.05" class="range-input" oninput="syncV('temp')"></div>
-        </div>
-        <div class="form-group"><label>Top-K</label>
-          <div class="range-display"><input type="range" id="topkRange" min="1" max="200" step="1" value="40" oninput="syncR('topk')"><input type="number" id="topkVal" value="40" min="1" max="200" class="range-input" oninput="syncV('topk')"></div>
-        </div>
-        <div class="form-group"><label>Top-P</label>
-          <div class="range-display"><input type="range" id="toppRange" min="0" max="1" step="0.01" value="0.95" oninput="syncR('topp')"><input type="number" id="toppVal" value="0.95" min="0" max="1" step="0.01" class="range-input" oninput="syncV('topp')"></div>
-        </div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="minpEnabled" onchange="toggleSamp('minp')"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">Min-P</span></div>
-        <div id="minpGroup" class="group-disabled"><div class="form-group"><div class="range-display"><input type="range" id="minpRange" min="0" max="1" step="0.01" value="0.05" oninput="syncR('minp')"><input type="number" id="minpVal" value="0.05" min="0" max="1" step="0.01" class="range-input" oninput="syncV('minp')"></div></div></div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="repeatEnabled" onchange="toggleSamp('repeat')"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">重复惩罚 (repeat penalty)</span></div>
-        <div id="repeatGroup" class="group-disabled"><div class="form-group"><div class="range-display"><input type="range" id="repeatRange" min="1" max="2" step="0.05" value="1.1" oninput="syncR('repeat')"><input type="number" id="repeatVal" value="1.1" min="1" max="2" step="0.05" class="range-input" oninput="syncV('repeat')"></div></div></div>
-        <div class="toggle-row"><label class="toggle"><input type="checkbox" id="presenceEnabled" onchange="toggleSamp('presence')"><span class="slider"></span></label><span onclick="this.previousElementSibling.querySelector('input').click()">存在惩罚 (presence penalty)</span></div>
-        <div id="presenceGroup" class="group-disabled"><div class="form-group"><div class="range-display"><input type="range" id="presenceRange" min="-2" max="2" step="0.1" value="0" oninput="syncR('presence')"><input type="number" id="presenceVal" value="0" min="-2" max="2" step="0.1" class="range-input" oninput="syncV('presence')"></div></div></div>
-      </div>
-    </div>
-
-    <!-- ═══ 提示词页 ═══ -->
-    <div id="page-prompt" class="page">
-      <div class="card">
-        <div class="card-title"><i data-lucide="file-text" class="icon"></i> 系统提示词</div>
-        <div class="form-group"><textarea id="systemPrompt" rows="8" placeholder="输入系统提示词..."></textarea></div>
-      </div>
-      <div class="card">
-        <div class="card-title"><i data-lucide="settings" class="icon"></i> 额外参数</div>
-        <div class="form-group"><textarea id="extraParams" rows="3" placeholder="每行一个额外参数，如: --flash-attn"></textarea><div class="inline-help">高级用户：直接添加 llama-server 命令行参数</div></div>
-      </div>
-    </div>
-
-    <!-- ═══ 服务器页 ═══ -->
-    <div id="page-server" class="page">
-      <div class="card">
-        <div class="card-title"><i data-lucide="server" class="icon"></i> 服务器控制</div>
-        <div class="control-row">
+        <div class="control-row head-actions">
           <button class="btn btn-success" id="btnStart" onclick="startServer()"><i data-lucide="play" class="icon icon-sm"></i> 启动</button>
           <button class="btn btn-danger" id="btnStop" onclick="stopServer()" disabled><i data-lucide="square" class="icon icon-sm"></i> 停止</button>
           <span id="serverInfo" class="info"></span>
         </div>
-        <div class="log-toolbar">
-          <label><input type="checkbox" id="autoScroll" checked> 自动滚动</label>
-          <button class="btn btn-secondary btn-sm" onclick="clearLogs()"><i data-lucide="trash-2" class="icon icon-sm"></i> 清空</button>
-        </div>
-        <div class="log-box" id="serverLog"></div>
       </div>
-    </div>
+      <div class="run-grid">
+        <div class="card">
+          <div class="card-title"><i data-lucide="scroll-text" class="icon"></i> 实时日志</div>
+          <div class="log-toolbar">
+            <label><input type="checkbox" id="autoScroll" checked> 自动滚动</label>
+            <button class="btn btn-secondary btn-sm" onclick="clearLogs()"><i data-lucide="trash-2" class="icon icon-sm"></i> 清空</button>
+            <button class="btn btn-secondary btn-sm" onclick="downloadLogs()"><i data-lucide="download" class="icon icon-sm"></i> 下载</button>
+          </div>
+          <div class="log-box" id="serverLog"></div>
+          <div id="fullLog" class="hidden-log"></div>
+          <input type="checkbox" id="autoScroll2" checked class="hidden-input">
+        </div>
+        <div class="card">
+          <div class="card-title"><i data-lucide="globe" class="icon"></i> 原生 WebUI</div>
+          <div class="control-row">
+            <button class="btn btn-secondary" onclick="refreshWebUI()"><i data-lucide="refresh-cw" class="icon icon-sm"></i> 刷新</button>
+            <button class="btn btn-secondary" onclick="openWebUI()"><i data-lucide="external-link" class="icon icon-sm"></i> 新窗口打开</button>
+          </div>
+          <iframe id="webuiFrame" class="webui-frame"></iframe>
+        </div>
+      </div>
+    </section>
 
-    <!-- ═══ 自动优化页 ═══ -->
-    <div id="page-optimize" class="page">
+    <section id="page-optimize" class="page">
+      <div class="workspace-head">
+        <div>
+          <h1>优化</h1>
+          <p>使用 Optuna 自动搜索最优 ngl、MoE、上下文与 KV 参数。</p>
+        </div>
+        <div class="control-row head-actions">
+          <button class="btn btn-success" id="btnOptStart" onclick="startOptimize()"><i data-lucide="play" class="icon icon-sm"></i> 开始优化</button>
+          <button class="btn btn-danger" id="btnOptStop" onclick="stopOptimize()" disabled><i data-lucide="square" class="icon icon-sm"></i> 停止</button>
+          <span id="optProgress" class="info"></span>
+        </div>
+      </div>
       <div class="card">
-        <div class="card-title"><i data-lucide="flask-conical" class="icon"></i> 贝叶斯自动优化</div>
-        <div class="inline-help mb-3">使用 Optuna 贝叶斯优化自动搜索最优 llama.cpp 参数组合（ngl × n_cpu_moe × ctx × kv）</div>
+        <div class="card-title"><i data-lucide="flask-conical" class="icon"></i> 搜索空间</div>
         <div class="grid-3">
           <div class="form-group"><label>ngl 最小值</label><input type="number" id="optNglMin" value="0" min="0"></div>
           <div class="form-group"><label>ngl 最大值</label><input type="number" id="optNglMax" value="99" min="0"></div>
@@ -235,128 +285,99 @@
             <label><input type="checkbox" class="opt-kv" value="q4_0"> q4_0</label>
           </div>
         </div>
-        <div class="control-row mt-3">
-          <button class="btn btn-success" id="btnOptStart" onclick="startOptimize()"><i data-lucide="play" class="icon icon-sm"></i> 开始优化</button>
-          <button class="btn btn-danger" id="btnOptStop" onclick="stopOptimize()" disabled><i data-lucide="square" class="icon icon-sm"></i> 停止</button>
-          <span id="optProgress" class="info"></span>
+      </div>
+      <div class="opt-grid">
+        <div class="card">
+          <div class="card-title"><i data-lucide="bar-chart-3" class="icon"></i> 优化结果</div>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr><th>#</th><th>ngl</th><th>n_cpu_moe</th><th>ctx</th><th>kv</th><th>pp</th><th>tg</th><th>状态</th><th></th></tr></thead>
+              <tbody id="optResultBody"><tr><td colspan="9" class="empty-state">暂无结果</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title"><i data-lucide="scroll-text" class="icon"></i> 优化日志</div>
+          <div class="log-box log-sm" id="optimizeLog"></div>
         </div>
       </div>
-      <div class="card">
-        <div class="card-title"><i data-lucide="bar-chart-3" class="icon"></i> 优化结果</div>
-        <div class="table-scroll">
-          <table class="data-table">
-            <thead><tr><th>#</th><th>ngl</th><th>n_cpu_moe</th><th>ctx</th><th>kv</th><th>pp (t/s)</th><th>tg (t/s)</th><th>状态</th><th></th></tr></thead>
-            <tbody id="optResultBody"><tr><td colspan="9" class="empty-state">暂无结果</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-title"><i data-lucide="scroll-text" class="icon"></i> 优化日志</div>
-        <div class="log-box log-sm" id="optimizeLog"></div>
-      </div>
-    </div>
+    </section>
 
-    <!-- ═══ 参数预览页 ═══ -->
-    <div id="page-params" class="page">
-      <div class="card">
-        <div class="card-title"><i data-lucide="terminal" class="icon"></i> 启动参数预览</div>
-        <div class="control-row">
-          <button class="btn btn-secondary btn-sm" onclick="copyParams()"><i data-lucide="copy" class="icon icon-sm"></i> 复制</button>
-          <button class="btn btn-secondary btn-sm" onclick="buildParamPreview()"><i data-lucide="refresh-cw" class="icon icon-sm"></i> 刷新</button>
+    <section id="page-maintenance" class="page">
+      <div class="workspace-head">
+        <div>
+          <h1>维护</h1>
+          <p>下载、更新和编译 llama.cpp。</p>
         </div>
-        <div class="param-preview" id="paramPreview"></div>
       </div>
-      <div class="card">
-        <div class="card-title"><i data-lucide="code-2" class="icon"></i> 完整命令</div>
-        <div class="code-block"><code id="cmdPreview"></code></div>
+      <div class="maintenance-grid">
+        <div class="card">
+          <div class="card-title"><i data-lucide="download" class="icon"></i> 下载 llama.cpp</div>
+          <div class="form-group"><label>目标目录</label><div class="form-row"><div class="form-group form-group-wide"><input type="text" id="downloadDir" placeholder="选择下载目录"></div><button class="btn btn-secondary" onclick="openFolderPicker('downloadDir')"><i data-lucide="folder-open" class="icon icon-sm"></i> 浏览</button></div></div>
+          <div class="control-row">
+            <button class="btn btn-success" id="btnDownload" onclick="startDownload()"><i data-lucide="download" class="icon icon-sm"></i> 下载</button>
+            <button class="btn btn-danger" id="btnDownloadStop" onclick="stopDownload()" disabled><i data-lucide="square" class="icon icon-sm"></i> 停止</button>
+          </div>
+          <div class="log-box log-sm" id="downloadLog"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><i data-lucide="refresh-cw" class="icon"></i> 更新与编译</div>
+          <div class="control-row">
+            <button class="btn btn-secondary" onclick="checkUpdate()"><i data-lucide="search" class="icon icon-sm"></i> 检查更新</button>
+            <button class="btn btn-primary" onclick="pullUpdate()"><i data-lucide="download" class="icon icon-sm"></i> 拉取更新</button>
+            <button class="btn btn-danger" onclick="pullUpdate(true)"><i data-lucide="alert-triangle" class="icon icon-sm"></i> 强制重置</button>
+          </div>
+          <span id="updateInfo" class="info block-info"></span>
+          <div class="form-group mt-3"><label>编译命令</label><input type="text" id="compileCmd" value='cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="89" && cmake --build build --config Release -j12'></div>
+          <div class="control-row">
+            <button class="btn btn-success" id="btnCompile" onclick="startCompile()"><i data-lucide="hammer" class="icon icon-sm"></i> 编译</button>
+            <button class="btn btn-danger" id="btnCompileStop" onclick="stopCompile()" disabled><i data-lucide="square" class="icon icon-sm"></i> 停止</button>
+          </div>
+          <div class="log-box log-sm" id="compileLog"></div>
+        </div>
       </div>
-    </div>
+    </section>
 
-    <!-- ═══ 对话页 ═══ -->
-    <div id="page-chat" class="page">
-      <div class="card card-compact">
+    <section id="page-chat" class="page">
+      <div class="workspace-head">
+        <div>
+          <h1>对话</h1>
+          <p>通过本地 llama-server 或 DeepSeek API 对话，支持思考、网页搜索和文本附件。</p>
+        </div>
+      </div>
+      <div class="card chat-card">
         <div class="chat-toolbar">
+          <select id="chatProvider" onchange="onChatProviderChange()">
+            <option value="local">本地 llama-server</option>
+          </select>
           <select id="chatModel"><option>服务器未启动</option></select>
-          <div class="form-group"><label>温度</label><input type="number" id="chatTemp" value="0.7" min="0" max="2" step="0.1"></div>
-          <div class="form-group max-tokens"><label>最大 tokens</label><input type="number" id="chatMaxTokens" value="2048" min="1" max="32768"></div>
-          <button class="btn btn-secondary btn-sm" onclick="clearChat()"><i data-lucide="trash-2" class="icon icon-sm"></i> 清空</button>
+          <select id="reasoningEffort" title="DeepSeek 思考强度">
+            <option value="high">High</option>
+            <option value="max">Max</option>
+          </select>
+          <label class="tool-toggle" title="仅 DeepSeek 支持；其他模型不会发送思考参数"><input type="checkbox" id="chatThinking"><span><i data-lucide="brain-circuit" class="icon icon-sm"></i> 思考</span></label>
+          <label class="tool-toggle" title="搜索公开网页并把摘要注入上下文"><input type="checkbox" id="chatWebSearch"><span><i data-lucide="search" class="icon icon-sm"></i> Web</span></label>
+          <button class="btn btn-secondary" onclick="attachChatFiles()"><i data-lucide="paperclip" class="icon icon-sm"></i> 文件</button>
+          <button class="btn btn-secondary" onclick="clearChat()"><i data-lucide="trash-2" class="icon icon-sm"></i> 清空</button>
         </div>
+        <div class="chat-attachments" id="chatAttachments"></div>
         <div class="chat-box" id="chatMessages"><div class="chat-empty">启动服务器后开始对话</div></div>
         <div class="chat-input-wrap">
-          <textarea id="chatInput" placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"></textarea>
+          <textarea id="chatInput" placeholder="输入消息...  Enter 发送，Shift+Enter 换行"></textarea>
           <button class="btn btn-primary" id="btnSend" onclick="sendChat()"><i data-lucide="send" class="icon icon-sm"></i> 发送</button>
         </div>
       </div>
-    </div>
-
-    <!-- ═══ 更新页 ═══ -->
-    <div id="page-update" class="page">
-      <div class="card">
-        <div class="card-title"><i data-lucide="refresh-cw" class="icon"></i> llama.cpp 更新</div>
-        <div class="control-row">
-          <button class="btn btn-secondary" onclick="checkUpdate()"><i data-lucide="search" class="icon icon-sm"></i> 检查更新</button>
-          <button class="btn btn-primary" onclick="pullUpdate()"><i data-lucide="download" class="icon icon-sm"></i> 拉取更新</button>
-          <button class="btn btn-danger btn-sm" onclick="pullUpdate(true)"><i data-lucide="alert-triangle" class="icon icon-sm"></i> 强制重置</button>
-          <span id="updateInfo" class="info"></span>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-title"><i data-lucide="hammer" class="icon"></i> 编译</div>
-        <div class="form-group"><label>编译命令</label><input type="text" id="compileCmd" value='cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="89" && cmake --build build --config Release -j12'></div>
-        <div class="control-row">
-          <button class="btn btn-success" id="btnCompile" onclick="startCompile()"><i data-lucide="hammer" class="icon icon-sm"></i> 编译</button>
-          <button class="btn btn-danger" id="btnCompileStop" onclick="stopCompile()" disabled><i data-lucide="square" class="icon icon-sm"></i> 停止</button>
-        </div>
-        <div class="log-box log-sm" id="compileLog"></div>
-      </div>
-    </div>
-
-    <!-- ═══ 下载页 ═══ -->
-    <div id="page-download" class="page">
-      <div class="card">
-        <div class="card-title"><i data-lucide="download" class="icon"></i> 下载 llama.cpp</div>
-        <div class="form-group"><label>目标目录</label><div class="form-row"><div class="form-group form-group-wide"><input type="text" id="downloadDir" placeholder="选择下载目录"></div><button class="btn btn-secondary" onclick="openFolderPicker('downloadDir')"><i data-lucide="folder-open" class="icon icon-sm"></i> 浏览</button></div></div>
-        <div class="control-row">
-          <button class="btn btn-success" id="btnDownload" onclick="startDownload()"><i data-lucide="download" class="icon icon-sm"></i> 下载</button>
-          <button class="btn btn-danger" id="btnDownloadStop" onclick="stopDownload()" disabled><i data-lucide="square" class="icon icon-sm"></i> 停止</button>
-        </div>
-        <div class="log-box log-sm" id="downloadLog"></div>
-      </div>
-    </div>
-
-    <!-- ═══ 日志页 ═══ -->
-    <div id="page-logs" class="page">
-      <div class="card">
-        <div class="card-title"><i data-lucide="scroll-text" class="icon"></i> 完整日志</div>
-        <div class="log-toolbar">
-          <label><input type="checkbox" id="autoScroll2" checked> 自动滚动</label>
-          <button class="btn btn-secondary btn-sm" onclick="clearLogs()"><i data-lucide="trash-2" class="icon icon-sm"></i> 清空</button>
-          <button class="btn btn-secondary btn-sm" onclick="downloadLogs()"><i data-lucide="download" class="icon icon-sm"></i> 下载</button>
-        </div>
-        <div class="log-box" id="fullLog" style="height:calc(100vh - 200px)"></div>
-      </div>
-    </div>
-
-    <!-- ═══ WebUI 页 ═══ -->
-    <div id="page-webui" class="page">
-      <div class="control-row">
-        <button class="btn btn-secondary" onclick="refreshWebUI()"><i data-lucide="refresh-cw" class="icon icon-sm"></i> 刷新</button>
-        <button class="btn btn-secondary" onclick="openWebUI()"><i data-lucide="external-link" class="icon icon-sm"></i> 新窗口打开</button>
-      </div>
-      <iframe id="webuiFrame" style="width:100%;height:calc(100vh - 120px);border:1px solid var(--border-subtle);border-radius:var(--radius)"></iframe>
-    </div>
-
-  </div>
+    </section>
+  </main>
 </div>
 
-<!-- ═══ 文件浏览器弹窗 ═══ -->
 <div class="modal-overlay" id="folderModal">
   <div class="modal">
     <h3 id="folderModalTitle"><i data-lucide="folder-open" class="icon"></i> 浏览文件夹</h3>
     <div class="breadcrumb" id="folderBreadcrumb"></div>
     <div class="control-row">
       <button class="btn btn-secondary btn-sm" onclick="goUpOneLevel()"><i data-lucide="arrow-up" class="icon icon-sm"></i> 上一级</button>
-      <div id="driveList" style="display:none;gap:6px;flex-wrap:wrap"></div>
+      <div id="driveList" class="drive-list"></div>
     </div>
     <div class="form-row mb-2">
       <input type="text" id="folderPathInput" placeholder="输入路径..." class="flex-1">
@@ -371,10 +392,51 @@
   </div>
 </div>
 
-<input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImport(event)">
-<input type="file" id="nativeFolderPicker" webkitdirectory style="display:none" onchange="handleNativeFolder(event)">
-<input type="file" id="nativeFilePicker" accept=".gguf" style="display:none" onchange="handleNativeFile(event)">
+<div class="modal-overlay" id="providerModal">
+  <div class="modal provider-modal">
+    <h3><i data-lucide="settings" class="icon"></i> API 厂商设置</h3>
+    <div class="provider-layout">
+      <div class="provider-list" id="providerList"></div>
+      <div class="provider-form">
+        <input type="hidden" id="providerId" value="deepseek">
+        <div class="grid-2">
+          <div class="form-group"><label>显示名称</label><input type="text" id="providerName" value="DeepSeek"></div>
+          <div class="form-group"><label>接口类型</label>
+            <select id="providerKind" onchange="onProviderKindChange()">
+              <option value="deepseek">DeepSeek</option>
+              <option value="openai_chat">OpenAI Chat Completions</option>
+              <option value="openai_responses">OpenAI Responses</option>
+              <option value="anthropic">Anthropic Messages</option>
+              <option value="openai_compatible">OpenAI-compatible</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group"><label>Base URL</label><input type="text" id="providerBaseUrl" value="https://api.deepseek.com"></div>
+        <div class="form-group"><label>API Key</label><input type="password" id="providerApiKey" placeholder="留空则使用后端环境变量"></div>
+        <div class="grid-2">
+          <div class="form-group"><label>默认模型</label><select id="providerDefaultModel"></select></div>
+          <div class="form-group"><label>启用</label><label class="toggle provider-enabled"><input type="checkbox" id="providerEnabled" checked><span class="slider"></span></label></div>
+        </div>
+        <div class="control-row">
+          <button class="btn btn-primary" onclick="saveProviderSettings()"><i data-lucide="save" class="icon icon-sm"></i> 保存</button>
+          <button class="btn btn-secondary" onclick="fetchProviderModels()"><i data-lucide="refresh-cw" class="icon icon-sm"></i> 拉取模型</button>
+          <button class="btn btn-danger" onclick="deleteProviderSettings()"><i data-lucide="trash-2" class="icon icon-sm"></i> 删除</button>
+          <button class="btn btn-secondary" onclick="newProviderSettings()"><i data-lucide="plus" class="icon icon-sm"></i> 新增</button>
+        </div>
+        <div id="providerInfo" class="inline-help"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeProviderSettings()">关闭</button>
+    </div>
+  </div>
+</div>
 
-<script src="/static/app.js"></script>
+<input type="file" id="importFile" accept=".json" class="hidden-input" onchange="handleImport(event)">
+<input type="file" id="nativeFolderPicker" webkitdirectory class="hidden-input" onchange="handleNativeFolder(event)">
+<input type="file" id="nativeFilePicker" accept=".gguf" class="hidden-input" onchange="handleNativeFile(event)">
+<input type="file" id="chatFileInput" class="hidden-input" multiple onchange="handleChatFiles(event)">
+
+<script src="/static/app.js?v=chat-api-1"></script>
 </body>
 </html>

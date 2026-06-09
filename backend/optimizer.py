@@ -356,27 +356,33 @@ class Optimizer:
             return result["tg"]
 
         try:
-            await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
-            )
-        except Exception as e:
-            self._append(f"❌ 优化中断: {e}")
+            try:
+                await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+                )
+            except Exception as e:
+                self._append(f"❌ 优化中断: {e}")
 
-        # Final summary
-        self._append(f"")
-        self._append(f"━━━ 优化完成 ━━━")
-        if study.best_trial:
-            best = study.best_trial
-            self._append(f"🏆 最优配置:")
-            self._append(f"  ngl = {best.params.get('ngl')}")
-            self._append(f"  n_cpu_moe = {best.params.get('n_cpu_moe')}")
-            self._append(f"  ctx = {best.params.get('ctx')}")
-            self._append(f"  kv = {best.params.get('kv')}")
-            self._append(f"  tg = {best.value:.1f} t/s")
-
-        self._is_running = False
-        self._notify_update()
+            self._append(f"")
+            self._append(f"━━━ 优化完成 ━━━")
+            completed_trials = [
+                t for t in study.trials
+                if t.state.name == "COMPLETE" and t.value is not None
+            ]
+            if completed_trials:
+                best = study.best_trial
+                self._append(f"🏆 最优配置:")
+                self._append(f"  ngl = {best.params.get('ngl')}")
+                self._append(f"  n_cpu_moe = {best.params.get('n_cpu_moe')}")
+                self._append(f"  ctx = {best.params.get('ctx')}")
+                self._append(f"  kv = {best.params.get('kv')}")
+                self._append(f"  tg = {best.value:.1f} t/s")
+            else:
+                self._append("未产生有效试验结果")
+        finally:
+            self._is_running = False
+            self._notify_update()
 
     async def stop(self):
         self._should_stop = True

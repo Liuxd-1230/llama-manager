@@ -50,7 +50,9 @@ class ProcessManager:
 
         b = config.basic
         cmd += ["-c", str(b.ctx_size)]
-        if b.ngl_enabled:
+        if b.fit_enabled:
+            cmd += ["--fit", "on"]
+        elif b.ngl_enabled:
             cmd += ["-ngl", str(b.ngl)]
         else:
             cmd += ["-ngl", "0"]
@@ -83,7 +85,7 @@ class ProcessManager:
         if b.flash_attn:
             cmd += ["--flash-attn", "on"]
 
-        # Fit model to GPU memory with margin
+        # Target margin for llama.cpp auto-fit.
         if b.fit_enabled and b.fit_target > 0:
             cmd += ["--fit-target", str(b.fit_target)]
 
