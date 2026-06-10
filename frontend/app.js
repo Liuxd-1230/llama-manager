@@ -1,6 +1,7 @@
 // ── State ──
 let ws=null, wsCompile=null, wsDownload=null, statusTimer=null, chatHistory=[], chatAttachments=[];
 let chatTurns=[];
+let chatAbortController=null;
 let apiProviders=[], selectedProviderId='deepseek';
 let wsReconnectDelay=3000, wsCompileReconnectDelay=3000, wsDownloadReconnectDelay=3000;
 const WS_MAX_DELAY=30000;
@@ -757,6 +758,23 @@ function appendChatMsg(role,content,reasoning=''){
   box.scrollTop=box.scrollHeight;
   return d;
 }
+function renderAssistantActions(turnIndex,node){
+  const turn=chatTurns[turnIndex];
+  const cand=turn?.candidates?.[turn.activeIndex];
+  if(!turn||!cand||!node)return;
+  const actions=document.createElement('div');
+  actions.className='chat-msg-actions';
+  const count=turn.candidates.length;
+  actions.innerHTML=[
+    `<button class="msg-action" onclick="copyAssistant(${turnIndex})" title="复制"><i data-lucide="copy" class="icon icon-sm"></i>复制</button>`,
+    `<button class="msg-action" onclick="regenerateTurn(${turnIndex})" title="刷新回答"><i data-lucide="refresh-cw" class="icon icon-sm"></i>刷新</button>`,
+    `<button class="msg-action icon-only" onclick="prevCandidate(${turnIndex})" title="上一条回答" ${turn.activeIndex<=0?'disabled':''}><i data-lucide="chevron-left" class="icon icon-sm"></i></button>`,
+    `<span class="candidate-count">候选 ${turn.activeIndex+1}/${count}</span>`,
+    `<button class="msg-action icon-only" onclick="nextCandidate(${turnIndex})" title="下一条回答" ${turn.activeIndex>=count-1?'disabled':''}><i data-lucide="chevron-right" class="icon icon-sm"></i></button>`,
+  ].join('');
+  node.appendChild(actions);
+  try{if(typeof lucide!=='undefined') lucide.createIcons()}catch(e){}
+}
 function attachChatFiles(){document.getElementById('chatFileInput').click()}
 async function handleChatFiles(e){
   const files=Array.from(e.target.files||[]);
@@ -809,12 +827,7 @@ function renderChatTurns(){
     if(cand){
       const node=appendChatMsg('assistant',cand.content||'生成中...',cand.reasoning||'');
       if(cand.toolEvents?.length)updateToolEvents(node,cand.toolEvents);
-      if(turn.candidates.length>1){
-        const meta=document.createElement('div');
-        meta.className='candidate-meta';
-        meta.textContent=`候选 ${turn.activeIndex+1}/${turn.candidates.length}`;
-        node.appendChild(meta);
-      }
+      renderAssistantActions(i,node);
     }
   });
   box.scrollTop=box.scrollHeight;
@@ -825,13 +838,24 @@ function activeChatTurn(){
   }
   return -1;
 }
-function prevCandidate(){
-  const i=activeChatTurn();if(i<0)return;
+function prevCandidate(i=activeChatTurn()){
+  if(i<0)return;
   const t=chatTurns[i];if(t.activeIndex>0){t.activeIndex--;rebuildChatHistory();renderChatTurns();}
 }
-function nextCandidate(){
-  const i=activeChatTurn();if(i<0)return;
+function nextCandidate(i=activeChatTurn()){
+  if(i<0)return;
   const t=chatTurns[i];if(t.activeIndex<t.candidates.length-1){t.activeIndex++;rebuildChatHistory();renderChatTurns();}
+}
+async function copyAssistant(turnIndex){
+  const cand=chatTurns[turnIndex]?.candidates?.[chatTurns[turnIndex].activeIndex];
+  if(!cand)return;
+  try{await navigator.clipboard.writeText(cand.content||'');showToast('已复制回答')}
+  catch(e){showToast('复制失败: '+e.message)}
+}
+async function regenerateTurn(turnIndex){
+  if(chatAbortController)return;
+  if(turnIndex<0||turnIndex>=chatTurns.length)return;
+  await requestAssistant(turnIndex);
 }
 function extractMessageContent(j){
   const msg=j.choices?.[0]?.message||{};
@@ -841,7 +865,24 @@ function extractMessageContent(j){
     toolEvents:j.tool_events||[],
   };
 }
+function setChatGenerating(on){
+  const btn=document.getElementById('btnSend');
+  if(!btn)return;
+  if(on){
+    btn.classList.add('btn-danger');
+    btn.innerHTML='<i data-lucide="square" class="icon icon-sm"></i> 停止';
+  }else{
+    btn.classList.remove('btn-danger');
+    btn.innerHTML='<i data-lucide="send" class="icon icon-sm"></i> 发送';
+    chatAbortController=null;
+  }
+  try{if(typeof lucide!=='undefined') lucide.createIcons()}catch(e){}
+}
+function stopChatGeneration(){
+  if(chatAbortController)chatAbortController.abort();
+}
 async function requestAssistant(turnIndex){
+  if(chatAbortController)return;
   const provider=document.getElementById('chatProvider').value;
   const stream=document.getElementById('chatStream').checked;
   const messages=messagesBeforeTurn(turnIndex);
@@ -860,9 +901,10 @@ async function requestAssistant(turnIndex){
   turn.activeIndex=turn.candidates.length-1;
   renderChatTurns();
   let aiDiv=Array.from(document.querySelectorAll('.chat-ai')).pop();
-  document.getElementById('btnSend').disabled=true;
+  chatAbortController=new AbortController();
+  setChatGenerating(true);
   try{
-    const resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:chatAbortController.signal});
     if(!resp.ok){throw new Error(`HTTP ${resp.status}`)}
     if(!stream){
       const j=await resp.json();
@@ -878,6 +920,7 @@ async function requestAssistant(turnIndex){
     const reader=resp.body.getReader();
     const decoder=new TextDecoder();
     let full='',reasoning='',buffer='';
+    let finished=false;
     while(true){
       const{done,value}=await reader.read();
       if(done)break;
@@ -887,7 +930,7 @@ async function requestAssistant(turnIndex){
       for(const line of lines){
         if(!line.startsWith('data: '))continue;
         const data=line.slice(6).trim();
-        if(data==='[DONE]')continue;
+        if(data==='[DONE]'){finished=true;break}
         try{
           const j=JSON.parse(data);
           if(j.error){throw new Error(j.error)}
@@ -903,23 +946,31 @@ async function requestAssistant(turnIndex){
           candidate.content=full;
           candidate.reasoning=reasoning;
           renderMessageContent(aiDiv,full||'生成中...',reasoning);
+          renderAssistantActions(turnIndex,aiDiv);
           document.getElementById('chatMessages').scrollTop=999999;
         }catch(err){
           if(err instanceof Error&&err.message)throw err;
         }
       }
+      if(finished)break;
     }
     candidate.content=full||'(空回复)';
     candidate.reasoning=reasoning;
     rebuildChatHistory();
     renderChatTurns();
   }catch(e){
-    candidate.content='错误: '+e.message;
+    if(e.name==='AbortError'){
+      candidate.content=(candidate.content||'').trim()||'已停止生成。';
+    }else{
+      candidate.content='错误: '+e.message;
+    }
     rebuildChatHistory();
     renderChatTurns();
+  }finally{
+    setChatGenerating(false);
   }
-  document.getElementById('btnSend').disabled=false;
 }
+function sendOrStopChat(){if(chatAbortController)stopChatGeneration();else sendChat()}
 async function sendChat(){
   const inp=document.getElementById('chatInput');
   const msg=inp.value.trim();
@@ -930,11 +981,6 @@ async function sendChat(){
   chatTurns.push(turn);
   chatAttachments=[];renderChatAttachments();
   await requestAssistant(chatTurns.length-1);
-}
-async function regenerateLastTurn(){
-  const idx=chatTurns.length-1;
-  if(idx<0)return;
-  await requestAssistant(idx);
 }
 function clearChat(){chatHistory=[];chatTurns=[];chatAttachments=[];renderChatAttachments();document.getElementById('chatMessages').innerHTML='<div class="chat-empty">对话已清空</div>'}
 document.addEventListener('DOMContentLoaded',()=>{const ci=document.getElementById('chatInput');if(ci)ci.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}})});

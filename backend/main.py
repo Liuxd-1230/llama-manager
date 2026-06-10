@@ -527,6 +527,42 @@ def _tool_summary(text: str, limit: int = 700) -> str:
     return text if len(text) <= limit else text[:limit].rstrip() + "..."
 
 
+def _merge_tool_call_delta(acc: dict[int, dict], delta_call: dict) -> None:
+    index = int(delta_call.get("index") or 0)
+    call = acc.setdefault(index, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+    if delta_call.get("id"):
+        call["id"] = delta_call.get("id")
+    if delta_call.get("type"):
+        call["type"] = delta_call.get("type")
+    fn = delta_call.get("function") or {}
+    if fn.get("name"):
+        call["function"]["name"] = fn.get("name")
+    if fn.get("arguments"):
+        call["function"]["arguments"] += fn.get("arguments")
+
+
+async def _execute_chat_tool_calls(messages: list[dict], tool_calls: list[dict]) -> list[dict]:
+    events = []
+    messages.append({"role": "assistant", "content": "", "tool_calls": tool_calls})
+    for call in tool_calls:
+        fn = call.get("function", {})
+        try:
+            args = json.loads(fn.get("arguments") or "{}")
+        except Exception:
+            args = {}
+        events.append({"type": "call", "name": fn.get("name") or "", "query": args.get("query") or "", "limit": args.get("limit") or ""})
+        if fn.get("name") != "web_search":
+            result = f"Unsupported tool: {fn.get('name')}"
+        else:
+            try:
+                result = await _run_web_search_tool(args)
+            except Exception as exc:
+                result = f"web_search failed: {type(exc).__name__}: {exc}"
+        events.append({"type": "result", "name": fn.get("name") or "", "summary": _tool_summary(result)})
+        messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": result})
+    return events
+
+
 async def _complete_with_chat_tools(target: str, headers: dict[str, str], payload: dict, max_rounds: int = 3) -> dict:
     import httpx
     tool_payload = dict(payload)
@@ -555,28 +591,8 @@ async def _complete_with_chat_tools(target: str, headers: dict[str, str], payloa
                 last_payload["tool_events"] = tool_events
                 return last_payload
             messages.append(message)
-            for call in tool_calls:
-                fn = call.get("function", {})
-                args = {}
-                try:
-                    args = json.loads(fn.get("arguments") or "{}")
-                except Exception:
-                    args = {}
-                tool_events.append({
-                    "type": "call",
-                    "name": fn.get("name") or "",
-                    "query": args.get("query") or "",
-                    "limit": args.get("limit") or "",
-                })
-                if fn.get("name") != "web_search":
-                    result = f"Unsupported tool: {fn.get('name')}"
-                else:
-                    try:
-                        result = await _run_web_search_tool(args)
-                    except Exception as exc:
-                        result = f"web_search failed: {type(exc).__name__}: {exc}"
-                tool_events.append({"type": "result", "name": fn.get("name") or "", "summary": _tool_summary(result)})
-                messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": result})
+            messages.pop()
+            tool_events.extend(await _execute_chat_tool_calls(messages, tool_calls))
         tool_events.append({"type": "limit", "message": "工具调用达到轮数上限，已请求模型基于现有结果作答。"})
         final_payload = dict(tool_payload)
         final_payload["messages"] = messages
@@ -589,62 +605,69 @@ async def _complete_with_chat_tools(target: str, headers: dict[str, str], payloa
         return final_json
 
 
-async def _prepare_chat_tool_followup(target: str, headers: dict[str, str], payload: dict, max_rounds: int = 3) -> tuple[list[dict], dict]:
+async def _stream_chat_with_tools(target: str, headers: dict[str, str], payload: dict, max_rounds: int = 3):
     import httpx
     tool_payload = dict(payload)
-    tool_payload["stream"] = False
-    tool_events = [{"type": "status", "message": "Web Search 工具已启用，等待模型决定是否调用。"}]
+    tool_payload["stream"] = True
+    messages = [*tool_payload.get("messages", [])]
+    yield _tool_event_chunk({"type": "status", "message": "Web Search 工具已启用，等待模型决定是否调用。"})
     async with httpx.AsyncClient(timeout=300) as client:
-        messages = [*tool_payload.get("messages", [])]
-        forced_once = False
-        for _ in range(max_rounds):
+        for round_index in range(max_rounds):
             request_payload = dict(tool_payload)
             request_payload["messages"] = messages
-            resp = await client.post(target, json=request_payload, headers=headers)
-            resp.raise_for_status()
-            payload_json = resp.json()
-            message = payload_json.get("choices", [{}])[0].get("message", {})
-            tool_calls = message.get("tool_calls") or []
-            if not tool_calls:
-                content = message.get("content") or ""
-                if not forced_once and _looks_like_missed_web_search(content):
-                    tool_events.append({"type": "retry", "message": "模型表示无法联网或不确定，已强制调用 web_search。"})
-                    tool_payload = _force_web_search_tool_choice(tool_payload)
-                    forced_once = True
-                    continue
-                tool_events.append({"type": "skip", "message": "模型本轮未调用 web_search。"})
-                payload_json["tool_events"] = tool_events
-                return tool_events, payload_json
-            messages.append(message)
-            for call in tool_calls:
-                fn = call.get("function", {})
-                try:
-                    args = json.loads(fn.get("arguments") or "{}")
-                except Exception:
-                    args = {}
-                tool_events.append({"type": "call", "name": fn.get("name") or "", "query": args.get("query") or "", "limit": args.get("limit") or ""})
-                if fn.get("name") != "web_search":
-                    result = f"Unsupported tool: {fn.get('name')}"
-                else:
-                    try:
-                        result = await _run_web_search_tool(args)
-                    except Exception as exc:
-                        result = f"web_search failed: {type(exc).__name__}: {exc}"
-                tool_events.append({"type": "result", "name": fn.get("name") or "", "summary": _tool_summary(result)})
-                messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": result})
-            followup = dict(payload)
-            followup["messages"] = messages
-            followup["stream"] = True
-            followup.pop("tools", None)
-            followup.pop("tool_choice", None)
-            return tool_events, followup
-        tool_events.append({"type": "limit", "message": "工具调用达到轮数上限，已请求模型基于现有结果作答。"})
-        followup = dict(payload)
-        followup["messages"] = messages
-        followup["stream"] = True
-        followup.pop("tools", None)
-        followup.pop("tool_choice", None)
-        return tool_events, followup
+            tool_acc: dict[int, dict] = {}
+            finish_reason = None
+            try:
+                async with client.stream("POST", target, json=request_payload, headers=headers) as resp:
+                    if resp.status_code >= 400:
+                        error_text = await resp.aread()
+                        yield "data: " + json.dumps({"error": error_text.decode("utf-8", errors="replace")}) + "\n\n"
+                        return
+                    buffer = ""
+                    async for text in resp.aiter_text():
+                        buffer += text
+                        lines = buffer.split("\n")
+                        buffer = lines.pop()
+                        for line in lines:
+                            if not line.startswith("data: "):
+                                continue
+                            data_text = line[6:].strip()
+                            if not data_text or data_text == "[DONE]":
+                                continue
+                            try:
+                                chunk = json.loads(data_text)
+                            except Exception:
+                                continue
+                            choice = (chunk.get("choices") or [{}])[0]
+                            delta = choice.get("delta") or {}
+                            finish_reason = choice.get("finish_reason") or finish_reason
+                            for delta_call in delta.get("tool_calls") or []:
+                                _merge_tool_call_delta(tool_acc, delta_call)
+                            if delta.get("content") or delta.get("reasoning_content") or delta.get("reasoning") or delta.get("thinking"):
+                                yield "data: " + json.dumps(chunk, ensure_ascii=False) + "\n\n"
+            except Exception as exc:
+                yield "data: " + json.dumps({"error": str(exc)}) + "\n\n"
+                return
+            tool_calls = [tool_acc[idx] for idx in sorted(tool_acc)]
+            if tool_calls or finish_reason == "tool_calls":
+                events = await _execute_chat_tool_calls(messages, tool_calls)
+                for event in events:
+                    yield _tool_event_chunk(event)
+                continue
+            yield "data: [DONE]\n\n"
+            return
+        yield _tool_event_chunk({"type": "limit", "message": "工具调用达到轮数上限，已停止继续搜索并请求最终回答。"})
+        final_payload = dict(payload)
+        final_payload["messages"] = messages
+        final_payload["stream"] = True
+        final_payload.pop("tools", None)
+        final_payload.pop("tool_choice", None)
+        try:
+            async with client.stream("POST", target, json=final_payload, headers=headers) as resp:
+                async for chunk in resp.aiter_bytes():
+                    yield chunk
+        except Exception as exc:
+            yield "data: " + json.dumps({"error": str(exc)}) + "\n\n"
 
 
 async def _complete_with_anthropic_tools(target: str, headers: dict[str, str], payload: dict, max_rounds: int = 3) -> dict:
@@ -1003,31 +1026,7 @@ async def chat_proxy(request: Request):
     if use_web_tool and (not provider_config or provider_config.kind in {"deepseek", "openai_chat", "openai_compatible", "anthropic", "openai_responses"}):
         try:
             if stream and (not provider_config or provider_config.kind in {"deepseek", "openai_chat", "openai_compatible"}):
-                tool_events, followup = await _prepare_chat_tool_followup(target, headers, payload)
-                if followup.get("tool_events") is not None:
-                    message = followup.get("choices", [{}])[0].get("message", {})
-                    events = followup.get("tool_events") or []
-                    return StreamingResponse(
-                        iter([*[_tool_event_chunk(event) for event in events], _openai_chunk(content=message.get("content") or "", reasoning=message.get("reasoning_content") or ""), "data: [DONE]\n\n"]),
-                        media_type="text/event-stream",
-                    )
-
-                async def generate_tool_stream():
-                    for event in tool_events:
-                        yield _tool_event_chunk(event)
-                    try:
-                        async with httpx.AsyncClient(timeout=300) as client:
-                            async with client.stream("POST", target, json=followup, headers=headers) as resp:
-                                if resp.status_code >= 400:
-                                    error_text = await resp.aread()
-                                    yield "data: " + json.dumps({"error": error_text.decode("utf-8", errors="replace")}) + "\n\n"
-                                    return
-                                async for chunk in resp.aiter_bytes():
-                                    yield chunk
-                    except Exception as exc:
-                        yield "data: " + json.dumps({"error": str(exc)}) + "\n\n"
-
-                return StreamingResponse(generate_tool_stream(), media_type="text/event-stream")
+                return StreamingResponse(_stream_chat_with_tools(target, headers, payload), media_type="text/event-stream")
 
             if not provider_config or provider_config.kind in {"deepseek", "openai_chat", "openai_compatible"}:
                 payload = await _complete_with_chat_tools(target, headers, payload)

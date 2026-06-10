@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 import time
 import unittest
@@ -16,8 +17,8 @@ from backend.main import (
     _local_chat_payload,
     _looks_like_missed_web_search,
     _messages_with_web_tool_guidance,
-    _prepare_chat_tool_followup,
     _search_web,
+    _stream_chat_with_tools,
     _normalize_non_stream_response,
     app,
 )
@@ -26,6 +27,10 @@ from backend.process_manager import process_manager
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+async def _collect_async(iterator):
+    return [item async for item in iterator]
 
 
 class SecurityRegressionTests(unittest.TestCase):
@@ -104,14 +109,25 @@ class FrontendRegressionTests(unittest.TestCase):
         self.assertNotIn("chatTemp", index_html)
         self.assertNotIn("chatMaxTokens", index_html)
 
-    def test_chat_toolbar_exposes_streaming_regenerate_and_web_search_tool_controls(self):
+    def test_chat_toolbar_exposes_streaming_and_web_search_tool_controls(self):
         index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
         app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
 
         self.assertIn("chatStream", index_html)
-        self.assertIn("regenerateLastTurn", index_html)
         self.assertIn("chatWebSearch", index_html)
         self.assertIn("web_search_tool", app_js)
+        self.assertIn("sendOrStopChat", index_html)
+
+    def test_assistant_message_actions_live_below_each_answer(self):
+        index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+        app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+
+        self.assertNotIn("regenerateLastTurn()", index_html)
+        self.assertNotIn("function regenerateLastTurn", app_js)
+        self.assertIn("renderAssistantActions", app_js)
+        self.assertIn("copyAssistant", app_js)
+        self.assertIn("regenerateTurn", app_js)
+        self.assertIn("chat-msg-actions", app_js)
         self.assertIn("prevCandidate", app_js)
         self.assertIn("nextCandidate", app_js)
 
@@ -221,30 +237,45 @@ class ChatProxyRegressionTests(unittest.TestCase):
 
         self.assertEqual(normalized["tool_events"][0]["type"], "skip")
 
-    def test_chat_tool_followup_keeps_final_answer_streaming(self):
-        requests = []
+    def test_chat_tool_stream_handles_tool_calls_then_streams_final_answer(self):
+        stream_requests = []
 
-        class FakeResponse:
-            def __init__(self, payload):
-                self._payload = payload
+        class FakeStreamResponse:
+            status_code = 200
 
-            def raise_for_status(self):
-                pass
+            def __init__(self, chunks):
+                self._chunks = chunks
 
-            def json(self):
-                return self._payload
+            async def __aenter__(self):
+                return self
 
-        async def fake_post(_self, _url, json=None, headers=None):
-            requests.append(json)
-            if len(requests) == 1:
-                return FakeResponse({
-                    "choices": [{"message": {"role": "assistant", "tool_calls": [{
-                        "id": "call_1",
-                        "type": "function",
-                        "function": {"name": "web_search", "arguments": "{\"query\":\"today news\"}"},
-                    }]}}],
-                })
-            self.fail("final response should be streamed by caller, not fetched in prepare step")
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def aiter_text(self):
+                for chunk in self._chunks:
+                    yield chunk
+
+            async def aiter_bytes(self):
+                for chunk in self._chunks:
+                    yield chunk.encode("utf-8")
+
+        def sse(payload):
+            return "data: " + json.dumps(payload) + "\n\n"
+
+        def fake_stream(_self, _method, _url, json=None, headers=None):
+            stream_requests.append(json)
+            if len(stream_requests) == 1:
+                return FakeStreamResponse([
+                    sse({"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "call_1", "type": "function", "function": {"name": "web_search", "arguments": "{\"query\":\"today"}}]}}]}),
+                    sse({"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"arguments": " news\"}"}}]}, "finish_reason": "tool_calls"}]}),
+                    "data: [DONE]\n\n",
+                ])
+            return FakeStreamResponse([
+                sse({"choices": [{"delta": {"content": "final "}}]}),
+                sse({"choices": [{"delta": {"content": "answer"}}]}),
+                "data: [DONE]\n\n",
+            ])
 
         payload = {
             "model": "m",
@@ -252,12 +283,15 @@ class ChatProxyRegressionTests(unittest.TestCase):
             "tools": [{"type": "function", "function": {"name": "web_search", "parameters": {"type": "object"}}}],
             "tool_choice": "auto",
         }
-        with patch("httpx.AsyncClient.post", new=fake_post), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="[1] ok")):
-            events, followup = asyncio.run(_prepare_chat_tool_followup("https://example.test", {}, payload, max_rounds=1))
+        with patch("httpx.AsyncClient.stream", new=fake_stream), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="[1] ok")):
+            chunks = asyncio.run(_collect_async(_stream_chat_with_tools("https://example.test", {}, payload, max_rounds=2)))
 
-        self.assertTrue(any(event["type"] == "call" for event in events))
-        self.assertTrue(followup["stream"])
-        self.assertNotIn("tools", followup)
+        joined = "".join(chunks)
+        self.assertIn('"tool_event"', joined)
+        self.assertIn("final ", joined)
+        self.assertIn("answer", joined)
+        self.assertEqual(len(stream_requests), 2)
+        self.assertTrue(stream_requests[1]["stream"])
 
     def test_search_web_falls_back_to_bing_when_duckduckgo_fails(self):
         class FakeResponse:

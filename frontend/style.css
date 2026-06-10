@@ -636,6 +636,33 @@ select option { background: var(--option-bg); color: var(--option-fg) }
   overflow-y: hidden;
 }
 .candidate-meta { margin-top: 8px; color: var(--fg-muted); font-size: 11px; text-align: right }
+.chat-msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+.msg-action {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 8px;
+  color: var(--fg-secondary);
+  background: var(--surface-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  font: 700 11px/1 var(--font);
+  cursor: pointer;
+}
+.msg-action:hover:not(:disabled) { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 36%, var(--border)) }
+.msg-action:disabled { opacity: .38; cursor: default }
+.msg-action.icon-only { width: 28px; padding: 5px }
+.candidate-count { color: var(--fg-muted); font-size: 11px; font-weight: 700 }
 .fold-block {
   margin: 5px 0 8px;
   border: 1px solid var(--border-subtle);

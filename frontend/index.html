@@ -363,16 +363,13 @@
           <label class="tool-toggle" title="把 web_search 作为工具交给模型，由模型自行决定是否调用"><input type="checkbox" id="chatWebSearch"><span><i data-lucide="search" class="icon icon-sm"></i> Web Search</span></label>
           <label class="tool-toggle" title="关闭后会等待完整回复再显示"><input type="checkbox" id="chatStream" checked><span><i data-lucide="radio" class="icon icon-sm"></i> 流式</span></label>
           <button class="btn btn-secondary" onclick="attachChatFiles()"><i data-lucide="paperclip" class="icon icon-sm"></i> 文件</button>
-          <button class="btn btn-secondary" onclick="regenerateLastTurn()"><i data-lucide="rotate-ccw" class="icon icon-sm"></i> 重生成</button>
-          <button class="btn btn-secondary icon-btn" onclick="prevCandidate()" title="上一条候选"><i data-lucide="chevron-left" class="icon icon-sm"></i></button>
-          <button class="btn btn-secondary icon-btn" onclick="nextCandidate()" title="下一条候选"><i data-lucide="chevron-right" class="icon icon-sm"></i></button>
           <button class="btn btn-secondary" onclick="clearChat()"><i data-lucide="trash-2" class="icon icon-sm"></i> 清空</button>
         </div>
         <div class="chat-attachments" id="chatAttachments"></div>
         <div class="chat-box" id="chatMessages"><div class="chat-empty">启动服务器后开始对话</div></div>
         <div class="chat-input-wrap">
           <textarea id="chatInput" placeholder="输入消息...  Enter 发送，Shift+Enter 换行"></textarea>
-          <button class="btn btn-primary" id="btnSend" onclick="sendChat()"><i data-lucide="send" class="icon icon-sm"></i> 发送</button>
+          <button class="btn btn-primary" id="btnSend" onclick="sendOrStopChat()"><i data-lucide="send" class="icon icon-sm"></i> 发送</button>
         </div>
       </div>
     </section>
