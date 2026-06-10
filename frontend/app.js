@@ -653,6 +653,58 @@ function normalizeReasoning(text){
   return {content:content.trim(),reasoning:reasoning.trim()};
 }
 function renderInline(text){return esc(text).replace(/\n/g,'<br>')}
+function renderMath(expr,displayMode){
+  if(typeof katex==='undefined')return esc((displayMode?'$$':'$')+expr+(displayMode?'$$':'$'));
+  try{return katex.renderToString(expr,{throwOnError:false,displayMode})}
+  catch(e){return esc((displayMode?'$$':'$')+expr+(displayMode?'$$':'$'))}
+}
+function renderFallbackMarkdown(text){
+  const lines=esc(text).split('\n');
+  const html=[];
+  let inList=false;
+  const closeList=()=>{if(inList){html.push('</ul>');inList=false}};
+  const inline=s=>s
+    .replace(/`([^`]+?)`/g,'<code>$1</code>')
+    .replace(/\*\*([^*]+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*([^*]+?)\*/g,'<em>$1</em>')
+    .replace(/\[([^\]]+?)\]\((https?:\/\/[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  lines.forEach(line=>{
+    if(/^\s*[-*]\s+/.test(line)){
+      if(!inList){html.push('<ul>');inList=true}
+      html.push(`<li>${inline(line.replace(/^\s*[-*]\s+/,''))}</li>`);
+      return;
+    }
+    closeList();
+    if(!line.trim()){html.push('');return}
+    const heading=line.match(/^(#{1,3})\s+(.+)$/);
+    if(heading){html.push(`<h${heading[1].length}>${inline(heading[2])}</h${heading[1].length}>`);return}
+    html.push(`<p>${inline(line)}</p>`);
+  });
+  closeList();
+  return html.join('');
+}
+function renderMarkdown(text){
+  const source=String(text||'');
+  const math=[];
+  const tokenBase='@@LLAMA_MANAGER_MATH_';
+  const protectedSource=source
+    .replace(/\$\$([\s\S]+?)\$\$/g,(_,expr)=>{
+      const token=`${tokenBase}${math.length}@@`;
+      math.push({expr,display:true});
+      return token;
+    })
+    .replace(/(^|[^\\])\$([^$\n]+?)\$/g,(_,prefix,expr)=>{
+      const token=`${tokenBase}${math.length}@@`;
+      math.push({expr,display:false});
+      return prefix+token;
+    });
+  let html=typeof marked!=='undefined'?marked.parse(protectedSource,{breaks:true,gfm:true}):renderFallbackMarkdown(protectedSource);
+  html=html.replace(/@@LLAMA_MANAGER_MATH_(\d+)@@/g,(_,idx)=>{
+    const item=math[Number(idx)];
+    return item?renderMath(item.expr,item.display):'';
+  });
+  return typeof DOMPurify!=='undefined'?DOMPurify.sanitize(html):html;
+}
 function renderRichText(text){
   const parts=String(text||'').split(/(```[\s\S]*?```)/g);
   return parts.map(part=>{
@@ -663,7 +715,7 @@ function renderRichText(text){
       const code=nl>0?raw.slice(nl+1):raw;
       return `<details class="fold-block code-fold" open><summary><i data-lucide="code-2" class="icon icon-sm"></i>${esc(lang)}</summary><pre><code>${esc(code.trim())}</code></pre></details>`;
     }
-    return renderInline(part);
+    return renderMarkdown(part);
   }).join('');
 }
 function renderMessageContent(node,content,reasoning=''){
@@ -779,7 +831,7 @@ async function requestAssistant(turnIndex){
     stream,
     thinking_enabled:document.getElementById('chatThinking').checked&&provider==='deepseek',
     reasoning_effort:document.getElementById('reasoningEffort').value,
-    search_summary:document.getElementById('chatSearchSummary').checked,
+    web_search_tool:document.getElementById('chatWebSearch').checked,
   };
   const turn=chatTurns[turnIndex];
   const candidate={content:'',reasoning:''};

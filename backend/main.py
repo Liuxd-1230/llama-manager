@@ -251,15 +251,61 @@ def _deepseek_chat_payload(data: dict, messages: list[dict]) -> dict:
     return payload
 
 
+def _web_search_tool_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the public web when current or external information is needed. Return concise source summaries.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query in the user's language."},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 5, "description": "Number of search results."},
+                },
+                "required": ["query"],
+            },
+        },
+    }
+
+
+def _anthropic_web_search_tool_schema() -> dict:
+    fn = _web_search_tool_schema()["function"]
+    return {"name": fn["name"], "description": fn["description"], "input_schema": fn["parameters"]}
+
+
+async def _run_web_search_tool(arguments: dict) -> str:
+    query = str(arguments.get("query", "")).strip()
+    limit = int(arguments.get("limit") or 4)
+    results = await _search_web(query, limit=max(1, min(limit, 5)))
+    if not results:
+        return "No web results found."
+    lines = []
+    for idx, item in enumerate(results, 1):
+        lines.append(f"[{idx}] {item['title']}\nURL: {item['url']}")
+        if item.get("snippet"):
+            lines.append(f"Summary: {item['snippet']}")
+    return "\n\n".join(lines)
+
+
 def _external_chat_request(provider: providers.ProviderConfig, data: dict, messages: list[dict]) -> tuple[str, dict]:
     base = _provider_base_url(provider)
     model = data.get("model") or provider.default_model
+    web_tool = bool(data.get("web_search_tool") or data.get("web_search") is True)
     if provider.kind == "openai_responses":
-        return f"{base}/responses", {
+        payload = {
             "model": model,
             "input": [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in messages],
             "stream": data.get("stream", True),
         }
+        if web_tool:
+            payload["tools"] = [{
+                "type": "function",
+                "name": "web_search",
+                "description": _web_search_tool_schema()["function"]["description"],
+                "parameters": _web_search_tool_schema()["function"]["parameters"],
+            }]
+        return f"{base}/responses", payload
     if provider.kind == "anthropic":
         system = "\n\n".join(m.get("content", "") for m in messages if m.get("role") == "system")
         chat_messages = [
@@ -275,14 +321,24 @@ def _external_chat_request(provider: providers.ProviderConfig, data: dict, messa
         }
         if system:
             payload["system"] = system
+        if web_tool:
+            payload["tools"] = [_anthropic_web_search_tool_schema()]
         return f"{base}/messages", payload
     if provider.kind == "deepseek":
-        return _chat_completions_url(base), _deepseek_chat_payload(data, messages)
-    return _chat_completions_url(base), {
+        payload = _deepseek_chat_payload(data, messages)
+        if web_tool:
+            payload["tools"] = [_web_search_tool_schema()]
+            payload["tool_choice"] = "auto"
+        return _chat_completions_url(base), payload
+    payload = {
         "model": model,
         "messages": messages,
         "stream": data.get("stream", True),
     }
+    if web_tool:
+        payload["tools"] = [_web_search_tool_schema()]
+        payload["tool_choice"] = "auto"
+    return _chat_completions_url(base), payload
 
 
 def _openai_chunk(content: str = "", reasoning: str = "") -> str:
@@ -337,6 +393,118 @@ def _normalize_non_stream_response(provider_kind: str, payload: dict) -> dict:
     if reasoning:
         message["reasoning_content"] = reasoning
     return {"choices": [{"message": message}], "raw": payload}
+
+
+async def _complete_with_chat_tools(target: str, headers: dict[str, str], payload: dict, max_rounds: int = 3) -> dict:
+    import httpx
+    tool_payload = dict(payload)
+    tool_payload["stream"] = False
+    async with httpx.AsyncClient(timeout=300) as client:
+        messages = [*tool_payload.get("messages", [])]
+        last_payload = None
+        for _ in range(max_rounds):
+            request_payload = dict(tool_payload)
+            request_payload["messages"] = messages
+            resp = await client.post(target, json=request_payload, headers=headers)
+            resp.raise_for_status()
+            last_payload = resp.json()
+            message = last_payload.get("choices", [{}])[0].get("message", {})
+            tool_calls = message.get("tool_calls") or []
+            if not tool_calls:
+                return last_payload
+            messages.append(message)
+            for call in tool_calls:
+                fn = call.get("function", {})
+                if fn.get("name") != "web_search":
+                    result = f"Unsupported tool: {fn.get('name')}"
+                else:
+                    try:
+                        args = json.loads(fn.get("arguments") or "{}")
+                        result = await _run_web_search_tool(args)
+                    except Exception as exc:
+                        result = f"web_search failed: {exc}"
+                messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": result})
+        final_payload = dict(tool_payload)
+        final_payload["messages"] = messages
+        final_payload.pop("tools", None)
+        final_payload.pop("tool_choice", None)
+        final = await client.post(target, json=final_payload, headers=headers)
+        final.raise_for_status()
+        return final.json() if last_payload is not None else {}
+
+
+async def _complete_with_anthropic_tools(target: str, headers: dict[str, str], payload: dict, max_rounds: int = 3) -> dict:
+    import httpx
+    tool_payload = dict(payload)
+    tool_payload["stream"] = False
+    async with httpx.AsyncClient(timeout=300) as client:
+        messages = [*tool_payload.get("messages", [])]
+        last_payload = None
+        for _ in range(max_rounds):
+            request_payload = dict(tool_payload)
+            request_payload["messages"] = messages
+            resp = await client.post(target, json=request_payload, headers=headers)
+            resp.raise_for_status()
+            last_payload = resp.json()
+            uses = [part for part in last_payload.get("content", []) if part.get("type") == "tool_use"]
+            if not uses:
+                return last_payload
+            messages.append({"role": "assistant", "content": last_payload.get("content", [])})
+            tool_results = []
+            for use in uses:
+                if use.get("name") != "web_search":
+                    result = f"Unsupported tool: {use.get('name')}"
+                else:
+                    try:
+                        result = await _run_web_search_tool(use.get("input") or {})
+                    except Exception as exc:
+                        result = f"web_search failed: {exc}"
+                tool_results.append({"type": "tool_result", "tool_use_id": use.get("id"), "content": result})
+            messages.append({"role": "user", "content": tool_results})
+        final_payload = dict(tool_payload)
+        final_payload["messages"] = messages
+        final_payload.pop("tools", None)
+        final = await client.post(target, json=final_payload, headers=headers)
+        final.raise_for_status()
+        return final.json() if last_payload is not None else {}
+
+
+async def _complete_with_responses_tools(target: str, headers: dict[str, str], payload: dict, max_rounds: int = 3) -> dict:
+    import httpx
+    tool_payload = dict(payload)
+    tool_payload["stream"] = False
+    async with httpx.AsyncClient(timeout=300) as client:
+        request_payload = tool_payload
+        last_payload = None
+        for _ in range(max_rounds):
+            resp = await client.post(target, json=request_payload, headers=headers)
+            resp.raise_for_status()
+            last_payload = resp.json()
+            calls = [item for item in last_payload.get("output", []) if item.get("type") == "function_call"]
+            if not calls:
+                return last_payload
+            tool_outputs = []
+            for call in calls:
+                if call.get("name") != "web_search":
+                    result = f"Unsupported tool: {call.get('name')}"
+                else:
+                    try:
+                        result = await _run_web_search_tool(json.loads(call.get("arguments") or "{}"))
+                    except Exception as exc:
+                        result = f"web_search failed: {exc}"
+                tool_outputs.append({"type": "function_call_output", "call_id": call.get("call_id"), "output": result})
+            request_payload = {
+                "model": tool_payload.get("model"),
+                "input": tool_outputs,
+                "previous_response_id": last_payload.get("id"),
+                "stream": False,
+                "tools": tool_payload.get("tools", []),
+            }
+        final_payload = dict(request_payload)
+        final_payload.pop("tools", None)
+        final = await client.post(target, json=final_payload, headers=headers)
+        final.raise_for_status()
+        return final.json() if last_payload is not None else {}
 
 
 @app.middleware("http")
@@ -559,7 +727,8 @@ async def chat_proxy(request: Request):
     data = await request.json()
     provider_id = data.get("provider", "local")
     messages = data.get("messages", [])
-    messages = await _messages_with_search_context(messages, bool(data.get("search_summary") or data.get("web_search")))
+    use_web_tool = bool(data.get("web_search_tool") or data.get("web_search") is True)
+    messages = await _messages_with_search_context(messages, bool(data.get("search_summary")))
     stream = bool(data.get("stream", True))
 
     provider_config = None
@@ -584,6 +753,24 @@ async def chat_proxy(request: Request):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     except TypeError as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
+
+    if provider_config and use_web_tool:
+        try:
+            if provider_config.kind in {"deepseek", "openai_chat", "openai_compatible"}:
+                payload = await _complete_with_chat_tools(target, headers, payload)
+            elif provider_config.kind == "anthropic":
+                payload = _normalize_non_stream_response(provider_config.kind, await _complete_with_anthropic_tools(target, headers, payload))
+            elif provider_config.kind == "openai_responses":
+                payload = _normalize_non_stream_response(provider_config.kind, await _complete_with_responses_tools(target, headers, payload))
+        except Exception as exc:
+            return JSONResponse(status_code=400, content={"error": str(exc)})
+        if stream:
+            message = payload.get("choices", [{}])[0].get("message", {})
+            return StreamingResponse(
+                iter([_openai_chunk(content=message.get("content") or "", reasoning=message.get("reasoning_content") or ""), "data: [DONE]\n\n"]),
+                media_type="text/event-stream",
+            )
+        return JSONResponse(content=payload)
 
     if stream:
         async def generate():

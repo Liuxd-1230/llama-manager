@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from backend import config_manager as cfg
 from backend import provider_manager as providers
-from backend.main import _deepseek_chat_payload, _local_chat_payload, _normalize_non_stream_response, app
+from backend.main import _deepseek_chat_payload, _external_chat_request, _local_chat_payload, _normalize_non_stream_response, app
 from backend.models import AppConfig, BasicSettings
 from backend.process_manager import process_manager
 
@@ -94,13 +94,14 @@ class FrontendRegressionTests(unittest.TestCase):
         self.assertNotIn("chatTemp", index_html)
         self.assertNotIn("chatMaxTokens", index_html)
 
-    def test_chat_toolbar_exposes_streaming_regenerate_and_search_summary_controls(self):
+    def test_chat_toolbar_exposes_streaming_regenerate_and_web_search_tool_controls(self):
         index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
         app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
 
         self.assertIn("chatStream", index_html)
         self.assertIn("regenerateLastTurn", index_html)
-        self.assertIn("搜索摘要", index_html)
+        self.assertIn("chatWebSearch", index_html)
+        self.assertIn("web_search_tool", app_js)
         self.assertIn("prevCandidate", app_js)
         self.assertIn("nextCandidate", app_js)
 
@@ -108,6 +109,15 @@ class FrontendRegressionTests(unittest.TestCase):
         style_css = (ROOT / "frontend" / "style.css").read_text(encoding="utf-8")
 
         self.assertRegex(style_css, r"input\[type=\"text\"\].*input\[type=\"password\"\].*select,\s*textarea")
+
+    def test_chat_loads_markdown_and_latex_renderers(self):
+        index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+        app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn("marked", index_html)
+        self.assertIn("katex", index_html)
+        self.assertIn("DOMPurify", index_html)
+        self.assertIn("renderMarkdown", app_js)
 
 
 class ChatProxyRegressionTests(unittest.TestCase):
@@ -152,6 +162,24 @@ class ChatProxyRegressionTests(unittest.TestCase):
 
         self.assertEqual(openai["choices"][0]["message"]["content"], "hello")
         self.assertEqual(anthropic["choices"][0]["message"]["content"], "hi")
+
+    def test_chat_completion_provider_gets_web_search_tool_definition(self):
+        provider = providers.ProviderConfig(
+            id="compat",
+            name="Compat",
+            kind="openai_compatible",
+            base_url="https://example.com/v1",
+            default_model="test-model",
+        )
+
+        _target, payload = _external_chat_request(
+            provider,
+            {"model": "test-model", "web_search": True, "stream": False},
+            [{"role": "user", "content": "need current info"}],
+        )
+
+        self.assertEqual(payload["tool_choice"], "auto")
+        self.assertEqual(payload["tools"][0]["function"]["name"], "web_search")
 
 
 class ProviderConfigRegressionTests(unittest.TestCase):

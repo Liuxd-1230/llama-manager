@@ -610,6 +610,31 @@ select option { background: var(--option-bg); color: var(--option-fg) }
 .chat-input-wrap textarea { flex: 1; resize: none; min-height: 54px }
 .chat-rendered { white-space: normal }
 .chat-rendered.muted { color: var(--fg-muted) }
+.chat-rendered p,
+.chat-rendered ul,
+.chat-rendered ol,
+.chat-rendered blockquote,
+.chat-rendered h1,
+.chat-rendered h2,
+.chat-rendered h3 { margin: 0 0 8px }
+.chat-rendered > :last-child { margin-bottom: 0 }
+.chat-rendered ul,
+.chat-rendered ol { padding-left: 20px }
+.chat-rendered a { color: var(--accent); text-underline-offset: 3px }
+.chat-rendered :not(pre) > code {
+  padding: 2px 5px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--surface-soft);
+  font-family: var(--font-mono);
+  font-size: .92em;
+}
+.chat-rendered .katex-display,
+.chat-rendered .math-block {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
 .candidate-meta { margin-top: 8px; color: var(--fg-muted); font-size: 11px; text-align: right }
 .fold-block {
   margin: 5px 0 8px;
