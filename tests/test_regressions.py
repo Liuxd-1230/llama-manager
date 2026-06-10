@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from backend import config_manager as cfg
 from backend import provider_manager as providers
-from backend.main import _deepseek_chat_payload, _local_chat_payload, app
+from backend.main import _deepseek_chat_payload, _local_chat_payload, _normalize_non_stream_response, app
 from backend.models import AppConfig, BasicSettings
 from backend.process_manager import process_manager
 
@@ -94,6 +94,21 @@ class FrontendRegressionTests(unittest.TestCase):
         self.assertNotIn("chatTemp", index_html)
         self.assertNotIn("chatMaxTokens", index_html)
 
+    def test_chat_toolbar_exposes_streaming_regenerate_and_search_summary_controls(self):
+        index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+        app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn("chatStream", index_html)
+        self.assertIn("regenerateLastTurn", index_html)
+        self.assertIn("搜索摘要", index_html)
+        self.assertIn("prevCandidate", app_js)
+        self.assertIn("nextCandidate", app_js)
+
+    def test_password_inputs_share_liquid_glass_field_styles(self):
+        style_css = (ROOT / "frontend" / "style.css").read_text(encoding="utf-8")
+
+        self.assertRegex(style_css, r"input\[type=\"text\"\].*input\[type=\"password\"\].*select,\s*textarea")
+
 
 class ChatProxyRegressionTests(unittest.TestCase):
     def test_local_chat_payload_uses_saved_sampling_and_omits_reasoning_controls(self):
@@ -126,6 +141,17 @@ class ChatProxyRegressionTests(unittest.TestCase):
 
         self.assertEqual(payload["thinking"], {"type": "enabled"})
         self.assertEqual(payload["reasoning_effort"], "high")
+
+    def test_non_stream_provider_responses_are_normalized_for_frontend(self):
+        openai = _normalize_non_stream_response("openai_responses", {
+            "output": [{"content": [{"type": "output_text", "text": "hello"}]}],
+        })
+        anthropic = _normalize_non_stream_response("anthropic", {
+            "content": [{"type": "text", "text": "hi"}],
+        })
+
+        self.assertEqual(openai["choices"][0]["message"]["content"], "hello")
+        self.assertEqual(anthropic["choices"][0]["message"]["content"], "hi")
 
 
 class ProviderConfigRegressionTests(unittest.TestCase):

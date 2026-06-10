@@ -193,7 +193,7 @@ def _latest_user_text(messages: list[dict]) -> str:
     return ""
 
 
-async def _messages_with_web_context(messages: list[dict], enabled: bool) -> list[dict]:
+async def _messages_with_search_context(messages: list[dict], enabled: bool) -> list[dict]:
     if not enabled:
         return messages
     query = _latest_user_text(messages)
@@ -203,7 +203,7 @@ async def _messages_with_web_context(messages: list[dict], enabled: bool) -> lis
         search_text = f"网页搜索失败：{exc}"
     else:
         if results:
-            lines = ["以下是网页搜索工具返回的公开网页结果，请优先基于这些来源回答，并在相关处引用来源编号。"]
+            lines = ["以下是搜索摘要注入返回的公开网页结果。它不是模型可调用工具；请基于这些来源回答，并在相关处引用来源编号。"]
             for idx, item in enumerate(results, 1):
                 lines.append(f"[{idx}] {item['title']}\nURL: {item['url']}")
                 if item.get("snippet"):
@@ -212,6 +212,10 @@ async def _messages_with_web_context(messages: list[dict], enabled: bool) -> lis
         else:
             search_text = "网页搜索没有返回可用结果。"
     return [{"role": "system", "content": search_text}, *messages]
+
+
+async def _messages_with_web_context(messages: list[dict], enabled: bool) -> list[dict]:
+    return await _messages_with_search_context(messages, enabled)
 
 
 def _local_chat_payload(data: dict, config: AppConfig, messages: list[dict]) -> dict:
@@ -309,6 +313,30 @@ def _normalize_external_sse(provider_kind: str, payload: dict) -> str:
         if delta.get("type") in {"thinking_delta", "signature_delta"}:
             return _openai_chunk(reasoning=delta.get("thinking", "") or delta.get("signature", ""))
     return ""
+
+
+def _normalize_non_stream_response(provider_kind: str, payload: dict) -> dict:
+    if provider_kind in {"deepseek", "openai_chat", "openai_compatible"}:
+        return payload
+    content = ""
+    reasoning = ""
+    if provider_kind == "openai_responses":
+        for item in payload.get("output", []):
+            for part in item.get("content", []):
+                if part.get("type") in {"output_text", "text"}:
+                    content += part.get("text", "")
+                elif "reasoning" in part.get("type", ""):
+                    reasoning += part.get("text", "") or part.get("summary", "")
+    elif provider_kind == "anthropic":
+        for part in payload.get("content", []):
+            if part.get("type") == "text":
+                content += part.get("text", "")
+            elif "thinking" in part.get("type", ""):
+                reasoning += part.get("thinking", "")
+    message = {"role": "assistant", "content": content}
+    if reasoning:
+        message["reasoning_content"] = reasoning
+    return {"choices": [{"message": message}], "raw": payload}
 
 
 @app.middleware("http")
@@ -531,7 +559,7 @@ async def chat_proxy(request: Request):
     data = await request.json()
     provider_id = data.get("provider", "local")
     messages = data.get("messages", [])
-    messages = await _messages_with_web_context(messages, bool(data.get("web_search")))
+    messages = await _messages_with_search_context(messages, bool(data.get("search_summary") or data.get("web_search")))
     stream = bool(data.get("stream", True))
 
     provider_config = None
@@ -596,7 +624,10 @@ async def chat_proxy(request: Request):
     else:
         async with httpx.AsyncClient(timeout=300) as client:
             resp = await client.post(target, content=body, headers=headers)
-            return JSONResponse(content=resp.json(), status_code=resp.status_code)
+            payload = resp.json()
+            if provider_config:
+                payload = _normalize_non_stream_response(provider_config.kind, payload)
+            return JSONResponse(content=payload, status_code=resp.status_code)
 
 
 @app.get("/api/chat/models")

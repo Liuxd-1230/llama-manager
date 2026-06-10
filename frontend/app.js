@@ -1,5 +1,6 @@
 // ── State ──
 let ws=null, wsCompile=null, wsDownload=null, statusTimer=null, chatHistory=[], chatAttachments=[];
+let chatTurns=[];
 let apiProviders=[], selectedProviderId='deepseek';
 let wsReconnectDelay=3000, wsCompileReconnectDelay=3000, wsDownloadReconnectDelay=3000;
 const WS_MAX_DELAY=30000;
@@ -708,30 +709,98 @@ function messageWithAttachments(msg){
   const context=chatAttachments.map(f=>`--- 文件: ${f.name} ---\n${f.content}`).join('\n\n');
   return `${msg}\n\n[用户导入的文件上下文]\n${context}`;
 }
-async function sendChat(){
-  const inp=document.getElementById('chatInput');
-  const msg=inp.value.trim();
-  if(!msg&&!chatAttachments.length)return;
-  inp.value='';
-  const userContent=messageWithAttachments(msg||'请阅读附件内容。');
-  chatHistory.push({role:'user',content:userContent});
-  appendChatMsg('user',msg||'(附件)');
-  chatAttachments=[];renderChatAttachments();
+function rebuildChatHistory(){
+  chatHistory=[];
+  chatTurns.forEach(turn=>{
+    chatHistory.push({role:'user',content:turn.user.content});
+    const active=turn.candidates[turn.activeIndex];
+    if(active)chatHistory.push({role:'assistant',content:active.content});
+  });
+  return chatHistory;
+}
+function messagesBeforeTurn(turnIndex){
+  const messages=[];
+  chatTurns.slice(0,turnIndex).forEach(turn=>{
+    messages.push({role:'user',content:turn.user.content});
+    const active=turn.candidates[turn.activeIndex];
+    if(active)messages.push({role:'assistant',content:active.content});
+  });
+  messages.push({role:'user',content:chatTurns[turnIndex].user.content});
+  return messages;
+}
+function renderChatTurns(){
+  const box=document.getElementById('chatMessages');
+  box.innerHTML='';
+  if(!chatTurns.length){box.innerHTML='<div class="chat-empty">启动服务器后开始对话</div>';return}
+  chatTurns.forEach((turn,i)=>{
+    appendChatMsg('user',turn.user.display||turn.user.content);
+    const cand=turn.candidates[turn.activeIndex];
+    if(cand){
+      const node=appendChatMsg('assistant',cand.content||'生成中...',cand.reasoning||'');
+      if(turn.candidates.length>1){
+        const meta=document.createElement('div');
+        meta.className='candidate-meta';
+        meta.textContent=`候选 ${turn.activeIndex+1}/${turn.candidates.length}`;
+        node.appendChild(meta);
+      }
+    }
+  });
+  box.scrollTop=box.scrollHeight;
+}
+function activeChatTurn(){
+  for(let i=chatTurns.length-1;i>=0;i--){
+    if(chatTurns[i].candidates.length)return i;
+  }
+  return -1;
+}
+function prevCandidate(){
+  const i=activeChatTurn();if(i<0)return;
+  const t=chatTurns[i];if(t.activeIndex>0){t.activeIndex--;rebuildChatHistory();renderChatTurns();}
+}
+function nextCandidate(){
+  const i=activeChatTurn();if(i<0)return;
+  const t=chatTurns[i];if(t.activeIndex<t.candidates.length-1){t.activeIndex++;rebuildChatHistory();renderChatTurns();}
+}
+function extractMessageContent(j){
+  const msg=j.choices?.[0]?.message||{};
+  return {
+    content:msg.content||j.content||'',
+    reasoning:msg.reasoning_content||msg.reasoning||'',
+  };
+}
+async function requestAssistant(turnIndex){
   const provider=document.getElementById('chatProvider').value;
+  const stream=document.getElementById('chatStream').checked;
+  const messages=messagesBeforeTurn(turnIndex);
   const body={
     provider,
     model:document.getElementById('chatModel').value,
-    messages:chatHistory,
-    stream:true,
+    messages,
+    stream,
     thinking_enabled:document.getElementById('chatThinking').checked&&provider==='deepseek',
     reasoning_effort:document.getElementById('reasoningEffort').value,
-    web_search:document.getElementById('chatWebSearch').checked,
+    search_summary:document.getElementById('chatSearchSummary').checked,
   };
-  const aiDiv=appendChatMsg('assistant','生成中...');
+  const turn=chatTurns[turnIndex];
+  const candidate={content:'',reasoning:''};
+  turn.candidates.push(candidate);
+  turn.activeIndex=turn.candidates.length-1;
+  renderChatTurns();
+  let aiDiv=Array.from(document.querySelectorAll('.chat-ai')).pop();
   document.getElementById('btnSend').disabled=true;
   try{
     const resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!resp.ok){throw new Error(`HTTP ${resp.status}`)}
+    if(!stream){
+      const j=await resp.json();
+      if(j.error)throw new Error(j.error);
+      const result=extractMessageContent(j);
+      candidate.content=result.content||'(空回复)';
+      candidate.reasoning=result.reasoning||'';
+      rebuildChatHistory();
+      renderChatTurns();
+      return;
+    }
     const reader=resp.body.getReader();
     const decoder=new TextDecoder();
     let full='',reasoning='',buffer='';
@@ -752,6 +821,8 @@ async function sendChat(){
           const d=delta.content||'';
           const r=delta.reasoning_content||delta.reasoning||delta.thinking||'';
           full+=d;reasoning+=r;
+          candidate.content=full;
+          candidate.reasoning=reasoning;
           renderMessageContent(aiDiv,full||'生成中...',reasoning);
           document.getElementById('chatMessages').scrollTop=999999;
         }catch(err){
@@ -759,12 +830,34 @@ async function sendChat(){
         }
       }
     }
-    renderMessageContent(aiDiv,full,reasoning);
-    chatHistory.push({role:'assistant',content:full});
-  }catch(e){renderMessageContent(aiDiv,'错误: '+e.message)}
+    candidate.content=full||'(空回复)';
+    candidate.reasoning=reasoning;
+    rebuildChatHistory();
+    renderChatTurns();
+  }catch(e){
+    candidate.content='错误: '+e.message;
+    rebuildChatHistory();
+    renderChatTurns();
+  }
   document.getElementById('btnSend').disabled=false;
 }
-function clearChat(){chatHistory=[];chatAttachments=[];renderChatAttachments();document.getElementById('chatMessages').innerHTML='<div class="chat-empty">对话已清空</div>'}
+async function sendChat(){
+  const inp=document.getElementById('chatInput');
+  const msg=inp.value.trim();
+  if(!msg&&!chatAttachments.length)return;
+  inp.value='';
+  const userContent=messageWithAttachments(msg||'请阅读附件内容。');
+  const turn={user:{content:userContent,display:msg||'(附件)'},candidates:[],activeIndex:0};
+  chatTurns.push(turn);
+  chatAttachments=[];renderChatAttachments();
+  await requestAssistant(chatTurns.length-1);
+}
+async function regenerateLastTurn(){
+  const idx=chatTurns.length-1;
+  if(idx<0)return;
+  await requestAssistant(idx);
+}
+function clearChat(){chatHistory=[];chatTurns=[];chatAttachments=[];renderChatAttachments();document.getElementById('chatMessages').innerHTML='<div class="chat-empty">对话已清空</div>'}
 document.addEventListener('DOMContentLoaded',()=>{const ci=document.getElementById('chatInput');if(ci)ci.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}})});
 
 // ── WebUI ──

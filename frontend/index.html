@@ -342,7 +342,7 @@
       <div class="workspace-head">
         <div>
           <h1>对话</h1>
-          <p>通过本地 llama-server 或 DeepSeek API 对话，支持思考、网页搜索和文本附件。</p>
+          <p>通过本地 llama-server 或外部 API 对话，支持思考、搜索摘要注入和文本附件。</p>
         </div>
       </div>
       <div class="card chat-card">
@@ -356,8 +356,12 @@
             <option value="max">Max</option>
           </select>
           <label class="tool-toggle" title="仅 DeepSeek 支持；其他模型不会发送思考参数"><input type="checkbox" id="chatThinking"><span><i data-lucide="brain-circuit" class="icon icon-sm"></i> 思考</span></label>
-          <label class="tool-toggle" title="搜索公开网页并把摘要注入上下文"><input type="checkbox" id="chatWebSearch"><span><i data-lucide="search" class="icon icon-sm"></i> Web</span></label>
+          <label class="tool-toggle" title="搜索公开网页并把摘要注入上下文，不是模型可调用工具"><input type="checkbox" id="chatSearchSummary"><span><i data-lucide="search" class="icon icon-sm"></i> 搜索摘要</span></label>
+          <label class="tool-toggle" title="关闭后会等待完整回复再显示"><input type="checkbox" id="chatStream" checked><span><i data-lucide="radio" class="icon icon-sm"></i> 流式</span></label>
           <button class="btn btn-secondary" onclick="attachChatFiles()"><i data-lucide="paperclip" class="icon icon-sm"></i> 文件</button>
+          <button class="btn btn-secondary" onclick="regenerateLastTurn()"><i data-lucide="rotate-ccw" class="icon icon-sm"></i> 重生成</button>
+          <button class="btn btn-secondary icon-btn" onclick="prevCandidate()" title="上一条候选"><i data-lucide="chevron-left" class="icon icon-sm"></i></button>
+          <button class="btn btn-secondary icon-btn" onclick="nextCandidate()" title="下一条候选"><i data-lucide="chevron-right" class="icon icon-sm"></i></button>
           <button class="btn btn-secondary" onclick="clearChat()"><i data-lucide="trash-2" class="icon icon-sm"></i> 清空</button>
         </div>
         <div class="chat-attachments" id="chatAttachments"></div>

@@ -327,7 +327,7 @@ nav button.active {
 .inline-help { color: var(--fg-muted); font-size: 11px; margin-top: 4px; line-height: 1.4 }
 .inline-control { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px }
 
-input[type="text"], input[type="number"], select, textarea {
+input[type="text"], input[type="number"], input[type="password"], select, textarea {
   width: 100%;
   min-height: 38px;
   color: var(--fg);
@@ -385,6 +385,7 @@ select option { background: var(--option-bg); color: var(--option-fg) }
 .btn-success { color: white; background: linear-gradient(145deg, #2fcf85, var(--green)); border-color: transparent }
 .btn-danger { color: white; background: linear-gradient(145deg, #ff7378, var(--red)); border-color: transparent }
 .btn-sm { min-height: 30px; padding: 5px 10px; font-size: 11px; border-radius: 12px }
+.icon-btn { min-width: 40px; width: 40px; padding: 7px }
 
 .toggle-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; margin-top: 4px }
 .toggle-row {
@@ -609,6 +610,7 @@ select option { background: var(--option-bg); color: var(--option-fg) }
 .chat-input-wrap textarea { flex: 1; resize: none; min-height: 54px }
 .chat-rendered { white-space: normal }
 .chat-rendered.muted { color: var(--fg-muted) }
+.candidate-meta { margin-top: 8px; color: var(--fg-muted); font-size: 11px; text-align: right }
 .fold-block {
   margin: 5px 0 8px;
   border: 1px solid var(--border-subtle);
