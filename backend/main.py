@@ -220,6 +220,7 @@ async def _messages_with_web_context(messages: list[dict], enabled: bool) -> lis
 
 def _local_chat_payload(data: dict, config: AppConfig, messages: list[dict]) -> dict:
     sampling = config.sampling
+    web_tool = bool(data.get("web_search_tool") or data.get("web_search") is True)
     payload = {
         "model": data.get("model") or "default",
         "messages": messages,
@@ -234,6 +235,9 @@ def _local_chat_payload(data: dict, config: AppConfig, messages: list[dict]) -> 
         payload["repeat_penalty"] = sampling.repeat_penalty
     if sampling.presence_penalty_enabled:
         payload["presence_penalty"] = sampling.presence_penalty
+    if web_tool:
+        payload["tools"] = [_web_search_tool_schema()]
+        payload["tool_choice"] = "auto"
     return payload
 
 
@@ -754,13 +758,13 @@ async def chat_proxy(request: Request):
     except TypeError as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
 
-    if provider_config and use_web_tool:
+    if use_web_tool and (not provider_config or provider_config.kind in {"deepseek", "openai_chat", "openai_compatible", "anthropic", "openai_responses"}):
         try:
-            if provider_config.kind in {"deepseek", "openai_chat", "openai_compatible"}:
+            if not provider_config or provider_config.kind in {"deepseek", "openai_chat", "openai_compatible"}:
                 payload = await _complete_with_chat_tools(target, headers, payload)
-            elif provider_config.kind == "anthropic":
+            elif provider_config and provider_config.kind == "anthropic":
                 payload = _normalize_non_stream_response(provider_config.kind, await _complete_with_anthropic_tools(target, headers, payload))
-            elif provider_config.kind == "openai_responses":
+            elif provider_config and provider_config.kind == "openai_responses":
                 payload = _normalize_non_stream_response(provider_config.kind, await _complete_with_responses_tools(target, headers, payload))
         except Exception as exc:
             return JSONResponse(status_code=400, content={"error": str(exc)})

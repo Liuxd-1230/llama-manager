@@ -181,6 +181,16 @@ class ChatProxyRegressionTests(unittest.TestCase):
         self.assertEqual(payload["tool_choice"], "auto")
         self.assertEqual(payload["tools"][0]["function"]["name"], "web_search")
 
+    def test_local_chat_payload_can_expose_web_search_tool_definition(self):
+        payload = _local_chat_payload(
+            {"model": "local-model", "web_search_tool": True, "stream": False},
+            AppConfig(),
+            [{"role": "user", "content": "need current info"}],
+        )
+
+        self.assertEqual(payload["tool_choice"], "auto")
+        self.assertEqual(payload["tools"][0]["function"]["name"], "web_search")
+
 
 class ProviderConfigRegressionTests(unittest.TestCase):
     def test_default_deepseek_provider_uses_environment_key_without_exposing_it(self):
