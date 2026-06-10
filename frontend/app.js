@@ -641,16 +641,18 @@ async function deleteProviderSettings(){
 }
 function normalizeReasoning(text){
   if(!text)return {content:'',reasoning:''};
+  const dsmlToolCalls=/<\s*\|\s*DSML\s*\|\s*tool_calls\s*>[\s\S]*?<\/\s*\|\s*DSML\s*\|\s*tool_calls\s*>/gi;
   const patterns=[
     /<think>([\s\S]*?)<\/think>/gi,
     /<thinking>([\s\S]*?)<\/thinking>/gi,
     /```(?:reasoning|thinking|思考|思维链)\n([\s\S]*?)```/gi,
   ];
   let reasoning='';
-  let content=text;
+  let content=String(text).replace(dsmlToolCalls,'');
   patterns.forEach(re=>{
     content=content.replace(re,(_,m)=>{reasoning+=(reasoning?'\n\n':'')+m.trim();return ''});
   });
+  reasoning=reasoning.replace(dsmlToolCalls,'').trim();
   return {content:content.trim(),reasoning:reasoning.trim()};
 }
 function renderInline(text){return esc(text).replace(/\n/g,'<br>')}
@@ -885,15 +887,16 @@ async function requestAssistant(turnIndex){
   if(chatAbortController)return;
   const provider=document.getElementById('chatProvider').value;
   const stream=document.getElementById('chatStream').checked;
+  const webSearch=document.getElementById('chatWebSearch').checked;
   const messages=messagesBeforeTurn(turnIndex);
   const body={
     provider,
     model:document.getElementById('chatModel').value,
     messages,
     stream,
-    thinking_enabled:document.getElementById('chatThinking').checked&&provider==='deepseek',
+    thinking_enabled:document.getElementById('chatThinking').checked&&provider==='deepseek'&&!webSearch,
     reasoning_effort:document.getElementById('reasoningEffort').value,
-    web_search_tool:document.getElementById('chatWebSearch').checked,
+    web_search_tool:webSearch,
   };
   const turn=chatTurns[turnIndex];
   const candidate={content:'',reasoning:'',toolEvents:[]};

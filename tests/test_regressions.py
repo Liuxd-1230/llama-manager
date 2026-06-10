@@ -14,10 +14,14 @@ from backend import provider_manager as providers
 from backend.main import (
     _deepseek_chat_payload,
     _external_chat_request,
+    _filter_search_results,
     _local_chat_payload,
     _looks_like_missed_web_search,
     _messages_with_web_tool_guidance,
+    _normalize_web_search_query,
+    _parse_dsml_tool_calls,
     _search_web,
+    _strip_dsml_tool_blocks,
     _stream_chat_with_tools,
     _normalize_non_stream_response,
     app,
@@ -147,6 +151,13 @@ class FrontendRegressionTests(unittest.TestCase):
         self.assertIn("tool_event", app_js)
         self.assertIn("工具调用", app_js)
 
+    def test_frontend_strips_dsml_tool_calls_from_reasoning_display(self):
+        app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn("dsmlToolCalls", app_js)
+        self.assertIn("reasoning=reasoning.replace(dsmlToolCalls,'').trim()", app_js)
+        self.assertIn("!webSearch", app_js)
+
 
 class ChatProxyRegressionTests(unittest.TestCase):
     def test_local_chat_payload_uses_saved_sampling_and_omits_reasoning_controls(self):
@@ -179,6 +190,21 @@ class ChatProxyRegressionTests(unittest.TestCase):
 
         self.assertEqual(payload["thinking"], {"type": "enabled"})
         self.assertEqual(payload["reasoning_effort"], "high")
+
+    def test_deepseek_web_search_payload_disables_thinking_to_avoid_dsml_leakage(self):
+        payload = _deepseek_chat_payload(
+            {
+                "model": "deepseek-v4-flash",
+                "messages": [{"role": "user", "content": "hi"}],
+                "thinking_enabled": True,
+                "reasoning_effort": "max",
+                "web_search_tool": True,
+            },
+            [{"role": "user", "content": "hi"}],
+        )
+
+        self.assertEqual(payload["thinking"], {"type": "disabled"})
+        self.assertNotIn("reasoning_effort", payload)
 
     def test_non_stream_provider_responses_are_normalized_for_frontend(self):
         openai = _normalize_non_stream_response("openai_responses", {
@@ -292,6 +318,74 @@ class ChatProxyRegressionTests(unittest.TestCase):
         self.assertIn("answer", joined)
         self.assertEqual(len(stream_requests), 2)
         self.assertTrue(stream_requests[1]["stream"])
+
+    def test_dsml_tool_call_text_is_converted_without_streaming_reasoning_leak(self):
+        dsml = (
+            '<|DSML| tool_calls>\n'
+            '<|DSML| invoke name="web_search">\n'
+            '<|DSML| parameter name="query" string="true">霍尔海雅 角色</|DSML| parameter>\n'
+            '<|DSML| parameter name="limit" string="false">5</|DSML| parameter>\n'
+            '</|DSML| invoke>\n'
+            '</|DSML| tool_calls>'
+        )
+        stream_requests = []
+
+        class FakeStreamResponse:
+            status_code = 200
+
+            def __init__(self, chunks):
+                self._chunks = chunks
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def aiter_text(self):
+                for chunk in self._chunks:
+                    yield chunk
+
+        def sse(payload):
+            return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
+
+        def fake_stream(_self, _method, _url, json=None, headers=None):
+            stream_requests.append(json)
+            if len(stream_requests) == 1:
+                return FakeStreamResponse([sse({"choices": [{"delta": {"reasoning_content": dsml}}]}), "data: [DONE]\n\n"])
+            return FakeStreamResponse([sse({"choices": [{"delta": {"content": "霍尔海雅是角色。"}}]}), "data: [DONE]\n\n"])
+
+        payload = {
+            "model": "m",
+            "messages": [{"role": "user", "content": "霍尔海雅是谁"}],
+            "tools": [{"type": "function", "function": {"name": "web_search", "parameters": {"type": "object"}}}],
+            "tool_choice": "auto",
+        }
+        with patch("httpx.AsyncClient.stream", new=fake_stream), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="[1] ok")) as search:
+            chunks = asyncio.run(_collect_async(_stream_chat_with_tools("https://example.test", {}, payload, max_rounds=2)))
+
+        joined = "".join(chunks)
+        self.assertNotIn("DSML", joined)
+        self.assertIn("霍尔海雅是角色", joined)
+        search.assert_awaited_once()
+        self.assertEqual(search.await_args.args[0]["query"], "霍尔海雅 角色")
+
+    def test_dsml_helpers_parse_and_strip_pseudo_tool_calls(self):
+        text = 'before < | DSML | tool_calls>< | DSML | invoke name="web_search">< | DSML | parameter name="query" string="true">abc</ | DSML | parameter></ | DSML | invoke></ | DSML | tool_calls> after'
+
+        self.assertEqual(_strip_dsml_tool_blocks(text), "before  after")
+        calls = _parse_dsml_tool_calls(text)
+        self.assertEqual(calls[0]["function"]["name"], "web_search")
+        self.assertEqual(json.loads(calls[0]["function"]["arguments"])["query"], "abc")
+
+    def test_search_query_normalization_and_result_filtering(self):
+        self.assertIn("简介", _normalize_web_search_query("霍尔海雅 是谁"))
+        results = _filter_search_results([
+            {"title": "time.is", "url": "https://time.is/United_States"},
+            {"title": "Useful", "url": "https://example.com/page"},
+        ], 3)
+
+        self.assertEqual(results, [{"title": "Useful", "url": "https://example.com/page"}])
 
     def test_search_web_falls_back_to_bing_when_duckduckgo_fails(self):
         class FakeResponse:

@@ -7,6 +7,7 @@ import os
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
+import re
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -225,9 +226,50 @@ async def _search_bing(client, query: str, limit: int) -> list[dict[str, str]]:
     return parser.results[:limit]
 
 
+def _normalize_web_search_query(query: str) -> str:
+    text = " ".join(str(query or "").split())
+    if not text:
+        return ""
+    if re.search(r"[\u4e00-\u9fff]", text) and any(marker in text for marker in ("是谁", "什么是", "哪位")):
+        extras = [word for word in ("简介", "角色") if word not in text]
+        if extras:
+            text = f"{text} {' '.join(extras)}"
+    return text
+
+
+def _is_low_quality_search_result(item: dict[str, str]) -> bool:
+    parsed = urlparse(item.get("url", ""))
+    host = (parsed.hostname or "").lower()
+    blocked_hosts = {
+        "time.is",
+        "www.time.is",
+    }
+    if host in blocked_hosts:
+        return True
+    title = (item.get("title") or "").lower()
+    if host.endswith("time.is") or "time.is" in title:
+        return True
+    return False
+
+
+def _filter_search_results(results: list[dict[str, str]], limit: int) -> list[dict[str, str]]:
+    filtered = []
+    seen = set()
+    for item in results:
+        url = item.get("url", "")
+        if not url or url in seen or _is_low_quality_search_result(item):
+            continue
+        seen.add(url)
+        filtered.append(item)
+        if len(filtered) >= limit:
+            break
+    return filtered
+
+
 async def _search_web(query: str, limit: int = 4) -> list[dict[str, str]]:
     import httpx
-    if not query.strip():
+    query = _normalize_web_search_query(query)
+    if not query:
         return []
     errors = []
     async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
@@ -238,6 +280,7 @@ async def _search_web(query: str, limit: int = 4) -> list[dict[str, str]]:
             except Exception as exc:
                 errors.append(f"{searcher.__name__}: {type(exc).__name__}: {exc}")
                 continue
+            results = _filter_search_results(results, limit)
             if results:
                 break
         if not results and errors:
@@ -256,7 +299,7 @@ async def _search_web(query: str, limit: int = 4) -> list[dict[str, str]]:
                     item["snippet"] = extracted
             except Exception:
                 item["snippet"] = item.get("snippet", "")
-        return results
+        return _filter_search_results(results, limit)
 
 
 def _latest_user_text(messages: list[dict]) -> str:
@@ -300,7 +343,9 @@ def _messages_with_web_tool_guidance(messages: list[dict], enabled: bool) -> lis
         "Web Search is available as the `web_search` tool. For news, latest events, this week, "
         "current, recent, time-sensitive, uncertain, unknown, or external facts, call `web_search` before answering. "
         "Use the search result URLs in the final answer when relevant. If you choose not to call "
-        "the tool, answer only when the request does not need current web information."
+        "the tool, answer only when the request does not need current web information. "
+        "Do not write DSML, XML, JSON, or pseudo tool-call tags in the visible answer or reasoning; "
+        "use native tool_calls only."
     )
     return [{"role": "system", "content": guidance}, *messages]
 
@@ -358,7 +403,8 @@ def _local_chat_payload(data: dict, config: AppConfig, messages: list[dict]) -> 
 
 
 def _deepseek_chat_payload(data: dict, messages: list[dict]) -> dict:
-    thinking_enabled = bool(data.get("thinking_enabled"))
+    web_tool = bool(data.get("web_search_tool") or data.get("web_search") is True)
+    thinking_enabled = bool(data.get("thinking_enabled")) and not web_tool
     effort = data.get("reasoning_effort") if data.get("reasoning_effort") in {"high", "max"} else "high"
     payload = {
         "model": data.get("model") or "deepseek-v4-flash",
@@ -389,13 +435,54 @@ def _web_search_tool_schema() -> dict:
     }
 
 
+DSML_BLOCK_RE = re.compile(
+    r"<\s*\|\s*DSML\s*\|\s*tool_calls\s*>[\s\S]*?</\s*\|\s*DSML\s*\|\s*tool_calls\s*>",
+    re.IGNORECASE,
+)
+DSML_INVOKE_RE = re.compile(
+    r"<\s*\|\s*DSML\s*\|\s*invoke\s+name=[\"']([^\"']+)[\"']\s*>([\s\S]*?)</\s*\|\s*DSML\s*\|\s*invoke\s*>",
+    re.IGNORECASE,
+)
+DSML_PARAMETER_RE = re.compile(
+    r"<\s*\|\s*DSML\s*\|\s*parameter\s+name=[\"']([^\"']+)[\"'][^>]*>([\s\S]*?)</\s*\|\s*DSML\s*\|\s*parameter\s*>",
+    re.IGNORECASE,
+)
+
+
+def _strip_dsml_tool_blocks(text: str) -> str:
+    return DSML_BLOCK_RE.sub("", str(text or "")).strip()
+
+
+def _parse_dsml_tool_calls(text: str) -> list[dict]:
+    calls = []
+    for block in DSML_BLOCK_RE.findall(str(text or "")):
+        for call_index, match in enumerate(DSML_INVOKE_RE.finditer(block), 1):
+            name = match.group(1).strip()
+            args = {}
+            for param_name, param_value in DSML_PARAMETER_RE.findall(match.group(2)):
+                value = param_value.strip()
+                if param_name == "limit":
+                    try:
+                        args[param_name] = int(value)
+                    except ValueError:
+                        args[param_name] = value
+                else:
+                    args[param_name] = value
+            calls.append({
+                "id": f"dsml_{len(calls) + call_index}",
+                "type": "function",
+                "function": {"name": name, "arguments": json.dumps(args, ensure_ascii=False)},
+            })
+    return calls
+
+
 def _anthropic_web_search_tool_schema() -> dict:
     fn = _web_search_tool_schema()["function"]
     return {"name": fn["name"], "description": fn["description"], "input_schema": fn["parameters"]}
 
 
 async def _run_web_search_tool(arguments: dict) -> str:
-    query = str(arguments.get("query", "")).strip()
+    query = _normalize_web_search_query(str(arguments.get("query", "")).strip())
     limit = int(arguments.get("limit") or 4)
     results = await _search_web(query, limit=max(1, min(limit, 5)))
     if not results:
@@ -581,7 +668,15 @@ async def _complete_with_chat_tools(target: str, headers: dict[str, str], payloa
             message = last_payload.get("choices", [{}])[0].get("message", {})
             tool_calls = message.get("tool_calls") or []
             if not tool_calls:
+                dsml_tool_calls = _parse_dsml_tool_calls(message.get("reasoning_content") or message.get("reasoning") or "")
+                if dsml_tool_calls:
+                    tool_events.append({"type": "retry", "message": "模型输出了伪工具调用，已转换为真实 web_search。"})
+                    tool_events.extend(await _execute_chat_tool_calls(messages, dsml_tool_calls))
+                    continue
+            if not tool_calls:
                 content = message.get("content") or ""
+                if message.get("reasoning_content"):
+                    message["reasoning_content"] = _strip_dsml_tool_blocks(message.get("reasoning_content") or "")
                 if not forced_once and _looks_like_missed_web_search(content):
                     tool_events.append({"type": "retry", "message": "模型表示无法联网或不确定，已强制调用 web_search。"})
                     tool_payload = _force_web_search_tool_choice(tool_payload)
@@ -617,6 +712,7 @@ async def _stream_chat_with_tools(target: str, headers: dict[str, str], payload:
             request_payload["messages"] = messages
             tool_acc: dict[int, dict] = {}
             finish_reason = None
+            reasoning_buffer = ""
             try:
                 async with client.stream("POST", target, json=request_payload, headers=headers) as resp:
                     if resp.status_code >= 400:
@@ -643,17 +739,33 @@ async def _stream_chat_with_tools(target: str, headers: dict[str, str], payload:
                             finish_reason = choice.get("finish_reason") or finish_reason
                             for delta_call in delta.get("tool_calls") or []:
                                 _merge_tool_call_delta(tool_acc, delta_call)
-                            if delta.get("content") or delta.get("reasoning_content") or delta.get("reasoning") or delta.get("thinking"):
-                                yield "data: " + json.dumps(chunk, ensure_ascii=False) + "\n\n"
+                            reasoning_delta = delta.get("reasoning_content") or delta.get("reasoning") or delta.get("thinking") or ""
+                            if reasoning_delta:
+                                reasoning_buffer += reasoning_delta
+                            if delta.get("content"):
+                                clean_chunk = dict(chunk)
+                                clean_choice = dict(choice)
+                                clean_delta = {"content": delta.get("content")}
+                                clean_choice["delta"] = clean_delta
+                                clean_chunk["choices"] = [clean_choice]
+                                yield "data: " + json.dumps(clean_chunk, ensure_ascii=False) + "\n\n"
             except Exception as exc:
                 yield "data: " + json.dumps({"error": str(exc)}) + "\n\n"
                 return
             tool_calls = [tool_acc[idx] for idx in sorted(tool_acc)]
+            if not tool_calls:
+                dsml_tool_calls = _parse_dsml_tool_calls(reasoning_buffer)
+                if dsml_tool_calls:
+                    yield _tool_event_chunk({"type": "retry", "message": "模型输出了伪工具调用，已转换为真实 web_search。"})
+                    tool_calls = dsml_tool_calls
             if tool_calls or finish_reason == "tool_calls":
                 events = await _execute_chat_tool_calls(messages, tool_calls)
                 for event in events:
                     yield _tool_event_chunk(event)
                 continue
+            clean_reasoning = _strip_dsml_tool_blocks(reasoning_buffer)
+            if clean_reasoning:
+                yield _openai_chunk(reasoning=clean_reasoning)
             yield "data: [DONE]\n\n"
             return
         yield _tool_event_chunk({"type": "limit", "message": "工具调用达到轮数上限，已停止继续搜索并请求最终回答。"})
