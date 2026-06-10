@@ -10,7 +10,15 @@ from fastapi.testclient import TestClient
 
 from backend import config_manager as cfg
 from backend import provider_manager as providers
-from backend.main import _deepseek_chat_payload, _external_chat_request, _local_chat_payload, _normalize_non_stream_response, app
+from backend.main import (
+    _deepseek_chat_payload,
+    _external_chat_request,
+    _local_chat_payload,
+    _looks_like_missed_web_search,
+    _messages_with_web_tool_guidance,
+    _normalize_non_stream_response,
+    app,
+)
 from backend.models import AppConfig, BasicSettings
 from backend.process_manager import process_manager
 
@@ -118,6 +126,8 @@ class FrontendRegressionTests(unittest.TestCase):
         self.assertIn("katex", index_html)
         self.assertIn("DOMPurify", index_html)
         self.assertIn("renderMarkdown", app_js)
+        self.assertIn("tool_event", app_js)
+        self.assertIn("工具调用", app_js)
 
 
 class ChatProxyRegressionTests(unittest.TestCase):
@@ -190,6 +200,24 @@ class ChatProxyRegressionTests(unittest.TestCase):
 
         self.assertEqual(payload["tool_choice"], "auto")
         self.assertEqual(payload["tools"][0]["function"]["name"], "web_search")
+
+    def test_web_search_tool_guidance_tells_model_to_search_when_uncertain(self):
+        messages = _messages_with_web_tool_guidance([{"role": "user", "content": "这周的新闻"}], True)
+
+        self.assertEqual(messages[0]["role"], "system")
+        self.assertIn("uncertain", messages[0]["content"])
+        self.assertIn("call `web_search`", messages[0]["content"])
+
+    def test_missed_web_search_detector_catches_uncertain_connectivity_answers(self):
+        self.assertTrue(_looks_like_missed_web_search("抱歉，我目前无法联网搜索实时的本周新闻。"))
+
+    def test_normalized_external_response_preserves_tool_events(self):
+        normalized = _normalize_non_stream_response(
+            "anthropic",
+            {"content": [{"type": "text", "text": "hi"}], "tool_events": [{"type": "skip", "message": "no call"}]},
+        )
+
+        self.assertEqual(normalized["tool_events"][0]["type"], "skip")
 
 
 class ProviderConfigRegressionTests(unittest.TestCase):

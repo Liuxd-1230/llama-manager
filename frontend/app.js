@@ -722,10 +722,29 @@ function renderMessageContent(node,content,reasoning=''){
   const normalized=normalizeReasoning(content);
   const think=(reasoning||normalized.reasoning||'').trim();
   const body=(normalized.content||content||'').trim();
+  const existingTool=node.querySelector('.tool-events-fold')?.outerHTML||'';
   node.innerHTML=[
+    existingTool,
     think?`<details class="fold-block reasoning-fold"><summary><i data-lucide="brain-circuit" class="icon icon-sm"></i>思考过程</summary><div>${renderRichText(think)}</div></details>`:'',
     body?`<div class="chat-rendered">${renderRichText(body)}</div>`:'<div class="chat-rendered muted">(空回复)</div>'
   ].join('');
+  try{if(typeof lucide!=='undefined') lucide.createIcons()}catch(e){}
+}
+function renderToolEvents(events){
+  if(!events||!events.length)return '';
+  const rows=events.map(ev=>{
+    if(ev.type==='call')return `<div class="tool-event tool-call"><b>调用</b> ${esc(ev.name||'tool')}${ev.query?`<span>${esc(ev.query)}</span>`:''}</div>`;
+    if(ev.type==='result')return `<div class="tool-event tool-result"><b>结果</b><span>${renderRichText(ev.summary||'')}</span></div>`;
+    return `<div class="tool-event"><b>${esc(ev.type||'状态')}</b><span>${esc(ev.message||'')}</span></div>`;
+  }).join('');
+  return `<details class="fold-block tool-events-fold" open><summary><i data-lucide="wrench" class="icon icon-sm"></i>工具调用</summary><div class="tool-events">${rows}</div></details>`;
+}
+function updateToolEvents(node,events){
+  if(!node)return;
+  let current=node.querySelector('.tool-events-fold');
+  const html=renderToolEvents(events);
+  if(current)current.outerHTML=html;
+  else node.insertAdjacentHTML('afterbegin',html);
   try{if(typeof lucide!=='undefined') lucide.createIcons()}catch(e){}
 }
 function appendChatMsg(role,content,reasoning=''){
@@ -789,6 +808,7 @@ function renderChatTurns(){
     const cand=turn.candidates[turn.activeIndex];
     if(cand){
       const node=appendChatMsg('assistant',cand.content||'生成中...',cand.reasoning||'');
+      if(cand.toolEvents?.length)updateToolEvents(node,cand.toolEvents);
       if(turn.candidates.length>1){
         const meta=document.createElement('div');
         meta.className='candidate-meta';
@@ -818,6 +838,7 @@ function extractMessageContent(j){
   return {
     content:msg.content||j.content||'',
     reasoning:msg.reasoning_content||msg.reasoning||'',
+    toolEvents:j.tool_events||[],
   };
 }
 async function requestAssistant(turnIndex){
@@ -834,7 +855,7 @@ async function requestAssistant(turnIndex){
     web_search_tool:document.getElementById('chatWebSearch').checked,
   };
   const turn=chatTurns[turnIndex];
-  const candidate={content:'',reasoning:''};
+  const candidate={content:'',reasoning:'',toolEvents:[]};
   turn.candidates.push(candidate);
   turn.activeIndex=turn.candidates.length-1;
   renderChatTurns();
@@ -849,6 +870,7 @@ async function requestAssistant(turnIndex){
       const result=extractMessageContent(j);
       candidate.content=result.content||'(空回复)';
       candidate.reasoning=result.reasoning||'';
+      candidate.toolEvents=result.toolEvents||[];
       rebuildChatHistory();
       renderChatTurns();
       return;
@@ -869,6 +891,11 @@ async function requestAssistant(turnIndex){
         try{
           const j=JSON.parse(data);
           if(j.error){throw new Error(j.error)}
+          if(j.tool_event){
+            candidate.toolEvents.push(j.tool_event);
+            updateToolEvents(aiDiv,candidate.toolEvents);
+            continue;
+          }
           const delta=j.choices?.[0]?.delta||{};
           const d=delta.content||'';
           const r=delta.reasoning_content||delta.reasoning||delta.thinking||'';
