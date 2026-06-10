@@ -4,7 +4,7 @@ import time
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -16,6 +16,8 @@ from backend.main import (
     _local_chat_payload,
     _looks_like_missed_web_search,
     _messages_with_web_tool_guidance,
+    _prepare_chat_tool_followup,
+    _search_web,
     _normalize_non_stream_response,
     app,
 )
@@ -218,6 +220,66 @@ class ChatProxyRegressionTests(unittest.TestCase):
         )
 
         self.assertEqual(normalized["tool_events"][0]["type"], "skip")
+
+    def test_chat_tool_followup_keeps_final_answer_streaming(self):
+        requests = []
+
+        class FakeResponse:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return self._payload
+
+        async def fake_post(_self, _url, json=None, headers=None):
+            requests.append(json)
+            if len(requests) == 1:
+                return FakeResponse({
+                    "choices": [{"message": {"role": "assistant", "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "web_search", "arguments": "{\"query\":\"today news\"}"},
+                    }]}}],
+                })
+            self.fail("final response should be streamed by caller, not fetched in prepare step")
+
+        payload = {
+            "model": "m",
+            "messages": [{"role": "user", "content": "today news"}],
+            "tools": [{"type": "function", "function": {"name": "web_search", "parameters": {"type": "object"}}}],
+            "tool_choice": "auto",
+        }
+        with patch("httpx.AsyncClient.post", new=fake_post), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="[1] ok")):
+            events, followup = asyncio.run(_prepare_chat_tool_followup("https://example.test", {}, payload, max_rounds=1))
+
+        self.assertTrue(any(event["type"] == "call" for event in events))
+        self.assertTrue(followup["stream"])
+        self.assertNotIn("tools", followup)
+
+    def test_search_web_falls_back_to_bing_when_duckduckgo_fails(self):
+        class FakeResponse:
+            def __init__(self, text, content_type="text/html"):
+                self.text = text
+                self.headers = {"content-type": content_type}
+
+            def raise_for_status(self):
+                pass
+
+        async def fake_get(_self, url, **_kwargs):
+            if "duckduckgo" in url:
+                raise RuntimeError("duck timeout")
+            if "bing.com/search" in url:
+                return FakeResponse('<li class="b_algo"><h2><a href="https://example.com/news">Example News</a></h2><p>Snippet text</p></li>')
+            return FakeResponse("<html><body>Full article text</body></html>")
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            results = asyncio.run(_search_web("news", limit=1))
+
+        self.assertEqual(results[0]["title"], "Example News")
+        self.assertEqual(results[0]["url"], "https://example.com/news")
 
 
 class ProviderConfigRegressionTests(unittest.TestCase):

@@ -155,32 +155,107 @@ class _TextExtractor(HTMLParser):
                 self.parts.append(text)
 
 
+class _BingParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.results: list[dict[str, str]] = []
+        self._href = ""
+        self._title: list[str] = []
+        self._snippet: list[str] = []
+        self._in_title = False
+        self._in_snippet = False
+        self._li_depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        classes = attrs.get("class", "")
+        if tag == "li" and "b_algo" in classes:
+            self._li_depth += 1
+            self._href = ""
+            self._title = []
+            self._snippet = []
+        elif self._li_depth and tag == "a" and not self._href:
+            href = attrs.get("href", "")
+            if _public_http_url(href):
+                self._href = href
+                self._in_title = True
+        elif self._li_depth and tag == "p":
+            self._in_snippet = True
+
+    def handle_data(self, data):
+        if self._in_title:
+            self._title.append(data)
+        elif self._in_snippet:
+            self._snippet.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "a":
+            self._in_title = False
+        elif tag == "p":
+            self._in_snippet = False
+        elif tag == "li" and self._li_depth:
+            title = " ".join("".join(self._title).split())
+            snippet = " ".join("".join(self._snippet).split())
+            if title and _public_http_url(self._href):
+                self.results.append({"title": title, "url": self._href, "snippet": snippet})
+            self._li_depth -= 1
+
+
+async def _search_duckduckgo(client, query: str, limit: int) -> list[dict[str, str]]:
+    resp = await client.get(
+        "https://duckduckgo.com/html/",
+        params={"q": query},
+        headers={"User-Agent": "Mozilla/5.0"},
+    )
+    resp.raise_for_status()
+    parser = _DuckDuckGoParser()
+    parser.feed(resp.text)
+    return parser.results[:limit]
+
+
+async def _search_bing(client, query: str, limit: int) -> list[dict[str, str]]:
+    resp = await client.get(
+        "https://www.bing.com/search",
+        params={"q": query},
+        headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"},
+    )
+    resp.raise_for_status()
+    parser = _BingParser()
+    parser.feed(resp.text)
+    return parser.results[:limit]
+
+
 async def _search_web(query: str, limit: int = 4) -> list[dict[str, str]]:
     import httpx
     if not query.strip():
         return []
-    async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-        resp = await client.get(
-            "https://duckduckgo.com/html/",
-            params={"q": query},
-            headers={"User-Agent": "llama-manager/1.0"},
-        )
-        resp.raise_for_status()
-        parser = _DuckDuckGoParser()
-        parser.feed(resp.text)
-        results = parser.results[:limit]
+    errors = []
+    async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
+        results: list[dict[str, str]] = []
+        for searcher in (_search_duckduckgo, _search_bing):
+            try:
+                results = await searcher(client, query, limit)
+            except Exception as exc:
+                errors.append(f"{searcher.__name__}: {type(exc).__name__}: {exc}")
+                continue
+            if results:
+                break
+        if not results and errors:
+            raise RuntimeError("; ".join(errors))
         for item in results[:3]:
             try:
                 if not _public_http_url(item["url"]):
                     continue
-                page = await client.get(item["url"], headers={"User-Agent": "llama-manager/1.0"})
+                page = await client.get(item["url"], headers={"User-Agent": "Mozilla/5.0"})
                 if "text/html" not in page.headers.get("content-type", ""):
                     continue
                 extractor = _TextExtractor()
                 extractor.feed(page.text[:250_000])
-                item["snippet"] = " ".join(extractor.parts)[:1200]
+                extracted = " ".join(extractor.parts)[:1200]
+                if extracted:
+                    item["snippet"] = extracted
             except Exception:
-                item["snippet"] = ""
+                item["snippet"] = item.get("snippet", "")
         return results
 
 
@@ -499,7 +574,7 @@ async def _complete_with_chat_tools(target: str, headers: dict[str, str], payloa
                     try:
                         result = await _run_web_search_tool(args)
                     except Exception as exc:
-                        result = f"web_search failed: {exc}"
+                        result = f"web_search failed: {type(exc).__name__}: {exc}"
                 tool_events.append({"type": "result", "name": fn.get("name") or "", "summary": _tool_summary(result)})
                 messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": result})
         tool_events.append({"type": "limit", "message": "工具调用达到轮数上限，已请求模型基于现有结果作答。"})
@@ -512,6 +587,64 @@ async def _complete_with_chat_tools(target: str, headers: dict[str, str], payloa
         final_json = final.json() if last_payload is not None else {}
         final_json["tool_events"] = tool_events
         return final_json
+
+
+async def _prepare_chat_tool_followup(target: str, headers: dict[str, str], payload: dict, max_rounds: int = 3) -> tuple[list[dict], dict]:
+    import httpx
+    tool_payload = dict(payload)
+    tool_payload["stream"] = False
+    tool_events = [{"type": "status", "message": "Web Search 工具已启用，等待模型决定是否调用。"}]
+    async with httpx.AsyncClient(timeout=300) as client:
+        messages = [*tool_payload.get("messages", [])]
+        forced_once = False
+        for _ in range(max_rounds):
+            request_payload = dict(tool_payload)
+            request_payload["messages"] = messages
+            resp = await client.post(target, json=request_payload, headers=headers)
+            resp.raise_for_status()
+            payload_json = resp.json()
+            message = payload_json.get("choices", [{}])[0].get("message", {})
+            tool_calls = message.get("tool_calls") or []
+            if not tool_calls:
+                content = message.get("content") or ""
+                if not forced_once and _looks_like_missed_web_search(content):
+                    tool_events.append({"type": "retry", "message": "模型表示无法联网或不确定，已强制调用 web_search。"})
+                    tool_payload = _force_web_search_tool_choice(tool_payload)
+                    forced_once = True
+                    continue
+                tool_events.append({"type": "skip", "message": "模型本轮未调用 web_search。"})
+                payload_json["tool_events"] = tool_events
+                return tool_events, payload_json
+            messages.append(message)
+            for call in tool_calls:
+                fn = call.get("function", {})
+                try:
+                    args = json.loads(fn.get("arguments") or "{}")
+                except Exception:
+                    args = {}
+                tool_events.append({"type": "call", "name": fn.get("name") or "", "query": args.get("query") or "", "limit": args.get("limit") or ""})
+                if fn.get("name") != "web_search":
+                    result = f"Unsupported tool: {fn.get('name')}"
+                else:
+                    try:
+                        result = await _run_web_search_tool(args)
+                    except Exception as exc:
+                        result = f"web_search failed: {type(exc).__name__}: {exc}"
+                tool_events.append({"type": "result", "name": fn.get("name") or "", "summary": _tool_summary(result)})
+                messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": result})
+            followup = dict(payload)
+            followup["messages"] = messages
+            followup["stream"] = True
+            followup.pop("tools", None)
+            followup.pop("tool_choice", None)
+            return tool_events, followup
+        tool_events.append({"type": "limit", "message": "工具调用达到轮数上限，已请求模型基于现有结果作答。"})
+        followup = dict(payload)
+        followup["messages"] = messages
+        followup["stream"] = True
+        followup.pop("tools", None)
+        followup.pop("tool_choice", None)
+        return tool_events, followup
 
 
 async def _complete_with_anthropic_tools(target: str, headers: dict[str, str], payload: dict, max_rounds: int = 3) -> dict:
@@ -548,7 +681,7 @@ async def _complete_with_anthropic_tools(target: str, headers: dict[str, str], p
                     try:
                         result = await _run_web_search_tool(use.get("input") or {})
                     except Exception as exc:
-                        result = f"web_search failed: {exc}"
+                        result = f"web_search failed: {type(exc).__name__}: {exc}"
                 tool_events.append({"type": "result", "name": use.get("name") or "", "summary": _tool_summary(result)})
                 tool_results.append({"type": "tool_result", "tool_use_id": use.get("id"), "content": result})
             messages.append({"role": "user", "content": tool_results})
@@ -599,7 +732,7 @@ async def _complete_with_responses_tools(target: str, headers: dict[str, str], p
                     try:
                         result = await _run_web_search_tool(args)
                     except Exception as exc:
-                        result = f"web_search failed: {exc}"
+                        result = f"web_search failed: {type(exc).__name__}: {exc}"
                 tool_events.append({"type": "result", "name": call.get("name") or "", "summary": _tool_summary(result)})
                 tool_outputs.append({"type": "function_call_output", "call_id": call.get("call_id"), "output": result})
             request_payload = {
@@ -869,6 +1002,33 @@ async def chat_proxy(request: Request):
 
     if use_web_tool and (not provider_config or provider_config.kind in {"deepseek", "openai_chat", "openai_compatible", "anthropic", "openai_responses"}):
         try:
+            if stream and (not provider_config or provider_config.kind in {"deepseek", "openai_chat", "openai_compatible"}):
+                tool_events, followup = await _prepare_chat_tool_followup(target, headers, payload)
+                if followup.get("tool_events") is not None:
+                    message = followup.get("choices", [{}])[0].get("message", {})
+                    events = followup.get("tool_events") or []
+                    return StreamingResponse(
+                        iter([*[_tool_event_chunk(event) for event in events], _openai_chunk(content=message.get("content") or "", reasoning=message.get("reasoning_content") or ""), "data: [DONE]\n\n"]),
+                        media_type="text/event-stream",
+                    )
+
+                async def generate_tool_stream():
+                    for event in tool_events:
+                        yield _tool_event_chunk(event)
+                    try:
+                        async with httpx.AsyncClient(timeout=300) as client:
+                            async with client.stream("POST", target, json=followup, headers=headers) as resp:
+                                if resp.status_code >= 400:
+                                    error_text = await resp.aread()
+                                    yield "data: " + json.dumps({"error": error_text.decode("utf-8", errors="replace")}) + "\n\n"
+                                    return
+                                async for chunk in resp.aiter_bytes():
+                                    yield chunk
+                    except Exception as exc:
+                        yield "data: " + json.dumps({"error": str(exc)}) + "\n\n"
+
+                return StreamingResponse(generate_tool_stream(), media_type="text/event-stream")
+
             if not provider_config or provider_config.kind in {"deepseek", "openai_chat", "openai_compatible"}:
                 payload = await _complete_with_chat_tools(target, headers, payload)
             elif provider_config and provider_config.kind == "anthropic":
