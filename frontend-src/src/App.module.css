@@ -1,0 +1,48 @@
+.root { position: relative; height: 100%; overflow: hidden; isolation: isolate; --pointer-x: 50%; --pointer-y: 50% }
+.flow {
+  position: fixed; z-index: -2; inset: -28%; pointer-events: none;
+  background:
+    conic-gradient(from 210deg at var(--pointer-x) var(--pointer-y), transparent 0 18%, var(--flow-1) 30%, transparent 45% 58%, var(--flow-2) 68%, transparent 82%),
+    linear-gradient(128deg, var(--flow-3), transparent 38% 62%, var(--flow-4));
+  filter: blur(52px) saturate(1.25); opacity: .9; animation: drift 18s ease-in-out infinite alternate; transform-origin: var(--pointer-x) var(--pointer-y);
+}
+.flow::after { content: ''; position: absolute; inset: 10%; background: repeating-linear-gradient(115deg, rgba(255,255,255,.06) 0 1px, transparent 1px 54px); mask-image: linear-gradient(90deg, transparent, #000 24%, #000 76%, transparent); opacity: .55 }
+@keyframes drift { from { transform: translate3d(-1.5%, -1%, 0) rotate(-1deg) scale(1) } to { transform: translate3d(1.5%, 1%, 0) rotate(1deg) scale(1.04) } }
+.layout { height: 100%; display: grid; grid-template-columns: 188px minmax(0, 1fr); grid-template-rows: 64px minmax(0, 1fr); gap: 10px; padding: 10px }
+.topbar { grid-column: 1 / -1; border: 1px solid var(--glass-edge); border-radius: var(--radius); background: color-mix(in srgb, var(--glass-strong) 76%, transparent); box-shadow: var(--shadow-panel); backdrop-filter: blur(16px) saturate(1.25); display: flex; align-items: center; padding: 0 14px; gap: 12px; transition: background var(--transition), box-shadow var(--transition) }
+.topbarScrolled { background: var(--glass-strong); box-shadow: var(--shadow-shell) }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0 }
+.brandMark { flex: 0 0 34px; width: 34px; height: 34px; border-radius: var(--radius); display: grid; place-items: center; color: var(--accent); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--glass-edge)) }
+.brandText { font-weight: 800; font-size: 14px; white-space: nowrap }
+.brandSub { color: var(--text-3); font-size: 10px }
+.topMeta { margin-left: auto; display: flex; align-items: center; gap: 8px }
+.serverAddress { color: var(--text-3); font-family: monospace; font-size: 11px; white-space: nowrap }
+.sidebar { min-height: 0; border: 1px solid var(--glass-edge); border-radius: var(--radius); background: var(--glass); box-shadow: var(--shadow-panel); backdrop-filter: var(--blur); padding: 8px; display: flex; flex-direction: column }
+.nav { display: grid; gap: 4px }
+.navLink { height: 40px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--text-2); display: flex; align-items: center; gap: 10px; text-decoration: none; transition: all var(--transition) }
+.navLink:hover { text-decoration: none; color: var(--text); background: var(--glass-soft) }
+.navLinkActive { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 22%, transparent) }
+.sidebarBottom { margin-top: auto; display: grid; gap: 6px }
+.settingsButton { width: 100%; justify-content: flex-start }
+.main { min-width: 0; min-height: 0; overflow: auto; border: 1px solid var(--glass-edge); border-radius: var(--radius); background: color-mix(in srgb, var(--glass-soft) 62%, transparent); backdrop-filter: blur(12px); scrollbar-gutter: stable }
+.page { height: 100%; min-height: 0; padding: 18px; display: flex; flex-direction: column }
+.pageHeader { min-height: 60px; display: flex; align-items: flex-start; gap: 16px; margin-bottom: 12px }
+.pageHeader h1 { margin: 0; font-size: 22px; line-height: 1.2 }
+.pageHeader p { margin: 5px 0 0; color: var(--text-3); font-size: 12px }
+.pageHeaderActions { margin-left: auto; display: flex; align-items: center; gap: 8px }
+@media (max-width: 1120px) { .layout { grid-template-columns: 164px minmax(0, 1fr) } .brand { min-width: 210px } }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 58px minmax(0, 1fr); gap: 8px; padding: 8px }
+  .topbar { padding: 0 10px }
+  .brand { min-width: 0 }
+  .navLink { justify-content: center; padding: 0 }
+  .navLink span { display: none }
+  .settingsButton { padding: 0; justify-content: center; font-size: 0 }
+  .settingsButton svg { width: 16px; height: 16px }
+  .page { padding: 12px }
+}
+@media (max-width: 680px) {
+  .brandSub, .serverAddress { display: none }
+  .topMeta { gap: 5px }
+}
+@media (prefers-reduced-motion: reduce) { .flow { animation: none } }

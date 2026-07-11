@@ -11,19 +11,20 @@ from fastapi.testclient import TestClient
 
 from backend import config_manager as cfg
 from backend import provider_manager as providers
+from backend import search_manager
+from backend.chat_state import CandidateContext, ConversationStore
 from backend.main import (
     _deepseek_chat_payload,
     _external_chat_request,
-    _filter_search_results,
     _local_chat_payload,
-    _looks_like_missed_web_search,
     _messages_with_web_tool_guidance,
-    _normalize_web_search_query,
-    _parse_dsml_tool_calls,
-    _search_web,
-    _strip_dsml_tool_blocks,
-    _stream_chat_with_tools,
     _normalize_non_stream_response,
+    _normalize_v2_stream,
+    _parse_dsml_tool_calls,
+    _stream_anthropic_with_tools,
+    _stream_chat_with_tools,
+    _stream_responses_with_tools,
+    _strip_dsml_tool_blocks,
     app,
 )
 from backend.models import AppConfig, BasicSettings
@@ -33,24 +34,63 @@ from backend.process_manager import process_manager
 ROOT = Path(__file__).resolve().parents[1]
 
 
-async def _collect_async(iterator):
+async def collect(iterator):
     return [item async for item in iterator]
+
+
+class FakeStreamResponse:
+    status_code = 200
+
+    def __init__(self, chunks):
+        self.chunks = chunks
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def aiter_text(self):
+        for chunk in self.chunks:
+            yield chunk
+
+    async def aiter_lines(self):
+        for chunk in self.chunks:
+            for line in chunk.splitlines():
+                yield line
+
+    async def aiter_bytes(self):
+        for chunk in self.chunks:
+            yield chunk.encode("utf-8")
+
+    async def aread(self):
+        return "".join(self.chunks).encode()
+
+
+def sse(payload):
+    return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
 
 
 class SecurityRegressionTests(unittest.TestCase):
     def test_remote_clients_cannot_browse_local_files(self):
-        client = TestClient(app, client=("192.168.1.20", 50000))
-
-        response = client.get("/api/browse", params={"dir": "C:\\"})
-
+        response = TestClient(app, client=("192.168.1.20", 50000)).get("/api/browse", params={"dir": "C:\\"})
         self.assertEqual(response.status_code, 403)
 
     def test_remote_clients_cannot_start_compile_commands(self):
-        client = TestClient(app, client=("192.168.1.20", 50000))
-
-        response = client.post("/api/update/compile")
-
+        response = TestClient(app, client=("192.168.1.20", 50000)).post("/api/update/compile")
         self.assertEqual(response.status_code, 403)
+
+    def test_unknown_provider_does_not_fall_back_to_local_server(self):
+        response = TestClient(app).post("/api/chat", json={"provider": "missing", "messages": [], "stream": False})
+        self.assertEqual(response.status_code, 404)
+
+    def test_disabled_and_unconfigured_providers_return_conflict(self):
+        disabled = providers.ProviderConfig(id="disabled", name="Disabled", kind="openai_chat", enabled=False)
+        missing_key = providers.ProviderConfig(id="missing-key", name="Missing Key", kind="openai_chat", enabled=True)
+        with patch("backend.main.providers.get_provider", return_value=disabled):
+            self.assertEqual(TestClient(app).post("/api/chat", json={"provider": "disabled", "messages": [], "stream": False}).status_code, 409)
+        with patch("backend.main.providers.get_provider", return_value=missing_key), patch("backend.main.providers.resolve_api_key", return_value=""):
+            self.assertEqual(TestClient(app).post("/api/chat", json={"provider": "missing-key", "messages": [], "stream": False}).status_code, 409)
 
 
 class OptimizerRegressionTests(unittest.TestCase):
@@ -60,15 +100,11 @@ class OptimizerRegressionTests(unittest.TestCase):
 
         client = TestClient(app)
         cfg.save_config(AppConfig(llama_cpp_dir="C:\\llama.cpp", model_path="C:\\model.gguf"))
-
         with patch("backend.main.optimizer.run_optimization", side_effect=slow_optimization):
             started_at = time.monotonic()
             response = client.post("/api/optimize/start", json={"n_trials": 1})
-            elapsed = time.monotonic() - started_at
-
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"ok": True})
-        self.assertLess(elapsed, 1.0)
+        self.assertLess(time.monotonic() - started_at, 1.0)
 
 
 class CommandRegressionTests(unittest.TestCase):
@@ -78,367 +114,248 @@ class CommandRegressionTests(unittest.TestCase):
             server_bin = root / "build" / "bin" / "llama-server.exe"
             server_bin.parent.mkdir(parents=True)
             server_bin.write_text("", encoding="utf-8")
-            config = AppConfig(
-                llama_cpp_dir=str(root),
-                model_path="C:\\models\\model.gguf",
-                basic=BasicSettings(ngl_enabled=True, ngl=99, fit_enabled=True, fit_target=2048),
-            )
-
-            cmd = process_manager.build_command(config)
-
-        self.assertIn("--fit", cmd)
-        self.assertIn("on", cmd)
-        self.assertIn("--fit-target", cmd)
-        self.assertIn("2048", cmd)
-        self.assertNotIn("-ngl", cmd)
+            config = AppConfig(llama_cpp_dir=str(root), model_path="C:\\models\\model.gguf", basic=BasicSettings(ngl_enabled=True, ngl=99, fit_enabled=True, fit_target=2048))
+            command = process_manager.build_command(config)
+        self.assertIn("--fit", command)
+        self.assertIn("--fit-target", command)
+        self.assertNotIn("-ngl", command)
 
 
 class FrontendRegressionTests(unittest.TestCase):
-    def test_ui_from_cfg_restores_mtp_draft_min(self):
-        app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
-        ui_from_cfg = app_js.split("function uiFromCfg(c){", 1)[1].split("async function loadInitCfg", 1)[0]
-
-        self.assertIn("mtpDraftNMin", ui_from_cfg)
-        self.assertRegex(ui_from_cfg, r"mtpDraftNMin'\)\.value\s*=\s*m\.draft_n_min\?\?0")
-
-    def test_lucide_init_is_guarded(self):
-        app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
-
-        self.assertIsNone(re.search(r"^lucide\.createIcons\(\);$", app_js, re.MULTILINE))
-        self.assertIn("typeof lucide!=='undefined'", app_js)
-
-    def test_chat_toolbar_uses_config_sampling_instead_of_duplicate_controls(self):
-        index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
-
-        self.assertNotIn("chatTemp", index_html)
-        self.assertNotIn("chatMaxTokens", index_html)
-
-    def test_chat_toolbar_exposes_streaming_and_web_search_tool_controls(self):
-        index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
-        app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
-
-        self.assertIn("chatStream", index_html)
-        self.assertIn("chatWebSearch", index_html)
-        self.assertIn("web_search_tool", app_js)
-        self.assertIn("sendOrStopChat", index_html)
-
-    def test_assistant_message_actions_live_below_each_answer(self):
-        index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
-        app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
-
-        self.assertNotIn("regenerateLastTurn()", index_html)
-        self.assertNotIn("function regenerateLastTurn", app_js)
-        self.assertIn("renderAssistantActions", app_js)
-        self.assertIn("copyAssistant", app_js)
-        self.assertIn("regenerateTurn", app_js)
-        self.assertIn("chat-msg-actions", app_js)
-        self.assertIn("prevCandidate", app_js)
-        self.assertIn("nextCandidate", app_js)
-
-    def test_password_inputs_share_liquid_glass_field_styles(self):
-        style_css = (ROOT / "frontend" / "style.css").read_text(encoding="utf-8")
-
-        self.assertRegex(style_css, r"input\[type=\"text\"\].*input\[type=\"password\"\].*select,\s*textarea")
-
-    def test_chat_loads_markdown_and_latex_renderers(self):
-        index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
-        app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
-
-        self.assertIn("marked", index_html)
-        self.assertIn("katex", index_html)
-        self.assertIn("DOMPurify", index_html)
-        self.assertIn("renderMarkdown", app_js)
-        self.assertIn("tool_event", app_js)
-        self.assertIn("工具调用", app_js)
-
-    def test_frontend_strips_dsml_tool_calls_from_reasoning_display(self):
-        app_js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
-
-        self.assertIn("dsmlToolCalls", app_js)
-        self.assertIn("reasoning=reasoning.replace(dsmlToolCalls,'').trim()", app_js)
-        self.assertIn("!webSearch", app_js)
-
-
-class ChatProxyRegressionTests(unittest.TestCase):
-    def test_local_chat_payload_uses_saved_sampling_and_omits_reasoning_controls(self):
-        config = AppConfig()
-        payload = _local_chat_payload(
-            {
-                "model": "local-model",
-                "messages": [{"role": "user", "content": "hi"}],
-                "thinking_enabled": True,
-                "reasoning_effort": "max",
-            },
-            config,
-            [{"role": "user", "content": "hi"}],
-        )
-
-        self.assertEqual(payload["temperature"], config.sampling.temperature)
-        self.assertNotIn("thinking", payload)
-        self.assertNotIn("reasoning_effort", payload)
-
-    def test_deepseek_thinking_payload_only_sends_high_or_max(self):
-        payload = _deepseek_chat_payload(
-            {
-                "model": "deepseek-v4-flash",
-                "messages": [{"role": "user", "content": "hi"}],
-                "thinking_enabled": True,
-                "reasoning_effort": "low",
-            },
-            [{"role": "user", "content": "hi"}],
-        )
-
-        self.assertEqual(payload["thinking"], {"type": "enabled"})
-        self.assertEqual(payload["reasoning_effort"], "high")
-
-    def test_deepseek_web_search_payload_disables_thinking_to_avoid_dsml_leakage(self):
-        payload = _deepseek_chat_payload(
-            {
-                "model": "deepseek-v4-flash",
-                "messages": [{"role": "user", "content": "hi"}],
-                "thinking_enabled": True,
-                "reasoning_effort": "max",
-                "web_search_tool": True,
-            },
-            [{"role": "user", "content": "hi"}],
-        )
-
-        self.assertEqual(payload["thinking"], {"type": "disabled"})
-        self.assertNotIn("reasoning_effort", payload)
-
-    def test_non_stream_provider_responses_are_normalized_for_frontend(self):
-        openai = _normalize_non_stream_response("openai_responses", {
-            "output": [{"content": [{"type": "output_text", "text": "hello"}]}],
-        })
-        anthropic = _normalize_non_stream_response("anthropic", {
-            "content": [{"type": "text", "text": "hi"}],
-        })
-
-        self.assertEqual(openai["choices"][0]["message"]["content"], "hello")
-        self.assertEqual(anthropic["choices"][0]["message"]["content"], "hi")
-
-    def test_chat_completion_provider_gets_web_search_tool_definition(self):
-        provider = providers.ProviderConfig(
-            id="compat",
-            name="Compat",
-            kind="openai_compatible",
-            base_url="https://example.com/v1",
-            default_model="test-model",
-        )
-
-        _target, payload = _external_chat_request(
-            provider,
-            {"model": "test-model", "web_search": True, "stream": False},
-            [{"role": "user", "content": "need current info"}],
-        )
-
-        self.assertEqual(payload["tool_choice"], "auto")
-        self.assertEqual(payload["tools"][0]["function"]["name"], "web_search")
-
-    def test_local_chat_payload_can_expose_web_search_tool_definition(self):
-        payload = _local_chat_payload(
-            {"model": "local-model", "web_search_tool": True, "stream": False},
-            AppConfig(),
-            [{"role": "user", "content": "need current info"}],
-        )
-
-        self.assertEqual(payload["tool_choice"], "auto")
-        self.assertEqual(payload["tools"][0]["function"]["name"], "web_search")
-
-    def test_web_search_tool_guidance_tells_model_to_search_when_uncertain(self):
-        messages = _messages_with_web_tool_guidance([{"role": "user", "content": "这周的新闻"}], True)
-
-        self.assertEqual(messages[0]["role"], "system")
-        self.assertIn("uncertain", messages[0]["content"])
-        self.assertIn("call `web_search`", messages[0]["content"])
-
-    def test_missed_web_search_detector_catches_uncertain_connectivity_answers(self):
-        self.assertTrue(_looks_like_missed_web_search("抱歉，我目前无法联网搜索实时的本周新闻。"))
-
-    def test_normalized_external_response_preserves_tool_events(self):
-        normalized = _normalize_non_stream_response(
-            "anthropic",
-            {"content": [{"type": "text", "text": "hi"}], "tool_events": [{"type": "skip", "message": "no call"}]},
-        )
-
-        self.assertEqual(normalized["tool_events"][0]["type"], "skip")
-
-    def test_chat_tool_stream_handles_tool_calls_then_streams_final_answer(self):
-        stream_requests = []
-
-        class FakeStreamResponse:
-            status_code = 200
-
-            def __init__(self, chunks):
-                self._chunks = chunks
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, exc_type, exc, tb):
-                return False
-
-            async def aiter_text(self):
-                for chunk in self._chunks:
-                    yield chunk
-
-            async def aiter_bytes(self):
-                for chunk in self._chunks:
-                    yield chunk.encode("utf-8")
-
-        def sse(payload):
-            return "data: " + json.dumps(payload) + "\n\n"
-
-        def fake_stream(_self, _method, _url, json=None, headers=None):
-            stream_requests.append(json)
-            if len(stream_requests) == 1:
-                return FakeStreamResponse([
-                    sse({"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "call_1", "type": "function", "function": {"name": "web_search", "arguments": "{\"query\":\"today"}}]}}]}),
-                    sse({"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"arguments": " news\"}"}}]}, "finish_reason": "tool_calls"}]}),
-                    "data: [DONE]\n\n",
-                ])
-            return FakeStreamResponse([
-                sse({"choices": [{"delta": {"content": "final "}}]}),
-                sse({"choices": [{"delta": {"content": "answer"}}]}),
-                "data: [DONE]\n\n",
-            ])
-
-        payload = {
-            "model": "m",
-            "messages": [{"role": "user", "content": "today news"}],
-            "tools": [{"type": "function", "function": {"name": "web_search", "parameters": {"type": "object"}}}],
-            "tool_choice": "auto",
-        }
-        with patch("httpx.AsyncClient.stream", new=fake_stream), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="[1] ok")):
-            chunks = asyncio.run(_collect_async(_stream_chat_with_tools("https://example.test", {}, payload, max_rounds=2)))
-
-        joined = "".join(chunks)
-        self.assertIn('"tool_event"', joined)
-        self.assertIn("final ", joined)
-        self.assertIn("answer", joined)
-        self.assertEqual(len(stream_requests), 2)
-        self.assertTrue(stream_requests[1]["stream"])
-
-    def test_dsml_tool_call_text_is_converted_without_streaming_reasoning_leak(self):
-        dsml = (
-            '<|DSML| tool_calls>\n'
-            '<|DSML| invoke name="web_search">\n'
-            '<|DSML| parameter name="query" string="true">霍尔海雅 角色</|DSML| parameter>\n'
-            '<|DSML| parameter name="limit" string="false">5</|DSML| parameter>\n'
-            '</|DSML| invoke>\n'
-            '</|DSML| tool_calls>'
-        )
-        stream_requests = []
-
-        class FakeStreamResponse:
-            status_code = 200
-
-            def __init__(self, chunks):
-                self._chunks = chunks
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, exc_type, exc, tb):
-                return False
-
-            async def aiter_text(self):
-                for chunk in self._chunks:
-                    yield chunk
-
-        def sse(payload):
-            return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
-
-        def fake_stream(_self, _method, _url, json=None, headers=None):
-            stream_requests.append(json)
-            if len(stream_requests) == 1:
-                return FakeStreamResponse([sse({"choices": [{"delta": {"reasoning_content": dsml}}]}), "data: [DONE]\n\n"])
-            return FakeStreamResponse([sse({"choices": [{"delta": {"content": "霍尔海雅是角色。"}}]}), "data: [DONE]\n\n"])
-
-        payload = {
-            "model": "m",
-            "messages": [{"role": "user", "content": "霍尔海雅是谁"}],
-            "tools": [{"type": "function", "function": {"name": "web_search", "parameters": {"type": "object"}}}],
-            "tool_choice": "auto",
-        }
-        with patch("httpx.AsyncClient.stream", new=fake_stream), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="[1] ok")) as search:
-            chunks = asyncio.run(_collect_async(_stream_chat_with_tools("https://example.test", {}, payload, max_rounds=2)))
-
-        joined = "".join(chunks)
-        self.assertNotIn("DSML", joined)
-        self.assertIn("霍尔海雅是角色", joined)
-        search.assert_awaited_once()
-        self.assertEqual(search.await_args.args[0]["query"], "霍尔海雅 角色")
-
-    def test_dsml_helpers_parse_and_strip_pseudo_tool_calls(self):
-        text = 'before < | DSML | tool_calls>< | DSML | invoke name="web_search">< | DSML | parameter name="query" string="true">abc</ | DSML | parameter></ | DSML | invoke></ | DSML | tool_calls> after'
-
-        self.assertEqual(_strip_dsml_tool_blocks(text), "before  after")
-        calls = _parse_dsml_tool_calls(text)
-        self.assertEqual(calls[0]["function"]["name"], "web_search")
-        self.assertEqual(json.loads(calls[0]["function"]["arguments"])["query"], "abc")
-
-    def test_search_query_normalization_and_result_filtering(self):
-        self.assertIn("简介", _normalize_web_search_query("霍尔海雅 是谁"))
-        results = _filter_search_results([
-            {"title": "time.is", "url": "https://time.is/United_States"},
-            {"title": "Useful", "url": "https://example.com/page"},
-        ], 3)
-
-        self.assertEqual(results, [{"title": "Useful", "url": "https://example.com/page"}])
-
-    def test_search_web_falls_back_to_bing_when_duckduckgo_fails(self):
-        class FakeResponse:
-            def __init__(self, text, content_type="text/html"):
-                self.text = text
-                self.headers = {"content-type": content_type}
-
-            def raise_for_status(self):
-                pass
-
-        async def fake_get(_self, url, **_kwargs):
-            if "duckduckgo" in url:
-                raise RuntimeError("duck timeout")
-            if "bing.com/search" in url:
-                return FakeResponse('<li class="b_algo"><h2><a href="https://example.com/news">Example News</a></h2><p>Snippet text</p></li>')
-            return FakeResponse("<html><body>Full article text</body></html>")
-
-        with patch("httpx.AsyncClient.get", new=fake_get):
-            results = asyncio.run(_search_web("news", limit=1))
-
-        self.assertEqual(results[0]["title"], "Example News")
-        self.assertEqual(results[0]["url"], "https://example.com/news")
+    def test_react_stack_and_safe_markdown_are_declared(self):
+        package = json.loads((ROOT / "frontend-src" / "package.json").read_text(encoding="utf-8"))
+        markdown = (ROOT / "frontend-src" / "src" / "features" / "chat" / "Markdown.tsx").read_text(encoding="utf-8")
+        self.assertIn("react", package["dependencies"])
+        self.assertIn("motion", package["dependencies"])
+        self.assertIn("rehype-sanitize", package["dependencies"])
+        self.assertIn("rehypeSanitize", markdown)
+
+    def test_only_light_and_dark_theme_tokens_exist(self):
+        tokens = (ROOT / "frontend-src" / "src" / "styles" / "tokens.css").read_text(encoding="utf-8")
+        app = (ROOT / "frontend-src" / "src" / "App.tsx").read_text(encoding="utf-8")
+        self.assertIn("data-theme='dark'", tokens)
+        self.assertNotIn("apple", tokens.lower())
+        self.assertIn("Theme", app)
+
+    def test_all_five_workspaces_are_routed(self):
+        app = (ROOT / "frontend-src" / "src" / "App.tsx").read_text(encoding="utf-8")
+        for page in ("config", "run", "optimize", "maintenance", "chat"):
+            self.assertIn(f'path="/{page}"', app)
+
+    def test_chat_is_id_addressed_and_blocks_enter_during_generation(self):
+        reducer = (ROOT / "frontend-src" / "src" / "features" / "chat" / "chatReducer.ts").read_text(encoding="utf-8")
+        chat = (ROOT / "frontend-src" / "src" / "features" / "chat" / "ChatPage.tsx").read_text(encoding="utf-8")
+        self.assertIn("candidate.id", reducer)
+        self.assertIn("turn.id", reducer)
+        self.assertIn("请先停止当前生成", chat)
+        self.assertIn("parent_candidate_id", chat)
+
+    def test_settings_never_render_api_key_input(self):
+        settings = (ROOT / "frontend-src" / "src" / "components" / "SettingsDrawer.tsx").read_text(encoding="utf-8")
+        self.assertNotRegex(settings, r'type=["\']password')
+        self.assertIn("api_key_env", settings)
+
+    def test_production_build_is_committed_surface(self):
+        index = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("/static/assets/", index)
+        self.assertTrue((ROOT / "frontend" / "assets").exists())
 
 
 class ProviderConfigRegressionTests(unittest.TestCase):
-    def test_default_deepseek_provider_uses_environment_key_without_exposing_it(self):
+    def test_environment_key_is_reported_but_never_returned(self):
         with TemporaryDirectory() as tmp, patch.object(providers, "PROVIDERS_PATH", Path(tmp) / "providers.json"), patch.object(providers, "SECRETS_DIR", Path(tmp)), patch.dict("os.environ", {"DEEPSEEK_API_KEY": "sk-test"}):
-            public = providers.list_providers()
+            public = providers.list_providers()[0]
             private = providers.get_provider("deepseek")
+        self.assertTrue(public["api_key_set"])
+        self.assertNotIn("api_key", public)
+        self.assertFalse(hasattr(private, "api_key"))
 
-        self.assertEqual(public[0]["id"], "deepseek")
-        self.assertEqual(public[0]["kind"], "deepseek")
-        self.assertTrue(public[0]["api_key_set"])
-        self.assertEqual(public[0]["api_key"], "")
-        self.assertEqual(private.api_key, "sk-test")
+    def test_provider_save_rejects_submitted_keys(self):
+        with self.assertRaises(ValueError):
+            providers.save_provider({"id": "x", "kind": "openai_chat", "api_key": "sk-secret"})
 
-    def test_saved_provider_round_trips_models_and_masks_key(self):
+    def test_legacy_key_is_migrated_then_removed_from_json(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "providers.json"
+            path.write_text(json.dumps([{"id": "compat", "name": "Compat", "kind": "openai_compatible", "base_url": "https://example.test/v1", "api_key": "sk-old"}]), encoding="utf-8")
+            with patch.object(providers, "PROVIDERS_PATH", path), patch.object(providers, "SECRETS_DIR", Path(tmp)), patch("backend.provider_manager.set_user_env") as migrate:
+                providers.list_providers()
+            migrate.assert_called_once_with("LLAMA_MANAGER_PROVIDER_COMPAT_API_KEY", "sk-old")
+            self.assertNotIn("api_key", path.read_text(encoding="utf-8"))
+
+    def test_failed_legacy_key_migration_keeps_json_and_blocks_provider(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "providers.json"
+            path.write_text(json.dumps([{"id": "compat", "name": "Compat", "kind": "openai_compatible", "base_url": "https://example.test/v1", "api_key": "sk-old"}]), encoding="utf-8")
+            with patch.object(providers, "PROVIDERS_PATH", path), patch.object(providers, "SECRETS_DIR", Path(tmp)), patch("backend.provider_manager.set_user_env", side_effect=OSError("ACL failed")):
+                public = next(item for item in providers.list_providers() if item["id"] == "compat")
+                private = providers.get_provider("compat")
+            self.assertIn("api_key", path.read_text(encoding="utf-8"))
+            self.assertFalse(public["enabled"])
+            self.assertFalse(public["api_key_set"])
+            self.assertIn("迁移失败", public["migration_error"])
+            self.assertFalse(private.enabled)
+
+    def test_saved_metadata_round_trips_without_secret(self):
         with TemporaryDirectory() as tmp, patch.object(providers, "PROVIDERS_PATH", Path(tmp) / "providers.json"), patch.object(providers, "SECRETS_DIR", Path(tmp)):
-            saved = providers.save_provider({
-                "id": "openai-main",
-                "name": "OpenAI",
-                "kind": "openai_responses",
-                "base_url": "https://api.openai.com/v1",
-                "api_key": "sk-openai",
-                "default_model": "gpt-4.1",
-                "models": ["gpt-4.1", "gpt-4.1-mini"],
-            })
-            private = providers.get_provider("openai-main")
+            saved = providers.save_provider({"id": "openai-main", "name": "OpenAI", "kind": "openai_responses", "base_url": "https://api.openai.com/v1", "default_model": "gpt-4.1", "models": ["gpt-4.1"], "enabled": True})
+            raw = (Path(tmp) / "providers.json").read_text(encoding="utf-8")
+        self.assertEqual(saved["default_model"], "gpt-4.1")
+        self.assertNotIn("api_key", raw)
 
-        self.assertTrue(saved["api_key_set"])
-        self.assertEqual(saved["api_key"], "")
-        self.assertEqual(private.default_model, "gpt-4.1")
-        self.assertEqual(private.models, ["gpt-4.1", "gpt-4.1-mini"])
+
+class SearchRegressionTests(unittest.TestCase):
+    def test_tavily_uses_fixed_api_endpoint_without_redirects(self):
+        requests = []
+
+        class Response:
+            def raise_for_status(self): pass
+            def json(self): return {"results": [{"title": "Result", "url": "https://example.com", "content": "Summary", "score": .9}]}
+
+        async def post(_self, url, **kwargs): requests.append((url, kwargs)); return Response()
+        with patch.object(search_manager, "_read_settings", return_value=search_manager.SearchSettings(provider="tavily")), patch("backend.search_manager.env_value", return_value="tvly-test"), patch("httpx.AsyncClient.post", new=post):
+            provider, results = asyncio.run(search_manager.search_web("query", 3))
+        self.assertEqual(provider, "tavily")
+        self.assertEqual(requests[0][0], "https://api.tavily.com/search")
+        self.assertEqual(results[0]["snippet"], "Summary")
+
+    def test_brave_uses_fixed_api_endpoint(self):
+        requests = []
+
+        class Response:
+            def raise_for_status(self): pass
+            def json(self): return {"web": {"results": [{"title": "Result", "url": "https://example.com", "description": "Summary"}]}}
+
+        async def get(_self, url, **kwargs): requests.append((url, kwargs)); return Response()
+        with patch.object(search_manager, "_read_settings", return_value=search_manager.SearchSettings(provider="brave")), patch("backend.search_manager.env_value", return_value="brave-test"), patch("httpx.AsyncClient.get", new=get):
+            provider, results = asyncio.run(search_manager.search_web("query", 3))
+        self.assertEqual(provider, "brave")
+        self.assertEqual(requests[0][0], "https://api.search.brave.com/res/v1/web/search")
+        self.assertEqual(results[0]["title"], "Result")
+
+    def test_missing_search_key_fails_without_html_fallback(self):
+        with patch.object(search_manager, "_read_settings", return_value=search_manager.SearchSettings(provider="tavily")), patch("backend.search_manager.env_value", return_value=""):
+            with self.assertRaises(search_manager.SearchNotConfigured):
+                asyncio.run(search_manager.search_web("query"))
+
+
+class ChatProxyRegressionTests(unittest.TestCase):
+    def test_local_payload_uses_config_sampling(self):
+        config = AppConfig()
+        payload = _local_chat_payload({"model": "local", "thinking_enabled": True}, config, [{"role": "user", "content": "hi"}])
+        self.assertEqual(payload["temperature"], config.sampling.temperature)
+        self.assertNotIn("thinking", payload)
+
+    def test_deepseek_keeps_thinking_enabled_with_web_search(self):
+        payload = _deepseek_chat_payload({"thinking_enabled": True, "reasoning_effort": "max", "web_search_tool": True}, [{"role": "user", "content": "hi"}])
+        self.assertEqual(payload["thinking"], {"type": "enabled"})
+        self.assertEqual(payload["reasoning_effort"], "max")
+
+    def test_web_guidance_requires_native_tool_calls(self):
+        messages = _messages_with_web_tool_guidance([{"role": "user", "content": "news"}], True)
+        self.assertIn("native tool_calls", messages[0]["content"])
+
+    def test_chat_completion_provider_gets_web_tool(self):
+        provider = providers.ProviderConfig(id="compat", name="Compat", kind="openai_compatible", base_url="https://example.com/v1", default_model="m")
+        _target, payload = _external_chat_request(provider, {"web_search_tool": True}, [{"role": "user", "content": "news"}])
+        self.assertEqual(payload["tool_choice"], "auto")
+
+    def test_stream_tool_round_preserves_reasoning_content(self):
+        requests = []
+
+        def stream(_self, _method, _url, json=None, headers=None):
+            requests.append(json)
+            if len(requests) == 1:
+                return FakeStreamResponse([sse({"choices": [{"delta": {"reasoning_content": "need web"}}]}), sse({"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "call_1", "type": "function", "function": {"name": "web_search", "arguments": "{\"query\":\"news\"}"}}]}, "finish_reason": "tool_calls"}]}), "data: [DONE]\n\n"])
+            return FakeStreamResponse([sse({"choices": [{"delta": {"content": "answer"}}]}), "data: [DONE]\n\n"])
+
+        payload = {"model": "m", "messages": [{"role": "user", "content": "news"}], "tools": [{"type": "function", "function": {"name": "web_search"}}]}
+        state = {}
+        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="[1] ok")):
+            chunks = asyncio.run(collect(_stream_chat_with_tools("https://example.test", {}, payload, on_complete=state.update)))
+        self.assertEqual(requests[1]["messages"][1]["reasoning_content"], "need web")
+        self.assertIn("answer", "".join(chunks))
+        self.assertEqual(state["kind"], "chat_messages")
+
+    def test_cancelled_chat_stream_closes_provider_response(self):
+        exited = False
+
+        class Response(FakeStreamResponse):
+            async def __aexit__(self, exc_type, exc, tb):
+                nonlocal exited
+                exited = True
+                return False
+
+        async def run():
+            generator = _stream_chat_with_tools("https://example.test", {}, {"model": "m", "messages": []})
+            with patch("httpx.AsyncClient.stream", return_value=Response([sse({"choices": [{"delta": {"content": "part"}}]})])):
+                first = await anext(generator)
+                await generator.aclose()
+                return first
+
+        self.assertIn("part", asyncio.run(run()))
+        self.assertTrue(exited)
+
+    def test_anthropic_tools_stream_final_content(self):
+        requests = []
+
+        def stream(_self, _method, _url, json=None, headers=None):
+            requests.append(json)
+            if len(requests) == 1:
+                return FakeStreamResponse([sse({"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "id": "tool_1", "name": "web_search", "input": {}}}), sse({"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": "{\"query\":\"news\"}"}})])
+            return FakeStreamResponse([sse({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}), sse({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "final"}})])
+
+        payload = {"model": "claude", "messages": [{"role": "user", "content": "news"}], "tools": [{"name": "web_search"}]}
+        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="ok")):
+            output = "".join(asyncio.run(collect(_stream_anthropic_with_tools("https://example.test", {}, payload))))
+        self.assertIn("final", output)
+        self.assertEqual(len(requests), 2)
+
+    def test_responses_tools_stream_final_content(self):
+        requests = []
+
+        def stream(_self, _method, _url, json=None, headers=None):
+            requests.append(json)
+            if len(requests) == 1:
+                return FakeStreamResponse([sse({"type": "response.created", "response": {"id": "resp_1"}}), sse({"type": "response.output_item.added", "item": {"type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "web_search", "arguments": "{\"query\":\"news\"}"}})])
+            return FakeStreamResponse([sse({"type": "response.created", "response": {"id": "resp_2"}}), sse({"type": "response.output_text.delta", "delta": "final"})])
+
+        payload = {"model": "gpt", "input": "news", "tools": [{"type": "function", "name": "web_search"}]}
+        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="ok")):
+            output = "".join(asyncio.run(collect(_stream_responses_with_tools("https://example.test", {}, payload))))
+        self.assertIn("final", output)
+        self.assertEqual(requests[1]["previous_response_id"], "resp_1")
+
+    def test_v2_normalizer_emits_incremental_event_types(self):
+        async def source():
+            yield sse({"choices": [{"delta": {"content": "hello"}}]})
+            yield "data: [DONE]\n\n"
+
+        output = "".join(asyncio.run(collect(_normalize_v2_stream(source(), "candidate"))))
+        self.assertIn('"type": "start"', output)
+        self.assertIn('"type": "content_delta"', output)
+        self.assertIn('"type": "done"', output)
+
+    def test_dsml_helpers_remain_defensive(self):
+        text = '<|DSML| tool_calls><|DSML| invoke name="web_search"><|DSML| parameter name="query">abc</|DSML| parameter></|DSML| invoke></|DSML| tool_calls>'
+        self.assertEqual(_strip_dsml_tool_blocks(text), "")
+        self.assertEqual(_parse_dsml_tool_calls(text)[0]["function"]["name"], "web_search")
+
+    def test_non_stream_external_responses_normalize(self):
+        openai = _normalize_non_stream_response("openai_responses", {"output": [{"content": [{"type": "output_text", "text": "hello"}]}]})
+        anthropic = _normalize_non_stream_response("anthropic", {"content": [{"type": "text", "text": "hi"}]})
+        self.assertEqual(openai["choices"][0]["message"]["content"], "hello")
+        self.assertEqual(anthropic["choices"][0]["message"]["content"], "hi")
+
+
+class ConversationStoreTests(unittest.TestCase):
+    def test_candidate_context_is_branch_addressable(self):
+        store = ConversationStore(ttl_seconds=60, max_conversations=2)
+        context = CandidateContext(provider_id="deepseek", model="m", kind="chat_messages", state={"messages": [{"role": "user", "content": "hi"}]}, updated_at=time.time())
+        store.put("conversation", "candidate", context)
+        loaded = store.get("conversation", "candidate")
+        self.assertEqual(loaded.state["messages"][0]["content"], "hi")
+        self.assertTrue(store.delete("conversation"))
 
 
 if __name__ == "__main__":

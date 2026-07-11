@@ -7,3 +7,11 @@ dist/
 build/
 .env
 .hermes/
+frontend-src/node_modules/
+frontend-src/.vite/
+frontend-src/test-results/
+frontend-src/playwright-report/
+frontend-src/*.tsbuildinfo
+frontend-src/vite.config.js
+frontend-src/vite.config.d.ts
+.codex-*.log

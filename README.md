@@ -47,8 +47,10 @@
 - 本地模式 (127.0.0.1) / 局域网模式 (0.0.0.0)
 
 ### 对话
-- OpenAI 兼容 API 代理 (/v1/chat/completions)
-- 流式输出 + 对话历史
+- 本地 llama.cpp、DeepSeek、OpenAI Chat/Responses、Anthropic 和 OpenAI 兼容 API
+- 原生工具调用 Web Search（Tavily 或 Brave），支持多轮搜索和可见工具轨迹
+- 真正的流式输出、停止生成、单轮重生成与回答候选切换
+- Markdown、GFM、LaTeX、安全代码块和文件导入
 
 ### 更新管理
 - 检测 llama.cpp 更新 (git fetch)
@@ -80,22 +82,39 @@ python -m uvicorn backend.main:app --host 0.0.0.0 --port 9090
 
 然后浏览器打开 `http://localhost:9090`
 
+## API Key 与搜索
+
+Key 不通过网页输入或保存在 provider JSON 中。系统环境变量优先于 `~/llama-manager/.env`：
+
+```dotenv
+DEEPSEEK_API_KEY=
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+TAVILY_API_KEY=
+BRAVE_SEARCH_API_KEY=
+```
+
+自定义厂商使用 `LLAMA_MANAGER_PROVIDER_<ID>_API_KEY`，其中 `<ID>` 会转换为大写下划线形式。旧版 `providers.json` 中的 Key 会在启动时迁移到用户 `.env`；只有写入并收紧文件权限成功后才会删除旧字段。
+
+Web Search 只使用设置中明确选择的 Tavily 或 Brave，不抓取搜索结果网页，也不会在失败时自动切换厂商。
+
 ## 目录结构
 
 ```
 llama-manager/
 ├── backend/
 │   ├── main.py               # FastAPI 路由 + WebSocket
+│   ├── provider_manager.py   # Provider 元数据与环境 Key
+│   ├── search_manager.py     # Tavily / Brave 搜索适配
+│   ├── chat_state.py         # 进程内候选上下文图
 │   ├── models.py              # Pydantic 数据模型
 │   ├── config_manager.py      # 配置 CRUD + 模型扫描
 │   ├── process_manager.py     # llama-server 进程管理
 │   ├── update_manager.py      # git + cmake 编译
 │   ├── download_manager.py    # llama.cpp 仓库克隆
 │   └── optimizer.py           # Optuna 贝叶斯优化
-├── frontend/
-│   ├── index.html             # HTML 结构
-│   ├── style.css              # 样式
-│   └── app.js                 # 前端逻辑
+├── frontend-src/              # React + Vite + TypeScript 源码
+├── frontend/                  # 提交到仓库的生产构建产物
 ├── config/
 │   └── *.json                 # 命名配置文件
 ├── requirements.txt
@@ -131,6 +150,21 @@ llama-manager/
 ## 技术栈
 
 - **后端**: Python, FastAPI, WebSocket
-- **前端**: HTML, CSS, JavaScript (原生)
+- **前端**: React, Vite, TypeScript, Motion, CSS Modules
 - **优化**: Optuna (贝叶斯优化)
 - **进程管理**: asyncio.subprocess
+
+## 前端开发
+
+普通用户不需要 Node.js，`start.bat` 会直接加载已提交的 `frontend/`。修改前端源码时使用 pnpm：
+
+```bash
+cd frontend-src
+pnpm install
+pnpm dev
+pnpm test
+pnpm build
+pnpm test:e2e
+```
+
+Vite 开发服务器会代理 `/api` 和 WebSocket；生产构建使用 `/static/` base 并写入仓库根目录的 `frontend/`。

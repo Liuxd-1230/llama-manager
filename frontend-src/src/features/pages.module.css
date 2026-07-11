@@ -1,0 +1,29 @@
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px }
+.gridThree { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px }
+.stack { display: grid; gap: 10px }
+.formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px }
+.formGridThree { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px }
+.wide { grid-column: 1 / -1 }
+.row { display: flex; align-items: center; gap: 8px; min-width: 0 }
+.row > :first-child { min-width: 0 }
+.wrap { display: flex; flex-wrap: wrap; gap: 10px }
+.muted { color: var(--text-3) }
+.hint { margin: 5px 0 0; color: var(--text-3); font-size: 11px }
+.code { margin: 0; white-space: pre-wrap; word-break: break-word; color: var(--log-text); background: var(--log-bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px; min-height: 160px; max-height: 420px; overflow: auto; font-size: 12px }
+.log { composes: code; min-height: 320px }
+.table { width: 100%; border-collapse: collapse; font-size: 12px }
+.table th, .table td { text-align: left; padding: 8px 9px; border-bottom: 1px solid var(--line) }
+.table th { color: var(--text-3); font-size: 10px; text-transform: uppercase }
+.statusGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px }
+.metric { border-left: 2px solid var(--accent); background: var(--glass-soft); padding: 9px 10px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0 }
+.metric strong { display: block; font-size: 16px }
+.metric span { color: var(--text-3); font-size: 10px; text-transform: uppercase }
+.sticky { position: sticky; top: 0 }
+.splitMain { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, .65fr); align-items: start; gap: 10px }
+.iframe { width: 100%; height: 520px; border: 0; border-radius: var(--radius-sm); background: var(--bg-elevated) }
+@media (max-width: 1180px) { .formGridThree { grid-template-columns: repeat(2, minmax(0, 1fr)) } .splitMain { grid-template-columns: 1fr } .sticky { position: static } }
+@media (max-width: 760px) {
+  .grid, .gridThree, .formGrid, .formGridThree { grid-template-columns: 1fr }
+  .statusGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+  .row { flex-wrap: wrap }
+}

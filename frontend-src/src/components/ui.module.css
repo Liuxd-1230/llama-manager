@@ -1,0 +1,43 @@
+.button {
+  height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer;
+  background: var(--glass-soft); color: var(--text-2); transition: background var(--transition), border-color var(--transition), transform var(--transition), color var(--transition);
+}
+.button:hover:not(:disabled) { background: var(--input-hover); border-color: var(--line-strong); color: var(--text); transform: translateY(-1px) }
+.button:disabled { opacity: .42; cursor: not-allowed }
+.primary { background: var(--accent); border-color: transparent; color: white }
+.primary:hover:not(:disabled) { background: var(--accent-hover); color: white }
+.danger { background: var(--red-soft); border-color: color-mix(in srgb, var(--red) 32%, transparent); color: var(--red) }
+.success { background: var(--green-soft); border-color: color-mix(in srgb, var(--green) 32%, transparent); color: var(--green) }
+.iconButton { width: 34px; padding: 0 }
+.small { height: 30px; padding: 0 9px; font-size: 12px }
+.field { display: grid; gap: 6px; min-width: 0 }
+.label { color: var(--text-3); font-size: 11px; font-weight: 700; text-transform: uppercase }
+.input, .select, .textarea {
+  width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--input); color: var(--text);
+  transition: border-color var(--transition), background var(--transition), box-shadow var(--transition);
+}
+.input, .select { height: 36px; padding: 0 10px }
+.textarea { min-height: 92px; resize: vertical; padding: 10px }
+.input:hover, .select:hover, .textarea:hover { background: var(--input-hover) }
+.input:focus, .select:focus, .textarea:focus { border-color: color-mix(in srgb, var(--accent) 52%, var(--line)); box-shadow: 0 0 0 3px var(--accent-soft) }
+.switch { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 8px; color: var(--text-2); cursor: pointer; min-height: 34px; max-width: 100%; white-space: nowrap }
+.switch input { position: absolute; opacity: 0; pointer-events: none }
+.switch > span:last-child { min-width: 0; display: inline-flex; align-items: center; gap: 5px }
+.track { flex: 0 0 34px; width: 34px; height: 20px; padding: 2px; border-radius: 10px; background: color-mix(in srgb, var(--text-3) 24%, transparent); transition: background var(--transition) }
+.thumb { width: 16px; height: 16px; display: block; border-radius: 50%; background: white; box-shadow: 0 1px 4px rgba(0,0,0,.25); transition: transform var(--transition) }
+.switch input:checked + .track { background: var(--accent) }
+.switch input:checked + .track .thumb { transform: translateX(14px) }
+.panel { border: 1px solid var(--glass-edge); border-radius: var(--radius); background: var(--glass); box-shadow: var(--shadow-panel); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur) }
+.panelHeader { min-height: 44px; padding: 0 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px }
+.panelTitle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 750 }
+.panelBody { padding: 14px }
+.badge { min-height: 24px; padding: 3px 8px; border-radius: 12px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--glass-soft); color: var(--text-2); font-size: 11px }
+.badge[data-tone='good'] { background: var(--green-soft); color: var(--green) }
+.badge[data-tone='bad'] { background: var(--red-soft); color: var(--red) }
+.badge[data-tone='warn'] { background: var(--yellow-soft); color: var(--yellow) }
+.toolbar { min-height: 48px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap }
+.spacer { flex: 1 }
+.empty { min-height: 180px; display: grid; place-items: center; color: var(--text-3); text-align: center }
+.divider { height: 1px; background: var(--line); margin: 8px 0 }
+.toast { position: fixed; z-index: 100; right: 22px; bottom: 22px; max-width: 390px; padding: 11px 14px; border-radius: var(--radius); border: 1px solid var(--glass-edge); background: var(--glass-strong); box-shadow: var(--shadow-panel); backdrop-filter: var(--blur) }

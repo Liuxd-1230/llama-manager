@@ -1,0 +1,33 @@
+@import './tokens.css';
+@import 'katex/dist/katex.min.css';
+
+* { box-sizing: border-box }
+html, body, #root { min-width: 0; width: 100%; height: 100%; margin: 0 }
+body {
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; letter-spacing: 0 }
+button { color: inherit }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 74%, white);
+  outline-offset: 2px;
+}
+select option { color: var(--option-fg); background: var(--option-bg) }
+a { color: var(--blue); text-decoration: none }
+a:hover { text-decoration: underline }
+code, pre { font-family: "Geist Mono", "SFMono-Regular", Consolas, monospace }
+::selection { background: var(--accent-soft) }
+::-webkit-scrollbar { width: 9px; height: 9px }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text-3) 35%, transparent); border: 3px solid transparent; background-clip: padding-box; border-radius: 8px }
+::-webkit-scrollbar-track { background: transparent }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important }
+}
