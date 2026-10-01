@@ -7,7 +7,7 @@ import sys
 import os
 from typing import Optional, List, Any
 from .models import AppConfig, ServerStatus
-from .config_manager import detect_server_binary
+from .config_manager import detect_server_binary, detect_kvmem_binary
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -37,7 +37,10 @@ class ProcessManager:
         return ServerStatus(state="stopped")
 
     def build_command(self, config: AppConfig) -> list[str]:
-        """Build the llama-server command line from config."""
+        """Build the llama-server / llama-kvmem-server command line from config."""
+        if config.engine == "kvmem":
+            return self._build_kvmem_command(config)
+
         server_bin = detect_server_binary(config.llama_cpp_dir)
         if not server_bin:
             raise FileNotFoundError(
@@ -145,6 +148,49 @@ class ProcessManager:
 
         return cmd
 
+    def _build_kvmem_command(self, config: AppConfig) -> list[str]:
+        """Build the llama-kvmem-server command line (KV virtualization engine)."""
+        k = config.kvmem
+        if k.budget + k.gen_reserve > k.workspace:
+            raise ValueError(
+                f"KVMem: budget({k.budget}) + gen_reserve({k.gen_reserve}) 不能超过 workspace({k.workspace})"
+            )
+
+        server_bin = detect_kvmem_binary(config.llama_cpp_dir)
+        if not server_bin:
+            raise FileNotFoundError(
+                f"llama-kvmem-server not found in {config.llama_cpp_dir}/ (root or bin/)"
+            )
+
+        cmd = [server_bin, "-m", config.model_path]
+        if config.mmproj_path:
+            cmd += ["--mmproj", config.mmproj_path]
+        if config.basic.ngl_enabled:
+            cmd += ["-ngl", str(config.basic.ngl)]
+        cmd += ["--host", config.server.host, "--port", str(config.server.port)]
+        # In KVMem, -c is the logical KV workspace, not a VRAM cap; VRAM = budget + gen_reserve.
+        cmd += ["-c", str(k.workspace), "-b", str(k.batch), "--ubatch-size", str(k.batch), "-n", str(k.gen_reserve)]
+        cmd += [
+            "--kvmem-budget", str(k.budget),
+            "--kvmem-gen-reserve", str(k.gen_reserve),
+            "--kvmem-block-tokens", str(k.block_tokens),
+            "--kvmem-query-policy", k.query_policy,
+            "--kvmem-query-replay", "auto",
+            "--kv-dtype", k.kv_dtype,
+        ]
+        if config.basic.flash_attn:
+            cmd += ["--flash-attn", "on"]
+        if k.enable_thinking:
+            cmd += ["--enable-thinking", "--reasoning-budget", str(k.reasoning_budget)]
+        cmd += ["--spec-type", "none"]
+
+        if config.extra_params.strip():
+            try:
+                cmd += shlex.split(config.extra_params, posix=(not IS_WINDOWS))
+            except ValueError as e:
+                raise ValueError(f"extra_params 语法错误: {e}") from e
+        return cmd
+
     async def start(self, config: AppConfig, profile_name: str = ""):
         if self._process and self._process.returncode is None:
             raise RuntimeError("Server is already running. Stop it first.")
@@ -217,6 +263,12 @@ class ProcessManager:
         except ProcessLookupError:
             self._append_log(f"[manager] Process {pid} already exited.")
         finally:
+            # Reap the killed process so a subsequent start() does not race on returncode.
+            try:
+                if self._process and self._process.returncode is None:
+                    await self._process.wait()
+            except ProcessLookupError:
+                pass
             self._profile_name = ""
 
     def clear_logs(self):

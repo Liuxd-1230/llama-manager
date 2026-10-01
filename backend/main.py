@@ -1130,15 +1130,23 @@ def _profile_summary(name: str, profile: AppConfig) -> dict:
     if model_exists:
         model_size_mb = round(model_path.stat().st_size / (1024 * 1024), 1)
     basic = profile.basic
+    kvmem = profile.kvmem
     return {
         "name": name,
         "is_current": cfg.get_current_name() == name,
+        "engine": profile.engine,
         "model_path": profile.model_path,
         "model_name": model_path.name if model_path else "",
         "model_size_mb": model_size_mb,
         "model_exists": model_exists,
         "model_meta": cfg.read_gguf_metadata(profile.model_path),
         "ctx_size": basic.ctx_size,
+        "kvmem": {
+            "workspace": kvmem.workspace,
+            "budget": kvmem.budget,
+            "gen_reserve": kvmem.gen_reserve,
+            "kv_dtype": kvmem.kv_dtype,
+        },
         "ngl": basic.ngl if basic.ngl_enabled else 0,
         "fit_enabled": basic.fit_enabled,
         "n_cpu_moe": basic.n_cpu_moe,

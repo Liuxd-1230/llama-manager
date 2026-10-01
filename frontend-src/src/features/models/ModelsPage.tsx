@@ -14,6 +14,7 @@ type Profile = {
   name: string
   is_current: boolean
   is_running: boolean
+  engine?: string
   model_path: string
   model_name: string
   model_size_mb: number
@@ -29,6 +30,7 @@ type Profile = {
   mtp_enabled: boolean
   host: string
   port: number
+  kvmem?: { workspace: number; budget: number; gen_reserve: number; kv_dtype: string }
 }
 
 function errorMessage(reason: unknown) { return reason instanceof Error ? reason.message : String(reason) }
@@ -137,12 +139,16 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
   onRemove: () => void
 }) {
   const meta = profile.model_meta || {}
+  const isKvmem = profile.engine === 'kvmem'
+  const fmtK = (n: number) => (n >= 1024 ? `${Math.round(n / 1024)}K` : String(n))
   const sizeLabel = profile.model_size_mb >= 1024 ? `${(profile.model_size_mb / 1024).toFixed(1)} GB` : profile.model_size_mb ? `${profile.model_size_mb.toFixed(0)} MB` : ''
   const chips: { label: string; active?: boolean }[] = [
-    { label: `ctx ${profile.ctx_size >= 1024 ? `${Math.round(profile.ctx_size / 1024)}K` : profile.ctx_size}`, active: true },
+    { label: `ctx ${isKvmem ? fmtK(profile.kvmem?.workspace ?? profile.ctx_size) : fmtK(profile.ctx_size)}`, active: true },
+    ...(isKvmem ? [{ label: `KVMem 预算 ${fmtK(profile.kvmem?.budget ?? 0)}` }] : []),
+    ...(isKvmem && profile.kvmem?.kv_dtype ? [{ label: `KV ${profile.kvmem.kv_dtype}` }] : []),
     profile.fit_enabled ? { label: 'GPU 自动适配' } : { label: `ngl ${profile.ngl}` },
     ...(profile.n_cpu_moe > 0 ? [{ label: `MoE→CPU ${profile.n_cpu_moe}` }] : []),
-    ...(profile.kv_cache_quant_k || profile.kv_cache_quant_v ? [{ label: `KV ${profile.kv_cache_quant_k || profile.kv_cache_quant_v}` }] : []),
+    ...(!isKvmem && (profile.kv_cache_quant_k || profile.kv_cache_quant_v) ? [{ label: `KV ${profile.kv_cache_quant_k || profile.kv_cache_quant_v}` }] : []),
     ...(profile.flash_attn ? [{ label: 'FlashAttn' }] : []),
     ...(profile.mtp_enabled ? [{ label: 'MTP' }] : []),
     { label: `${profile.host}:${profile.port}` },

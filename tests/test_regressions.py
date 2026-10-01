@@ -29,7 +29,7 @@ from backend.main import (
     _strip_dsml_tool_blocks,
     app,
 )
-from backend.models import AppConfig, BasicSettings
+from backend.models import AppConfig, BasicSettings, KvmemSettings
 from backend.process_manager import process_manager
 
 
@@ -111,6 +111,7 @@ class ProfileRegressionTests(unittest.TestCase):
             self.assertEqual({p["name"] for p in profiles}, {"default", "qwen"})
             default = next(p for p in profiles if p["name"] == "default")
             self.assertEqual(default["ctx_size"], 32768)
+            self.assertEqual(default["engine"], "llama.cpp")
             self.assertTrue(default["model_exists"])
             self.assertGreater(default["model_size_mb"], 0)
             qwen = next(p for p in profiles if p["name"] == "qwen")
@@ -229,6 +230,43 @@ class CommandRegressionTests(unittest.TestCase):
         self.assertIn("--fit", command)
         self.assertIn("--fit-target", command)
         self.assertNotIn("-ngl", command)
+
+
+class KvmemCommandTests(unittest.TestCase):
+    def test_kvmem_engine_builds_kvmem_server_command(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            (bin_dir / "llama-kvmem-server.exe").write_text("", encoding="utf-8")
+            config = AppConfig(
+                llama_cpp_dir=str(root), model_path="E:\\models\\bonsai.gguf",
+                engine="kvmem",
+                basic=BasicSettings(ngl_enabled=True, ngl=99, flash_attn=True),
+            )
+            command = process_manager.build_command(config)
+        self.assertIn("llama-kvmem-server.exe", command[0])
+        self.assertIn("--kvmem-budget", command)
+        self.assertIn("--kvmem-gen-reserve", command)
+        self.assertIn("--kv-dtype", command)
+        self.assertIn("--spec-type", command)
+        self.assertIn("-ngl", command)
+        # llama.cpp-only flags must not leak into the kvmem command line
+        self.assertNotIn("--temp", command)
+        self.assertNotIn("--cache-type-k", command)
+        self.assertNotIn("--fit-target", command)
+        # workspace travels with -c, not ctx_size
+        self.assertEqual(command[command.index("-c") + 1], str(config.kvmem.workspace))
+
+    def test_kvmem_rejects_budget_exceeding_workspace(self):
+        config = AppConfig(engine="kvmem", llama_cpp_dir="C:\\x", kvmem=KvmemSettings(workspace=1000, budget=800, gen_reserve=400))
+        with self.assertRaises(ValueError):
+            process_manager.build_command(config)
+
+    def test_kvmem_binary_missing_fails_cleanly(self):
+        config = AppConfig(engine="kvmem", llama_cpp_dir="C:\\definitely-not-here")
+        with self.assertRaises(FileNotFoundError):
+            process_manager.build_command(config)
 
 
 class FrontendRegressionTests(unittest.TestCase):

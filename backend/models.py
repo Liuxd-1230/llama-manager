@@ -58,13 +58,35 @@ class CompileSettings(BaseModel):
     command: str = 'cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="89" && cmake --build build --config Release -j12'
 
 
+class KvmemSettings(BaseModel):
+    """KVMem engine (llama-kvmem-server) — KV cache virtualization parameters.
+
+    Note: workspace (-c) is the logical KV workspace, NOT the VRAM cap;
+    VRAM is driven by budget + gen_reserve.
+    """
+    workspace: int = 131072  # logical KV workspace tokens (-c)
+    budget: int = 24576  # GPU-resident history tokens (--kvmem-budget)
+    gen_reserve: int = 10240  # GPU slots reserved for new tokens (--kvmem-gen-reserve, also -n)
+    block_tokens: int = 128  # KV block size (--kvmem-block-tokens)
+    batch: int = 128  # -b / --ubatch-size
+    kv_dtype: str = "q8_0"  # --kv-dtype
+    query_policy: str = "user"  # --kvmem-query-policy
+    enable_thinking: bool = False  # --enable-thinking
+    reasoning_budget: int = 4096  # --reasoning-budget
+
+
+ENGINES = ("llama.cpp", "kvmem")
+
+
 class AppConfig(BaseModel):
     llama_cpp_dir: str = ""
     model_path: str = ""
     mmproj_path: str = ""
+    engine: str = "llama.cpp"  # "llama.cpp" (llama-server) or "kvmem" (llama-kvmem-server)
     basic: BasicSettings = Field(default_factory=BasicSettings)
     sampling: SamplingSettings = Field(default_factory=SamplingSettings)
     mtp: MTPSettings = Field(default_factory=MTPSettings)
+    kvmem: KvmemSettings = Field(default_factory=KvmemSettings)
     system_prompt: str = ""
     extra_params: str = ""
     server: ServerSettings = Field(default_factory=ServerSettings)

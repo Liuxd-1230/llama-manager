@@ -2162,6 +2162,11 @@
             "title": "Mmproj Path",
             "default": ""
           },
+          "engine": {
+            "type": "string",
+            "title": "Engine",
+            "default": "llama.cpp"
+          },
           "basic": {
             "$ref": "#/components/schemas/BasicSettings"
           },
@@ -2170,6 +2175,9 @@
           },
           "mtp": {
             "$ref": "#/components/schemas/MTPSettings"
+          },
+          "kvmem": {
+            "$ref": "#/components/schemas/KvmemSettings"
           },
           "system_prompt": {
             "type": "string",
@@ -2748,6 +2756,58 @@
           "path"
         ],
         "title": "KnowledgeSourceCreate"
+      },
+      "KvmemSettings": {
+        "properties": {
+          "workspace": {
+            "type": "integer",
+            "title": "Workspace",
+            "default": 131072
+          },
+          "budget": {
+            "type": "integer",
+            "title": "Budget",
+            "default": 24576
+          },
+          "gen_reserve": {
+            "type": "integer",
+            "title": "Gen Reserve",
+            "default": 10240
+          },
+          "block_tokens": {
+            "type": "integer",
+            "title": "Block Tokens",
+            "default": 128
+          },
+          "batch": {
+            "type": "integer",
+            "title": "Batch",
+            "default": 128
+          },
+          "kv_dtype": {
+            "type": "string",
+            "title": "Kv Dtype",
+            "default": "q8_0"
+          },
+          "query_policy": {
+            "type": "string",
+            "title": "Query Policy",
+            "default": "user"
+          },
+          "enable_thinking": {
+            "type": "boolean",
+            "title": "Enable Thinking",
+            "default": false
+          },
+          "reasoning_budget": {
+            "type": "integer",
+            "title": "Reasoning Budget",
+            "default": 4096
+          }
+        },
+        "type": "object",
+        "title": "KvmemSettings",
+        "description": "KVMem engine (llama-kvmem-server) — KV cache virtualization parameters.\n\nNote: workspace (-c) is the logical KV workspace, NOT the VRAM cap;\nVRAM is driven by budget + gen_reserve."
       },
       "MTPSettings": {
         "properties": {

@@ -46,6 +46,18 @@ export interface AppConfig {
     p_min: number
     p_split: number
   }
+  engine: 'llama.cpp' | 'kvmem'
+  kvmem: {
+    workspace: number
+    budget: number
+    gen_reserve: number
+    block_tokens: number
+    batch: number
+    kv_dtype: string
+    query_policy: string
+    enable_thinking: boolean
+    reasoning_budget: number
+  }
   system_prompt: string
   extra_params: string
   server: { host: string; port: number; mode: string }
@@ -124,6 +136,8 @@ export const defaultConfig: AppConfig = {
     presence_penalty: 0,
   },
   mtp: { enabled: false, spec_type: 'draft-mtp', draft_n_max: 3, draft_n_min: 0, p_min: 0, p_split: .1 },
+  engine: 'llama.cpp',
+  kvmem: { workspace: 131072, budget: 24576, gen_reserve: 10240, block_tokens: 128, batch: 128, kv_dtype: 'q8_0', query_policy: 'user', enable_thinking: false, reasoning_budget: 4096 },
   system_prompt: '', extra_params: '',
   server: { host: '127.0.0.1', port: 8080, mode: 'local' },
   compile: { command: 'cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release -j12' },

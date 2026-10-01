@@ -247,3 +247,19 @@ def detect_server_binary(llama_cpp_dir: str) -> str:
         return str(f)
 
     return ""
+
+
+def detect_kvmem_binary(llama_cpp_dir: str) -> str:
+    """Find llama-kvmem-server in a KVMem package dir (root or bin/)."""
+    d = Path(llama_cpp_dir)
+    if not d.is_dir():
+        return ""
+
+    import sys
+    exe = "llama-kvmem-server.exe" if sys.platform == "win32" else "llama-kvmem-server"
+    for c in (d / exe, d / "bin" / exe):
+        if c.exists():
+            return str(c)
+    for f in d.rglob(exe):
+        return str(f)
+    return ""

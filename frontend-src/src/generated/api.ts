@@ -1021,9 +1021,15 @@ export interface components {
              * @default
              */
             mmproj_path: string;
+            /**
+             * Engine
+             * @default llama.cpp
+             */
+            engine: string;
             basic?: components["schemas"]["BasicSettings"];
             sampling?: components["schemas"]["SamplingSettings"];
             mtp?: components["schemas"]["MTPSettings"];
+            kvmem?: components["schemas"]["KvmemSettings"];
             /**
              * System Prompt
              * @default
@@ -1357,6 +1363,60 @@ export interface components {
              * @enum {string}
              */
             kind: "file" | "directory";
+        };
+        /**
+         * KvmemSettings
+         * @description KVMem engine (llama-kvmem-server) — KV cache virtualization parameters.
+         *
+         *     Note: workspace (-c) is the logical KV workspace, NOT the VRAM cap;
+         *     VRAM is driven by budget + gen_reserve.
+         */
+        KvmemSettings: {
+            /**
+             * Workspace
+             * @default 131072
+             */
+            workspace: number;
+            /**
+             * Budget
+             * @default 24576
+             */
+            budget: number;
+            /**
+             * Gen Reserve
+             * @default 10240
+             */
+            gen_reserve: number;
+            /**
+             * Block Tokens
+             * @default 128
+             */
+            block_tokens: number;
+            /**
+             * Batch
+             * @default 128
+             */
+            batch: number;
+            /**
+             * Kv Dtype
+             * @default q8_0
+             */
+            kv_dtype: string;
+            /**
+             * Query Policy
+             * @default user
+             */
+            query_policy: string;
+            /**
+             * Enable Thinking
+             * @default false
+             */
+            enable_thinking: boolean;
+            /**
+             * Reasoning Budget
+             * @default 4096
+             */
+            reasoning_budget: number;
         };
         /** MTPSettings */
         MTPSettings: {

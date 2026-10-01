@@ -21,11 +21,13 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
   const basic = config.basic
   const sampling = config.sampling
   const mtp = config.mtp
+  const kvmem = config.kvmem
 
   const patch = <K extends keyof AppConfig>(key: K, value: AppConfig[K]) => setConfig({ ...config, [key]: value })
   const patchBasic = (value: Partial<AppConfig['basic']>) => patch('basic', { ...basic, ...value })
   const patchSampling = (value: Partial<AppConfig['sampling']>) => patch('sampling', { ...sampling, ...value })
   const patchMtp = (value: Partial<AppConfig['mtp']>) => patch('mtp', { ...mtp, ...value })
+  const patchKvmem = (value: Partial<AppConfig['kvmem']>) => patch('kvmem', { ...kvmem, ...value })
   const refreshNames = async () => {
     try { setConfigs((await api<{ configs: string[] }>('/api/config/list')).configs || []) } catch { setConfigs([]) }
   }
@@ -70,6 +72,20 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
   }
 
   const command = useMemo(() => {
+    if (config.engine === 'kvmem') {
+      const k = kvmem
+      const args: string[] = ['llama-kvmem-server', '-m', quote(config.model_path || '<model.gguf>')]
+      if (config.mmproj_path) args.push('--mmproj', quote(config.mmproj_path))
+      if (basic.ngl_enabled) args.push('-ngl', String(basic.ngl))
+      args.push('--host', config.server.host, '--port', String(config.server.port))
+      args.push('-c', String(k.workspace), '-b', String(k.batch), '--ubatch-size', String(k.batch), '-n', String(k.gen_reserve))
+      args.push('--kvmem-budget', String(k.budget), '--kvmem-gen-reserve', String(k.gen_reserve), '--kvmem-block-tokens', String(k.block_tokens), '--kvmem-query-policy', k.query_policy, '--kvmem-query-replay', 'auto', '--kv-dtype', k.kv_dtype)
+      if (basic.flash_attn) args.push('--flash-attn', 'on')
+      if (k.enable_thinking) args.push('--enable-thinking', '--reasoning-budget', String(k.reasoning_budget))
+      args.push('--spec-type', 'none')
+      if (config.extra_params.trim()) args.push(config.extra_params.trim())
+      return args.join(' ')
+    }
     const args: string[] = ['llama-server', '-m', quote(config.model_path || '<model.gguf>'), '-c', String(basic.ctx_size)]
     if (basic.fit_enabled) args.push('--fit', 'on', '--fit-target', String(basic.fit_target))
     else args.push('-ngl', String(basic.ngl_enabled ? basic.ngl : 0))
@@ -93,7 +109,7 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
     args.push('--host', config.server.host, '--port', String(config.server.port))
     if (config.extra_params.trim()) args.push(config.extra_params.trim())
     return args.join(' ')
-  }, [config, basic, sampling, mtp])
+  }, [config, basic, sampling, mtp, kvmem])
 
   const browseValue = browse ? config[browse.key] : ''
 
@@ -111,6 +127,7 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
 
         <Panel title="模型与运行目录">
           <div className={page.formGrid}>
+            <Field label="推理引擎"><Select value={config.engine} onChange={event => patch('engine', event.target.value as AppConfig['engine'])}><option value="llama.cpp">本地 llama.cpp</option><option value="kvmem">KVMem(KV 缓存虚拟化)</option></Select></Field>
             <Field label="llama.cpp 目录"><div className={page.row}><Input value={config.llama_cpp_dir} onChange={event => patch('llama_cpp_dir', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'llama_cpp_dir', mode: 'folder' })}><FolderOpen size={16}/></Button></div></Field>
             <Field label="GGUF 模型"><div className={page.row}><Input value={config.model_path} onChange={event => patch('model_path', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'model_path', mode: 'file', extension: '.gguf' })}><FolderOpen size={16}/></Button></div></Field>
             <Field label="MMProj"><div className={page.row}><Input value={config.mmproj_path} onChange={event => patch('mmproj_path', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'mmproj_path', mode: 'file', extension: '.gguf' })}><FolderOpen size={16}/></Button></div></Field>
@@ -140,6 +157,23 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
           </div>
           <div className={page.formGrid} style={{ marginTop: 12 }}><NumberField label="Batch" value={basic.batch_size} onChange={batch_size => patchBasic({ batch_size })}/><NumberField label="Micro Batch" value={basic.ubatch_size} onChange={ubatch_size => patchBasic({ ubatch_size })}/></div>
         </Panel>
+
+        {config.engine === 'kvmem' && (
+          <Panel title="KVMem(KV 缓存虚拟化)">
+            <div className={page.formGridThree}>
+              <NumberField label="逻辑工作区" value={kvmem.workspace} onChange={workspace => patchKvmem({ workspace })}/>
+              <NumberField label="GPU 预算" value={kvmem.budget} onChange={budget => patchKvmem({ budget })}/>
+              <NumberField label="生成预留" value={kvmem.gen_reserve} onChange={gen_reserve => patchKvmem({ gen_reserve })}/>
+              <NumberField label="块大小" value={kvmem.block_tokens} onChange={block_tokens => patchKvmem({ block_tokens })}/>
+              <NumberField label="批次" value={kvmem.batch} onChange={batch => patchKvmem({ batch })}/>
+              <Field label="KV 类型"><Select value={kvmem.kv_dtype} onChange={event => patchKvmem({ kv_dtype: event.target.value })}><option>q8_0</option><option>q5_0</option><option>q4_0</option></Select></Field>
+              <Field label="查询策略"><Input value={kvmem.query_policy} onChange={event => patchKvmem({ query_policy: event.target.value })}/></Field>
+              <Field label="思考"><Switch checked={kvmem.enable_thinking} onChange={enable_thinking => patchKvmem({ enable_thinking })} label="开启"/></Field>
+              <NumberField label="推理预算" value={kvmem.reasoning_budget} disabled={!kvmem.enable_thinking} onChange={reasoning_budget => patchKvmem({ reasoning_budget })}/>
+            </div>
+            <p className={page.hint}>-c 是逻辑 KV 工作区，不是显存上限；显存由「GPU 预算 + 生成预留」决定，两者之和不能超过工作区。采样参数在此引擎下走请求级设置。</p>
+          </Panel>
+        )}
 
         <Panel title="采样与 MTP">
           <div className={page.formGridThree}>
