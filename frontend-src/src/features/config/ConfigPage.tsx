@@ -204,7 +204,8 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
         </Panel>
 
         <Panel title="提示词与附加参数">
-          <div className={page.formGrid}><Field label="系统提示词"><Textarea value={config.system_prompt} onChange={event => patch('system_prompt', event.target.value)}/></Field><Field label="附加参数"><Textarea value={config.extra_params} onChange={event => patch('extra_params', event.target.value)}/></Field><Field label="编译命令" className={page.wide}><Textarea value={config.compile.command} onChange={event => patch('compile', { command: event.target.value })}/></Field></div>
+          <div className={page.formGrid}><Field label="系统提示词"><Textarea value={config.system_prompt} onChange={event => patch('system_prompt', event.target.value)}/></Field><Field label="附加参数"><Textarea value={config.extra_params} onChange={event => patch('extra_params', event.target.value)}/></Field></div>
+          <p className={page.hint}>编译命令已移至「维护」页的编译面板。</p>
         </Panel>
       </div>
 

@@ -1,12 +1,12 @@
 import { AlertTriangle, Download, Hammer, RefreshCw, Square } from 'lucide-react'
 import { useState } from 'react'
 import { api } from '../../api'
-import { Button, Field, Input, Panel } from '../../components/ui'
+import { Button, Field, Input, Panel, Textarea } from '../../components/ui'
 import { useWebSocket } from '../../hooks'
 import type { AppConfig } from '../../types'
 import page from '../pages.module.css'
 
-export function MaintenancePage({ config, toast }: { config: AppConfig; toast: (text: string) => void }) {
+export function MaintenancePage({ config, setConfig, toast }: { config: AppConfig; setConfig: (config: AppConfig) => void; toast: (text: string) => void }) {
   const [downloadDir, setDownloadDir] = useState('')
   const [downloadLogs, setDownloadLogs] = useState<string[]>([])
   const [compileLogs, setCompileLogs] = useState<string[]>([])
@@ -35,6 +35,8 @@ export function MaintenancePage({ config, toast }: { config: AppConfig; toast: (
       </Panel>
     </div>
     <Panel title="编译" icon={<Hammer size={15}/>} actions={<div className={page.row}><Button tone="success" disabled={compiling} onClick={() => void compile()}><Hammer size={15}/>开始编译</Button><Button tone="danger" disabled={!compiling} onClick={() => void stopCompile()}><Square size={15}/>停止</Button></div>}>
+      <Field label="编译命令"><Textarea value={config.compile.command} onChange={event => setConfig({ ...config, compile: { ...config.compile, command: event.target.value } })}/></Field>
+      <p className={page.hint}>在当前档案的引擎目录内执行；「开始编译」会先自动保存当前配置。仅对 git 源码检出有意义，预编译包无需编译。</p>
       <pre className={page.log}>{compileLogs.join('\n') || '等待编译任务…'}</pre>
     </Panel>
   </div>

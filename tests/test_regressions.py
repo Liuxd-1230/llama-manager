@@ -172,6 +172,22 @@ class ProfileRegressionTests(unittest.TestCase):
             client = TestClient(app)
             self.assertEqual(client.post("/api/profiles/duplicate", json={"source": "default", "name": "  "}).status_code, 400)
 
+    def test_save_current_config_preserves_profile_name(self):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "CONFIG_DIR", Path(tmp)):
+            client = TestClient(app)
+            base = AppConfig(llama_cpp_dir="C:\\base", model_path="C:\\m.gguf")
+            self.assertEqual(client.post("/api/config/save-as", json={"name": "kvmem-bonsai", "config": base.model_dump()}).status_code, 200)
+            self.assertEqual(client.post("/api/config/load", json={"name": "kvmem-bonsai"}).status_code, 200)
+
+            changed = AppConfig(llama_cpp_dir="C:\\changed", model_path="C:\\m.gguf")
+            self.assertEqual(client.post("/api/config", json=changed.model_dump()).status_code, 200)
+
+            profiles = {p["name"]: p for p in client.get("/api/profiles").json()["profiles"]}
+            self.assertTrue(profiles["kvmem-bonsai"]["is_current"])
+            self.assertNotIn("default", profiles)  # save-current must not create/rename into default
+            saved = (Path(tmp) / "kvmem-bonsai.json").read_text(encoding="utf-8")
+            self.assertIn("C:\\\\changed", saved)
+
 
 def _gguf_kv_string(key: str, value: str) -> bytes:
     raw = value.encode("utf-8")

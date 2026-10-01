@@ -1068,7 +1068,9 @@ def get_config():
 
 @app.post("/api/config")
 def save_config(config: AppConfig):
-    path = cfg.save_config(config)
+    # Save under the current profile name — "save current" must not silently
+    # re-file the config into the default profile (compile flow relies on this).
+    path = cfg.save_config(config, cfg.get_current_name())
     return {"ok": True, "path": str(path)}
 
 

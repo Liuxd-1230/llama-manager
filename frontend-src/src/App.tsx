@@ -87,7 +87,7 @@ function Shell() {
           <Route path="/run" element={<Page title="运行" description="控制 llama-server 并观察实时状态"><RunPage config={config} toast={toast}/></Page>}/>
           <Route path="/evaluation" element={<Page title="评测" description="用真实任务比较模型质量与响应表现"><EvaluationPage toast={toast}/></Page>}/>
           <Route path="/knowledge" element={<Page title="知识库" description="索引本地资料并验证检索引用"><KnowledgePage toast={toast}/></Page>}/>
-          <Route path="/maintenance" element={<Page title="维护" description="下载、更新和编译 llama.cpp"><MaintenancePage config={config} toast={toast}/></Page>}/>
+          <Route path="/maintenance" element={<Page title="维护" description="下载、更新和编译 llama.cpp"><MaintenancePage config={config} setConfig={setConfig} toast={toast}/></Page>}/>
           <Route path="/chat" element={<Page title="对话" description="本地模型与外部 API 的统一流式对话"><ChatPage toast={toast} providerRefresh={providerRefresh}/></Page>}/>
           <Route path="*" element={<Navigate to="/models" replace/>}/>
         </Routes></Suspense>
