@@ -35,9 +35,8 @@ type Profile = {
 
 function errorMessage(reason: unknown) { return reason instanceof Error ? reason.message : String(reason) }
 
-export function ModelsPage({ config, setConfig, dirty, server, toast }: {
+export function ModelsPage({ config, dirty, server, toast }: {
   config: AppConfig
-  setConfig: (config: AppConfig) => void
   dirty: boolean
   server: { state: string; pid?: number; profile?: string }
   toast: (text: string) => void
@@ -58,6 +57,7 @@ export function ModelsPage({ config, setConfig, dirty, server, toast }: {
       queryClient.invalidateQueries({ queryKey: ['profiles'] }),
       queryClient.invalidateQueries({ queryKey: ['server-status'] }),
       queryClient.invalidateQueries({ queryKey: ['config'] }),
+      queryClient.invalidateQueries({ queryKey: ['current-profile'] }),
     ])
   }
 
@@ -85,8 +85,13 @@ export function ModelsPage({ config, setConfig, dirty, server, toast }: {
   }
 
   const edit = async (profile: Profile) => {
-    setConfig(await api<AppConfig>('/api/config/load', { method: 'POST', body: JSON.stringify({ name: profile.name }) }))
-    await queryClient.invalidateQueries({ queryKey: ['config'] })
+    // No local setConfig: server state changed, so invalidate and let the Shell
+    // apply one atomic update — otherwise the dirty flag flashes falsely.
+    await api<AppConfig>('/api/config/load', { method: 'POST', body: JSON.stringify({ name: profile.name }) })
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['config'] }),
+      queryClient.invalidateQueries({ queryKey: ['current-profile'] }),
+    ])
     navigate('/config')
   }
 
@@ -106,8 +111,13 @@ export function ModelsPage({ config, setConfig, dirty, server, toast }: {
     setBusy(profile.name)
     try {
       await api('/api/config/delete', { method: 'POST', body: JSON.stringify({ name: profile.name }) })
-      if (profile.is_current) setConfig(await api<AppConfig>('/api/config/load', { method: 'POST', body: JSON.stringify({ name: 'default' }) }))
-      toast('档案已删除'); await queryClient.invalidateQueries({ queryKey: ['profiles'] })
+      if (profile.is_current) await api<AppConfig>('/api/config/load', { method: 'POST', body: JSON.stringify({ name: 'default' }) })
+      toast('档案已删除')
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['profiles'] }),
+        queryClient.invalidateQueries({ queryKey: ['config'] }),
+        queryClient.invalidateQueries({ queryKey: ['current-profile'] }),
+      ])
     } catch (reason) { toast(`删除失败：${errorMessage(reason)}`) } finally { setBusy('') }
   }
 

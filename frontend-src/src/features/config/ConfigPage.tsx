@@ -14,7 +14,7 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
   const queryClient = useQueryClient()
   const [name, setName] = useState('default')
   const [nameTouched, setNameTouched] = useState(false)
-  const currentNameQuery = useQuery({ queryKey: ['current-profile'], queryFn: () => api<{ name: string }>('/api/profiles/current'), staleTime: 5000 })
+  const currentNameQuery = useQuery({ queryKey: ['current-profile'], queryFn: () => api<{ name: string }>('/api/profiles/current'), staleTime: 0 })
   useEffect(() => { if (!nameTouched && currentNameQuery.data?.name) setName(currentNameQuery.data.name) }, [currentNameQuery.data, nameTouched])
   const [configs, setConfigs] = useState<string[]>([])
   const [browse, setBrowse] = useState<BrowseTarget>(null)
@@ -68,7 +68,7 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
   }
   const load = async (selected: string) => {
     if (!selected) return
-    setConfig(await api<AppConfig>('/api/config/load', { method: 'POST', body: JSON.stringify({ name: selected }) }))
+    await api<AppConfig>('/api/config/load', { method: 'POST', body: JSON.stringify({ name: selected }) })
     setName(selected); setNameTouched(true); toast(`已载入：${selected}`)
     await Promise.all([queryClient.invalidateQueries({ queryKey: ['config'] }), queryClient.invalidateQueries({ queryKey: ['current-profile'] })])
   }

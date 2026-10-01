@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api'
@@ -12,13 +12,14 @@ const mockedApi = vi.mocked(api)
 
 function renderPage(props: Partial<Parameters<typeof ModelsPage>[0]> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <ModelsPage config={defaultConfig} setConfig={() => {}} dirty={false} server={{ state: 'stopped' }} toast={() => {}} {...props} />
+        <ModelsPage config={defaultConfig} dirty={false} server={{ state: 'stopped' }} toast={() => {}} {...props} />
       </MemoryRouter>
     </QueryClientProvider>,
   )
+  return { ...view, client }
 }
 
 const profile = {
@@ -42,7 +43,7 @@ const profile = {
   port: 8080,
 }
 
-afterEach(() => { vi.clearAllMocks() })
+afterEach(() => { cleanup(); vi.clearAllMocks() })
 
 describe('ModelsPage', () => {
   it('shows a retryable error state instead of an empty list when loading fails', async () => {
@@ -71,5 +72,40 @@ describe('ModelsPage', () => {
     mockedApi.mockResolvedValue({ profiles: [{ ...profile, name: 'running-one', is_current: false, is_running: true, model_exists: true }] })
     renderPage()
     expect(await screen.findByRole('button', { name: '停止' })).toBeTruthy()
+  })
+
+  it('edit reloads server-side and invalidates caches without touching the buffer', async () => {
+    const loaded = { ...defaultConfig, model_path: 'E:\\loaded.gguf' }
+    mockedApi.mockImplementation((url: string) => {
+      if (url === '/api/config/load') return Promise.resolve(loaded)
+      if (url === '/api/profiles') return Promise.resolve({ profiles: [{ ...profile, name: 'card', is_current: false, model_exists: true }] })
+      return Promise.resolve({})
+    })
+    const { client } = renderPage({ dirty: false })
+    client.setQueryData(['config'], { ...defaultConfig, model_path: 'seed' })
+    client.setQueryData(['current-profile'], { name: 'old' })
+
+    await screen.findByText('card')
+    await fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    await waitFor(() => expect(mockedApi).toHaveBeenCalledWith('/api/config/load', expect.objectContaining({ method: 'POST' })))
+    await waitFor(() => {
+      expect(client.getQueryState(['config'])?.isInvalidated).toBe(true)
+      expect(client.getQueryState(['current-profile'])?.isInvalidated).toBe(true)
+    })
+  })
+
+  it('removing the current profile falls back to default server-side', async () => {
+    mockedApi.mockImplementation((url: string) => {
+      if (url === '/api/profiles') return Promise.resolve({ profiles: [{ ...profile, name: 'doomed', is_current: true, model_exists: true }] })
+      return Promise.resolve({})
+    })
+    const { client } = renderPage({ dirty: false })
+    client.setQueryData(['config'], { ...defaultConfig })
+
+    await screen.findByText('doomed')
+    await fireEvent.click(screen.getByRole('button', { name: '删除' }))
+    await fireEvent.click(await screen.findByRole('button', { name: '确认删除?' }))
+    await waitFor(() => expect(mockedApi).toHaveBeenCalledWith('/api/config/load', expect.objectContaining({ method: 'POST' })))
+    await waitFor(() => expect(client.getQueryState(['config'])?.isInvalidated).toBe(true))
   })
 })
