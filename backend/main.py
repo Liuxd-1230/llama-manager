@@ -238,11 +238,11 @@ def _local_chat_payload(data: dict, config: AppConfig, messages: list[dict]) -> 
         "top_k": sampling.top_k,
         "top_p": sampling.top_p,
     }
-    # Only an explicit OFF is sent: it must reliably suppress thinking (otherwise
-    # a reasoning model eats the whole small max_tokens budget). An ON defers to
-    # the server-side default so servers launched without --jinja keep working.
-    if data.get("thinking_enabled") is False:
-        payload["chat_template_kwargs"] = {"enable_thinking": False}
+    # Explicit per-request override for local engines. Safe to send unconditionally:
+    # --jinja servers honor enable_thinking; servers on the legacy formatting path
+    # (no --jinja) parse and ignore the kwarg.
+    if data.get("thinking_enabled") is not None:
+        payload["chat_template_kwargs"] = {"enable_thinking": bool(data.get("thinking_enabled"))}
     if sampling.min_p_enabled:
         payload["min_p"] = sampling.min_p
     if sampling.repeat_penalty_enabled:

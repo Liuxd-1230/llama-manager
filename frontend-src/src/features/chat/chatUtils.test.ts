@@ -21,6 +21,7 @@ describe('SseParser', () => {
 describe('chat provider helpers', () => {
   it('uses provider kind for custom DeepSeek thinking support', () => {
     expect(supportsThinking({ id: 'custom-ds', name: 'DS', kind: 'deepseek' } as Provider)).toBe(true)
+    expect(supportsThinking({ id: 'local-1', name: 'Local', kind: 'local' } as Provider)).toBe(true)
     expect(supportsThinking({ id: 'deepseek-name-only', name: 'DS', kind: 'openai_compatible' } as Provider)).toBe(false)
   })
 

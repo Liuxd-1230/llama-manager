@@ -269,14 +269,15 @@ class KvmemCommandTests(unittest.TestCase):
 
 
 class LocalPayloadThinkingTests(unittest.TestCase):
-    def test_explicit_thinking_off_is_sent_as_template_override(self):
-        payload = _local_chat_payload({"thinking_enabled": False}, AppConfig(model_path="C:\\m.gguf"), [])
-        self.assertEqual(payload["chat_template_kwargs"], {"enable_thinking": False})
+    def test_thinking_toggle_maps_to_template_kwargs_symmetrically(self):
+        off = _local_chat_payload({"thinking_enabled": False}, AppConfig(model_path="C:\\m.gguf"), [])
+        self.assertEqual(off["chat_template_kwargs"], {"enable_thinking": False})
+        on = _local_chat_payload({"thinking_enabled": True}, AppConfig(model_path="C:\\m.gguf"), [])
+        self.assertEqual(on["chat_template_kwargs"], {"enable_thinking": True})
 
-    def test_thinking_on_or_absent_defers_to_server_default(self):
-        for data in ({"thinking_enabled": True}, {}):
-            payload = _local_chat_payload(data, AppConfig(model_path="C:\\m.gguf"), [])
-            self.assertNotIn("chat_template_kwargs", payload)
+    def test_absent_thinking_field_defers_to_server_default(self):
+        payload = _local_chat_payload({}, AppConfig(model_path="C:\\m.gguf"), [])
+        self.assertNotIn("chat_template_kwargs", payload)
 
 
 class DetectEndpointTests(unittest.TestCase):
