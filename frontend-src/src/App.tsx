@@ -56,8 +56,11 @@ function Shell() {
   const savedConfig = useRef('')
   useEffect(() => {
     if (!configQuery.data) return
-    savedConfig.current = JSON.stringify(configQuery.data)
-    setConfig(configQuery.data)
+    // Normalize against version skew: an older backend omits newer fields and
+    // a crashed render on undefined is worse than a stale empty string.
+    const data = { ...configQuery.data, chat_template_file: configQuery.data.chat_template_file ?? '' }
+    savedConfig.current = JSON.stringify(data)
+    setConfig(data)
   }, [configQuery.data])
   useEffect(() => { if (configQuery.isError) toast(`读取配置失败：${(configQuery.error as Error).message}`) }, [configQuery.isError, configQuery.error, toast])
   // Dirty = the local editor buffer differs from the last server-saved snapshot.
