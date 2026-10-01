@@ -31,12 +31,36 @@ def get_current_name() -> str:
     return _current_name
 
 
+def _current_file() -> Path:
+    """Where the last-used profile name persists across restarts."""
+    return CONFIG_DIR / ".current"
+
+
+def _persist_current() -> None:
+    try:
+        _current_file().write_text(_current_name, encoding="utf-8")
+    except OSError:
+        pass
+
+
+def initial_profile_name() -> str:
+    """Profile to load at startup: the last used one, falling back to default."""
+    try:
+        name = _current_file().read_text(encoding="utf-8").strip()
+    except OSError:
+        return "default"
+    if name and (CONFIG_DIR / f"{_sanitize_name(name)}.json").exists():
+        return name
+    return "default"
+
+
 def save_config(config: AppConfig, name: str = "default") -> Path:
     global _current_config, _current_name
     _current_config = config
     _current_name = _sanitize_name(name)
     path = CONFIG_DIR / f"{_current_name}.json"
     path.write_text(json.dumps(config.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
+    _persist_current()
     return path
 
 
@@ -48,6 +72,7 @@ def load_config(name: str = "default") -> AppConfig:
         data = json.loads(path.read_text(encoding="utf-8"))
         _current_config = AppConfig(**data)
         _current_name = name
+        _persist_current()
     return _current_config
 
 

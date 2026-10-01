@@ -167,6 +167,21 @@ class ProfileRegressionTests(unittest.TestCase):
             self.assertEqual(client.post("/api/profiles/launch", json={"name": "ghost"}).status_code, 404)
             self.assertEqual(client.post("/api/profiles/duplicate", json={"source": "ghost", "name": "x"}).status_code, 404)
 
+    def test_set_current_and_startup_persistence(self):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "CONFIG_DIR", Path(tmp)):
+            client = TestClient(app)
+            cfg.save_config(AppConfig(llama_cpp_dir="C:/a"), name="default")
+            cfg.save_config(AppConfig(llama_cpp_dir="C:/b"), name="qwen")
+            self.assertEqual(client.get("/api/profiles/current").json()["name"], "qwen")  # saving makes it current
+            self.assertEqual(client.post("/api/profiles/set-current", json={"name": "default"}).status_code, 200)
+            self.assertEqual(client.get("/api/profiles/current").json()["name"], "default")
+            self.assertEqual(client.post("/api/profiles/set-current", json={"name": "qwen"}).status_code, 200)
+            self.assertEqual(client.get("/api/profiles/current").json()["name"], "qwen")
+            self.assertEqual(client.post("/api/profiles/set-current", json={"name": "ghost"}).status_code, 404)
+            self.assertEqual(client.post("/api/profiles/set-current", json={"name": ""}).status_code, 400)
+            # the choice survives a restart
+            self.assertEqual(cfg.initial_profile_name(), "qwen")
+
     def test_duplicate_rejects_empty_name(self):
         with TemporaryDirectory() as tmp, patch.object(cfg, "CONFIG_DIR", Path(tmp)):
             client = TestClient(app)

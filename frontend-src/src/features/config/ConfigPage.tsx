@@ -13,6 +13,9 @@ type BrowseTarget = { key: 'llama_cpp_dir' | 'model_path' | 'mmproj_path' | 'cha
 export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; setConfig: (config: AppConfig) => void; toast: (text: string) => void }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState('default')
+  const [nameTouched, setNameTouched] = useState(false)
+  const currentNameQuery = useQuery({ queryKey: ['current-profile'], queryFn: () => api<{ name: string }>('/api/profiles/current'), staleTime: 5000 })
+  useEffect(() => { if (!nameTouched && currentNameQuery.data?.name) setName(currentNameQuery.data.name) }, [currentNameQuery.data, nameTouched])
   const [configs, setConfigs] = useState<string[]>([])
   const [browse, setBrowse] = useState<BrowseTarget>(null)
   const [importOpen, setImportOpen] = useState(false)
@@ -61,13 +64,13 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
   const save = async () => {
     await api('/api/config/save-as', { method: 'POST', body: JSON.stringify({ name: name || 'default', config }) })
     toast(`配置已保存：${name || 'default'}`); await refreshNames()
-    await queryClient.invalidateQueries({ queryKey: ['config'] })
+    await Promise.all([queryClient.invalidateQueries({ queryKey: ['config'] }), queryClient.invalidateQueries({ queryKey: ['current-profile'] }), queryClient.invalidateQueries({ queryKey: ['profiles'] })])
   }
   const load = async (selected: string) => {
     if (!selected) return
     setConfig(await api<AppConfig>('/api/config/load', { method: 'POST', body: JSON.stringify({ name: selected }) }))
-    setName(selected); toast(`已载入：${selected}`)
-    await queryClient.invalidateQueries({ queryKey: ['config'] })
+    setName(selected); setNameTouched(true); toast(`已载入：${selected}`)
+    await Promise.all([queryClient.invalidateQueries({ queryKey: ['config'] }), queryClient.invalidateQueries({ queryKey: ['current-profile'] })])
   }
   const remove = async () => {
     if (!name || name === 'default') return toast('默认配置不能删除')
@@ -145,7 +148,7 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
       <div className={page.stack}>
         <Panel title="配置文件" actions={<div className={page.row}><Button size="small" onClick={exportConfig}><Upload size={14}/>导出</Button><Button size="small" onClick={() => importRef.current?.click()}><Download size={14}/>导入</Button></div>}>
           <div className={page.formGridThree}>
-            <Field label="配置名称"><Input value={name} onChange={event => setName(event.target.value)} /></Field>
+            <Field label="配置名称"><Input value={name} onChange={event => { setName(event.target.value); setNameTouched(true) }} /></Field>
             <Field label="已保存配置"><Select value={configs.includes(name) ? name : ''} onChange={event => void load(event.target.value)}><option value="">选择配置</option>{configs.map(item => <option key={item}>{item}</option>)}</Select></Field>
             <div className={page.row} style={{ alignSelf: 'end' }}><Button tone="primary" onClick={() => void save()}><Save size={15}/>保存</Button><Button tone="danger" onClick={() => void remove()}><Trash2 size={15}/>删除</Button></div>
           </div>

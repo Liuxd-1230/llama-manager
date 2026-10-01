@@ -1044,6 +1044,60 @@
         }
       }
     },
+    "/api/profiles/current": {
+      "get": {
+        "summary": "Current Profile",
+        "operationId": "current_profile_api_profiles_current_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profiles/set-current": {
+      "post": {
+        "summary": "Set Current Profile",
+        "operationId": "set_current_profile_api_profiles_set_current_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/profiles/duplicate": {
       "post": {
         "summary": "Duplicate Profile",

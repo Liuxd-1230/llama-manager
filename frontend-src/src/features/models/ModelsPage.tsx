@@ -1,4 +1,4 @@
-import { Copy, ExternalLink, PackageOpen, Pencil, Play, Plus, Square, Trash2 } from 'lucide-react'
+import { Copy, ExternalLink, PackageOpen, Pencil, Pin, Play, Plus, Square, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -75,6 +75,15 @@ export function ModelsPage({ config, setConfig, dirty, server, toast }: {
     try { await api('/api/server/stop', { method: 'POST' }); toast('服务已停止'); await afterServerAction() } catch (reason) { toast(`停止失败：${errorMessage(reason)}`) } finally { setBusy('') }
   }
 
+  const setCurrent = async (profile: Profile) => {
+    setBusy(profile.name)
+    try {
+      await api('/api/profiles/set-current', { method: 'POST', body: JSON.stringify({ name: profile.name }) })
+      toast(`当前档案：${profile.name}`)
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ['profiles'] }), queryClient.invalidateQueries({ queryKey: ['config'] }), queryClient.invalidateQueries({ queryKey: ['current-profile'] })])
+    } catch (reason) { toast(`设置失败：${errorMessage(reason)}`) } finally { setBusy('') }
+  }
+
   const edit = async (profile: Profile) => {
     setConfig(await api<AppConfig>('/api/config/load', { method: 'POST', body: JSON.stringify({ name: profile.name }) }))
     await queryClient.invalidateQueries({ queryKey: ['config'] })
@@ -122,12 +131,12 @@ export function ModelsPage({ config, setConfig, dirty, server, toast }: {
     {profilesQuery.isPending && !profilesQuery.isError && <Panel><p className={page.hint}>正在加载档案…</p></Panel>}
     {profilesQuery.isSuccess && profiles.length === 0 && <Panel><p className={page.hint}><PackageOpen size={14} style={{ verticalAlign: -2 }}/> 还没有档案。在「配置」页填写模型与参数后保存，或点击右上角「新建档案」。</p></Panel>}
     {profilesQuery.isSuccess && profiles.length > 0 && <div className={styles.grid}>
-      {profiles.map(profile => <ProfileCard key={profile.name} profile={profile} busy={busy === profile.name} stopping={busy === '__stop__'} serverRunning={serverRunning} dirty={dirty} onLaunch={() => void launch(profile)} onStop={() => void stop()} onEdit={() => void edit(profile)} onDuplicate={() => void duplicate(profile)} onRemove={() => void remove(profile)} />)}
+      {profiles.map(profile => <ProfileCard key={profile.name} profile={profile} busy={busy === profile.name} stopping={busy === '__stop__'} serverRunning={serverRunning} dirty={dirty} onLaunch={() => void launch(profile)} onStop={() => void stop()} onEdit={() => void edit(profile)} onSetCurrent={() => void setCurrent(profile)} onDuplicate={() => void duplicate(profile)} onRemove={() => void remove(profile)} />)}
     </div>}
   </>
 }
 
-function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, onStop, onEdit, onDuplicate, onRemove }: {
+function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, onStop, onEdit, onSetCurrent, onDuplicate, onRemove }: {
   profile: Profile
   busy: boolean
   stopping: boolean
@@ -136,6 +145,7 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
   onLaunch: () => void
   onStop: () => void
   onEdit: () => void
+  onSetCurrent: () => void
   onDuplicate: () => void
   onRemove: () => void
 }) {
@@ -166,6 +176,7 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
       <div className={page.row}>
         <ConfirmButton size="small" confirm={dirty} confirmLabel="丢弃修改?" title="编辑参数" onConfirm={onEdit}><Pencil size={14}/>编辑</ConfirmButton>
         <Button size="small" disabled={busy} onClick={onDuplicate}><Copy size={14}/>复制</Button>
+        {!profile.is_current && <ConfirmButton size="small" confirm={dirty} confirmLabel="丢弃修改?" title="设为当前档案（不启动）" onConfirm={onSetCurrent}><Pin size={14}/>设为当前</ConfirmButton>}
         <ConfirmButton size="small" tone="danger" disabled={profile.is_running || profile.name === 'default'} confirmLabel="确认删除?" onConfirm={onRemove}><Trash2 size={14}/>删除</ConfirmButton>
       </div>
     }>

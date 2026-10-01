@@ -40,7 +40,7 @@ async def lifespan(application: FastAPI):
     evaluation = EvaluationService(database, client)
     jobs.register("noop", noop_handler)
     jobs.register("evaluation", evaluation.run_job)
-    cfg.load_config("default")
+    cfg.load_config(cfg.initial_profile_name())
     application.state.db = database
     application.state.http_client = client
     application.state.jobs = jobs
@@ -1161,6 +1161,23 @@ def _profile_summary(name: str, profile: AppConfig) -> dict:
         "host": profile.server.host,
         "port": profile.server.port,
     }
+
+
+@app.get("/api/profiles/current")
+def current_profile():
+    return {"name": cfg.get_current_name()}
+
+
+@app.post("/api/profiles/set-current")
+def set_current_profile(body: dict):
+    raw_name = str(body.get("name", "")).strip()
+    name = cfg._sanitize_name(raw_name)
+    if not raw_name:
+        return JSONResponse(status_code=400, content={"error": "Profile name is required"})
+    if cfg.read_config(name) is None:
+        return JSONResponse(status_code=404, content={"error": f"Profile not found: {name}"})
+    cfg.load_config(name)
+    return {"ok": True, "name": name}
 
 
 @app.post("/api/profiles/duplicate")
