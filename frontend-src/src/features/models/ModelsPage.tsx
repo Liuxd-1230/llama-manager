@@ -85,10 +85,11 @@ export function ModelsPage({ config, setConfig, dirty, server, toast }: {
     const taken = new Set(profiles.map(item => item.name))
     let name = `${profile.name}-copy`
     for (let index = 2; taken.has(name); index += 1) name = `${profile.name}-copy${index}`
+    setBusy(profile.name)
     try {
       await api('/api/profiles/duplicate', { method: 'POST', body: JSON.stringify({ source: profile.name, name }) })
       toast(`已复制为：${name}`); await queryClient.invalidateQueries({ queryKey: ['profiles'] })
-    } catch (reason) { toast(`复制失败：${errorMessage(reason)}`) }
+    } catch (reason) { toast(`复制失败：${errorMessage(reason)}`) } finally { setBusy('') }
   }
 
   const remove = async (profile: Profile) => {
@@ -164,7 +165,7 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
     <Panel className={profile.is_running ? styles.cardRunning : ''} title={<span className={styles.titleRow}><span className={styles.titleName}>{profile.name}</span>{profile.is_running && <Badge tone="good">运行中</Badge>}{profile.is_current && !profile.is_running && <Badge>当前</Badge>}</span>} actions={
       <div className={page.row}>
         <ConfirmButton size="small" confirm={dirty} confirmLabel="丢弃修改?" title="编辑参数" onConfirm={onEdit}><Pencil size={14}/>编辑</ConfirmButton>
-        <Button size="small" onClick={onDuplicate}><Copy size={14}/>复制</Button>
+        <Button size="small" disabled={busy} onClick={onDuplicate}><Copy size={14}/>复制</Button>
         <ConfirmButton size="small" tone="danger" disabled={profile.is_running || profile.name === 'default'} confirmLabel="确认删除?" onConfirm={onRemove}><Trash2 size={14}/>删除</ConfirmButton>
       </div>
     }>

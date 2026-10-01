@@ -182,7 +182,16 @@ class ProcessManager:
             cmd += ["--flash-attn", "on"]
         if k.enable_thinking:
             cmd += ["--enable-thinking", "--reasoning-budget", str(k.reasoning_budget)]
-        cmd += ["--spec-type", "none"]
+        if config.mtp.enabled:
+            # Experimental: requires a model with a merged MTP head (prism.3 flow).
+            cmd += [
+                "--spec-type", "draft-mtp",
+                "--spec-draft-n-max", str(max(1, config.mtp.draft_n_max)),
+                "--spec-kv-dtype", "f16",
+                "--kvmem-mtp-state", "snapshots",
+            ]
+        else:
+            cmd += ["--spec-type", "none"]
 
         if config.extra_params.strip():
             try:

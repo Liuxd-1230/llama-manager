@@ -91,4 +91,55 @@ describe('applyLaunchCommand', () => {
     expect(config.server.mode).toBe('lan')
     expect(config.server.port).toBe(9090)
   })
+
+  it('detects a kvmem command and fills the kvmem fields', () => {
+    const text = [
+      'llama-kvmem-server.exe',
+      '-m "E:\\models\\bonsai.gguf"',
+      '-ngl 99',
+      '--host 127.0.0.1',
+      '--port 18203',
+      '-c 131072',
+      '-b 128',
+      '--ubatch-size 128',
+      '-n 10240',
+      '--kvmem-budget 24576',
+      '--kvmem-gen-reserve 10240',
+      '--kvmem-block-tokens 128',
+      '--kv-dtype q8_0',
+      '--kvmem-query-policy user',
+      '--kvmem-query-replay auto',
+      '--flash-attn on',
+      '--spec-type none',
+    ].join(' ')
+    const { config, unknown, applied } = applyLaunchCommand(defaultConfig, text)
+    expect(config.engine).toBe('kvmem')
+    expect(config.kvmem.workspace).toBe(131072)
+    expect(config.kvmem.batch).toBe(128)
+    expect(config.kvmem.gen_reserve).toBe(10240)
+    expect(config.kvmem.budget).toBe(24576)
+    expect(config.kvmem.block_tokens).toBe(128)
+    expect(config.kvmem.kv_dtype).toBe('q8_0')
+    expect(config.kvmem.query_policy).toBe('user')
+    expect(config.basic.flash_attn).toBe(true)
+    expect(config.mtp.enabled).toBe(false)
+    expect(config.server.port).toBe(18203)
+    expect(unknown).toEqual([])
+    expect(applied).toBeGreaterThan(10)
+  })
+
+  it('imports kvmem mtp flags and keeps llama.cpp -n in extra_params', () => {
+    const kvm = applyLaunchCommand(defaultConfig, 'llama-kvmem-server --spec-type draft-mtp --spec-draft-n-max 1 --spec-kv-dtype f16 --kvmem-mtp-state snapshots --enable-thinking --reasoning-budget 4096')
+    expect(kvm.config.engine).toBe('kvmem')
+    expect(kvm.config.mtp.enabled).toBe(true)
+    expect(kvm.config.mtp.draft_n_max).toBe(1)
+    expect(kvm.config.kvmem.enable_thinking).toBe(true)
+    expect(kvm.config.kvmem.reasoning_budget).toBe(4096)
+    expect(kvm.unknown).toEqual([])
+
+    const llamacpp = applyLaunchCommand(defaultConfig, 'llama-server -m a.gguf -n 512')
+    expect(llamacpp.config.engine).toBe('llama.cpp')
+    expect(llamacpp.unknown).toEqual(['-n 512'])
+    expect(llamacpp.config.extra_params).toContain('-n 512')
+  })
 })

@@ -29,6 +29,24 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
   const patchMtp = (value: Partial<AppConfig['mtp']>) => patch('mtp', { ...mtp, ...value })
   const patchKvmem = (value: Partial<AppConfig['kvmem']>) => patch('kvmem', { ...kvmem, ...value })
   const isKvmem = config.engine === 'kvmem'
+  // Engine switches carry the context number across (ctx ↔ workspace) and keep
+  // the kvmem trio valid: budget+reserve must stay ≤ workspace, snapped to 128.
+  const switchEngine = (engine: AppConfig['engine']) => {
+    if (engine === config.engine) return
+    if (engine === 'kvmem') {
+      const workspace = Math.max(1024, basic.ctx_size || kvmem.workspace)
+      let { budget, gen_reserve } = kvmem
+      if (budget + gen_reserve > workspace) {
+        const scale = workspace / (budget + gen_reserve)
+        budget = Math.max(128, Math.floor((budget * scale) / 128) * 128)
+        gen_reserve = Math.max(128, Math.floor((gen_reserve * scale) / 128) * 128)
+        if (budget + gen_reserve > workspace) gen_reserve = Math.max(128, workspace - budget)
+      }
+      setConfig({ ...config, engine, kvmem: { ...kvmem, workspace, budget, gen_reserve } })
+    } else {
+      setConfig({ ...config, engine, basic: { ...basic, ctx_size: kvmem.workspace } })
+    }
+  }
   const detectQuery = useQuery({
     queryKey: ['detect-binary', config.engine, config.llama_cpp_dir],
     queryFn: () => api<{ found: boolean; path: string }>(`/api/detect-server?llama_cpp_dir=${encodeURIComponent(config.llama_cpp_dir)}&engine=${config.engine}`),
@@ -134,7 +152,7 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
 
         <Panel title="模型与运行目录">
           <div className={page.formGrid}>
-            <Field label="推理引擎"><Select value={config.engine} onChange={event => patch('engine', event.target.value as AppConfig['engine'])}><option value="llama.cpp">本地 llama.cpp</option><option value="kvmem">KVMem(KV 缓存虚拟化)</option></Select></Field>
+            <Field label="推理引擎"><Select value={config.engine} onChange={event => switchEngine(event.target.value as AppConfig['engine'])}><option value="llama.cpp">本地 llama.cpp</option><option value="kvmem">KVMem(KV 缓存虚拟化)</option></Select></Field>
             <Field label="引擎目录"><div className={page.row}><Input value={config.llama_cpp_dir} onChange={event => patch('llama_cpp_dir', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'llama_cpp_dir', mode: 'folder' })}><FolderOpen size={16}/></Button></div></Field>
             <Field label="GGUF 模型"><div className={page.row}><Input value={config.model_path} onChange={event => patch('model_path', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'model_path', mode: 'file', extension: '.gguf' })}><FolderOpen size={16}/></Button></div></Field>
             <Field label="MMProj"><div className={page.row}><Input value={config.mmproj_path} onChange={event => patch('mmproj_path', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'mmproj_path', mode: 'file', extension: '.gguf' })}><FolderOpen size={16}/></Button></div></Field>
@@ -185,7 +203,7 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
           </Panel>
         )}
 
-        <Panel title={isKvmem ? '采样(MTP 仅 llama.cpp 引擎)' : '采样与 MTP'}>
+        <Panel title={isKvmem ? '采样与 MTP(实验)' : '采样与 MTP'}>
           <div className={page.formGridThree}>
             <NumberField label="温度" value={sampling.temperature} step="0.05" onChange={temperature => patchSampling({ temperature })}/>
             <NumberField label="Top-K" value={sampling.top_k} onChange={top_k => patchSampling({ top_k })}/>
@@ -194,13 +212,14 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
             <OptionalNumber label="重复惩罚" enabled={sampling.repeat_penalty_enabled} value={sampling.repeat_penalty} step="0.05" onEnabled={repeat_penalty_enabled => patchSampling({ repeat_penalty_enabled })} onChange={repeat_penalty => patchSampling({ repeat_penalty })}/>
             <OptionalNumber label="存在惩罚" enabled={sampling.presence_penalty_enabled} value={sampling.presence_penalty} step="0.1" onEnabled={presence_penalty_enabled => patchSampling({ presence_penalty_enabled })} onChange={presence_penalty => patchSampling({ presence_penalty })}/>
           </div>
-          {!isKvmem && <div className={page.formGridThree} style={{ marginTop: 14 }}>
+          <div className={page.formGridThree} style={{ marginTop: 14 }}>
             <Field label="MTP"><Switch checked={mtp.enabled} onChange={enabled => patchMtp({ enabled })} label="启用投机解码"/></Field>
             <NumberField label="最大草稿 Token" value={mtp.draft_n_max} disabled={!mtp.enabled} onChange={draft_n_max => patchMtp({ draft_n_max })}/>
-            <NumberField label="最小草稿 Token" value={mtp.draft_n_min} disabled={!mtp.enabled} onChange={draft_n_min => patchMtp({ draft_n_min })}/>
-            <NumberField label="P Min" value={mtp.p_min} step="0.01" disabled={!mtp.enabled} onChange={p_min => patchMtp({ p_min })}/>
-            <NumberField label="P Split" value={mtp.p_split} step="0.01" disabled={!mtp.enabled} onChange={p_split => patchMtp({ p_split })}/>
-          </div>}
+            {!isKvmem && <NumberField label="最小草稿 Token" value={mtp.draft_n_min} disabled={!mtp.enabled} onChange={draft_n_min => patchMtp({ draft_n_min })}/>}
+            {!isKvmem && <NumberField label="P Min" value={mtp.p_min} step="0.01" disabled={!mtp.enabled} onChange={p_min => patchMtp({ p_min })}/>}
+            {!isKvmem && <NumberField label="P Split" value={mtp.p_split} step="0.01" disabled={!mtp.enabled} onChange={p_split => patchMtp({ p_split })}/>}
+          </div>
+          {isKvmem && <p className={page.hint}>实验性:需要已合并 MTP 头的模型(见 KVMem prism.3 说明);最小草稿与 P 阈值仅 llama.cpp 引擎使用。</p>}
         </Panel>
 
         <Panel title="提示词与附加参数">

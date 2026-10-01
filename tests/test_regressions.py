@@ -278,6 +278,24 @@ class KvmemCommandTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             process_manager.build_command(config)
 
+    def test_kvmem_mtp_flags_and_default_off(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            (bin_dir / "llama-kvmem-server.exe").write_text("", encoding="utf-8")
+            base = AppConfig(llama_cpp_dir=str(root), model_path="E:\\m.gguf", engine="kvmem")
+            command = process_manager.build_command(base)
+            self.assertIn("none", command[command.index("--spec-type") + 1])
+
+            base.mtp.enabled = True
+            base.mtp.draft_n_max = 2
+            command = process_manager.build_command(base)
+            self.assertEqual(command[command.index("--spec-type") + 1], "draft-mtp")
+            self.assertEqual(command[command.index("--spec-draft-n-max") + 1], "2")
+            self.assertEqual(command[command.index("--spec-kv-dtype") + 1], "f16")
+            self.assertEqual(command[command.index("--kvmem-mtp-state") + 1], "snapshots")
+
     def test_kvmem_binary_missing_fails_cleanly(self):
         config = AppConfig(engine="kvmem", llama_cpp_dir="C:\\definitely-not-here")
         with self.assertRaises(FileNotFoundError):
