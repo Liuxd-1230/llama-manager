@@ -5,6 +5,7 @@ import shlex
 import time
 import sys
 import os
+from pathlib import Path
 from typing import Optional, List, Any
 from .models import AppConfig, ServerStatus
 from .config_manager import detect_server_binary, detect_kvmem_binary
@@ -128,6 +129,9 @@ class ProcessManager:
         srv = config.server
         cmd += ["--host", srv.host, "--port", str(srv.port)]
 
+        if config.chat_template_file.strip():
+            cmd += ["--chat-template-file", config.chat_template_file.strip()]
+
         # MTP speculative decoding
         mtp = config.mtp
         if mtp.enabled:
@@ -178,10 +182,18 @@ class ProcessManager:
             "--kvmem-query-replay", "auto",
             "--kv-dtype", k.kv_dtype,
         ]
+        # Serve the package's built-in WebUI when present (prism/rc packages).
+        for base in (Path(server_bin).parent.parent, Path(server_bin).parent):
+            ui_dir = base / "share" / "kvmem" / "ui"
+            if ui_dir.is_dir():
+                cmd += ["--ui-dir", str(ui_dir), "--webui"]
+                break
         if config.basic.flash_attn:
             cmd += ["--flash-attn", "on"]
         if k.enable_thinking:
             cmd += ["--enable-thinking", "--reasoning-budget", str(k.reasoning_budget)]
+        if config.chat_template_file.strip():
+            cmd += ["--chat-template-file", config.chat_template_file.strip()]
         if config.mtp.enabled:
             # Experimental: requires a model with a merged MTP head (prism.3 flow).
             cmd += [

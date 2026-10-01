@@ -8,7 +8,7 @@ import type { AppConfig } from '../../types'
 import { applyLaunchCommand } from './commandImport'
 import page from '../pages.module.css'
 
-type BrowseTarget = { key: 'llama_cpp_dir' | 'model_path' | 'mmproj_path'; mode: 'folder' | 'file'; extension?: string } | null
+type BrowseTarget = { key: 'llama_cpp_dir' | 'model_path' | 'mmproj_path' | 'chat_template_file'; mode: 'folder' | 'file'; extension?: string } | null
 
 export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; setConfig: (config: AppConfig) => void; toast: (text: string) => void }) {
   const queryClient = useQueryClient()
@@ -107,6 +107,7 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
       args.push('--kvmem-budget', String(k.budget), '--kvmem-gen-reserve', String(k.gen_reserve), '--kvmem-block-tokens', String(k.block_tokens), '--kvmem-query-policy', k.query_policy, '--kvmem-query-replay', 'auto', '--kv-dtype', k.kv_dtype)
       if (basic.flash_attn) args.push('--flash-attn', 'on')
       if (k.enable_thinking) args.push('--enable-thinking', '--reasoning-budget', String(k.reasoning_budget))
+      if (config.chat_template_file.trim()) args.push('--chat-template-file', quote(config.chat_template_file.trim()))
       args.push('--spec-type', 'none')
       if (config.extra_params.trim()) args.push(config.extra_params.trim())
       return args.join(' ')
@@ -132,6 +133,7 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
     if (sampling.presence_penalty_enabled) args.push('--presence-penalty', String(sampling.presence_penalty))
     if (mtp.enabled) args.push('--spec-type', mtp.spec_type, '--spec-draft-n-max', String(mtp.draft_n_max))
     args.push('--host', config.server.host, '--port', String(config.server.port))
+    if (config.chat_template_file.trim()) args.push('--chat-template-file', quote(config.chat_template_file.trim()))
     if (config.extra_params.trim()) args.push(config.extra_params.trim())
     return args.join(' ')
   }, [config, basic, sampling, mtp, kvmem])
@@ -224,6 +226,7 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
 
         <Panel title="提示词与附加参数">
           <div className={page.formGrid}><Field label="系统提示词"><Textarea value={config.system_prompt} onChange={event => patch('system_prompt', event.target.value)}/></Field><Field label="附加参数"><Textarea value={config.extra_params} onChange={event => patch('extra_params', event.target.value)}/></Field></div>
+          <Field label="聊天模板文件（可选，--chat-template-file）" className={page.wide}><div className={page.row}><Input value={config.chat_template_file} onChange={event => patch('chat_template_file', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'chat_template_file', mode: 'file' })}><FolderOpen size={16}/></Button></div></Field>
           <p className={page.hint}>编译命令已移至「维护」页的编译面板。</p>
         </Panel>
       </div>

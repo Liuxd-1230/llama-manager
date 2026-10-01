@@ -1,10 +1,11 @@
 export type Theme = 'light' | 'dark'
-export type PageId = 'models' | 'config' | 'run' | 'evaluation' | 'knowledge' | 'maintenance' | 'chat'
+export type PageId = 'models' | 'config' | 'run' | 'evaluation' | 'maintenance' | 'chat'
 
 export interface AppConfig {
   llama_cpp_dir: string
   model_path: string
   mmproj_path: string
+  chat_template_file: string
   basic: {
     ctx_size: number
     ngl_enabled: boolean
@@ -118,8 +119,6 @@ export interface JobRecord { id: string; kind: string; status: JobStatus; payloa
 export interface DatasetSummary { id: string; name: string; description: string; builtin: number; case_count: number; updated_at: number }
 export interface DatasetCase { id: string; prompt: string; expected: string; evaluator: Record<string, unknown>; metadata: Record<string, unknown>; position: number }
 export interface Experiment { id: string; name: string; dataset_id?: string; provider_id: string; model: string; status: string; metrics: Record<string, number>; config: Record<string, unknown>; created_at: number }
-export interface KnowledgeBase { id: string; name: string; description: string; source_count: number; chunk_count: number; last_sync_at?: number; sources?: KnowledgeSource[] }
-export interface KnowledgeSource { id: string; knowledge_base_id: string; path: string; kind: 'file' | 'directory'; status: string; file_count: number; updated_at: number }
 
 export const defaultConfig: AppConfig = {
   llama_cpp_dir: '', model_path: '', mmproj_path: '',
@@ -137,6 +136,7 @@ export const defaultConfig: AppConfig = {
   },
   mtp: { enabled: false, spec_type: 'draft-mtp', draft_n_max: 3, draft_n_min: 0, p_min: 0, p_split: .1 },
   engine: 'llama.cpp',
+  chat_template_file: '',
   kvmem: { workspace: 131072, budget: 24576, gen_reserve: 10240, block_tokens: 128, batch: 128, kv_dtype: 'q8_0', query_policy: 'user', enable_thinking: false, reasoning_budget: 4096 },
   system_prompt: '', extra_params: '',
   server: { host: '127.0.0.1', port: 8080, mode: 'local' },

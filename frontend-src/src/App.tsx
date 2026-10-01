@@ -1,4 +1,4 @@
-import { Activity, Bot, BookOpen, Boxes, ClipboardCheck, Gauge, ListTodo, Moon, Settings, SlidersHorizontal, Sun, Wrench, Zap } from 'lucide-react'
+import { Activity, Bot, Boxes, ClipboardCheck, Gauge, ListTodo, Moon, Settings, SlidersHorizontal, Sun, Wrench, Zap } from 'lucide-react'
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, useReducedMotion } from 'motion/react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -16,7 +16,6 @@ const nav = [
   { id: 'config', label: '配置', icon: SlidersHorizontal },
   { id: 'run', label: '运行', icon: Activity },
   { id: 'evaluation', label: '评测', icon: ClipboardCheck },
-  { id: 'knowledge', label: '知识库', icon: BookOpen },
   { id: 'maintenance', label: '维护', icon: Wrench },
   { id: 'chat', label: '对话', icon: Bot },
 ] as const
@@ -25,7 +24,6 @@ const ConfigPage = lazy(() => import('./features/config/ConfigPage').then(module
 const RunPage = lazy(() => import('./features/run/RunPage').then(module => ({ default: module.RunPage })))
 const EvaluationPage = lazy(() => import('./features/evaluation/EvaluationPage').then(module => ({ default: module.EvaluationPage })))
 const ModelsPage = lazy(() => import('./features/models/ModelsPage').then(module => ({ default: module.ModelsPage })))
-const KnowledgePage = lazy(() => import('./features/knowledge/KnowledgePage').then(module => ({ default: module.KnowledgePage })))
 const MaintenancePage = lazy(() => import('./features/maintenance/MaintenancePage').then(module => ({ default: module.MaintenancePage })))
 const ChatPage = lazy(() => import('./features/chat/ChatPage').then(module => ({ default: module.ChatPage })))
 
@@ -86,7 +84,6 @@ function Shell() {
           <Route path="/config" element={<Page title="配置" description="编辑当前档案的模型、推理、采样和服务参数"><ConfigPage config={config} setConfig={setConfig} toast={toast}/></Page>}/>
           <Route path="/run" element={<Page title="运行" description="控制 llama-server 并观察实时状态"><RunPage config={config} toast={toast}/></Page>}/>
           <Route path="/evaluation" element={<Page title="评测" description="用真实任务比较模型质量与响应表现"><EvaluationPage toast={toast}/></Page>}/>
-          <Route path="/knowledge" element={<Page title="知识库" description="索引本地资料并验证检索引用"><KnowledgePage toast={toast}/></Page>}/>
           <Route path="/maintenance" element={<Page title="维护" description="下载、更新和编译 llama.cpp"><MaintenancePage config={config} setConfig={setConfig} toast={toast}/></Page>}/>
           <Route path="/chat" element={<Page title="对话" description="本地模型与外部 API 的统一流式对话"><ChatPage toast={toast} providerRefresh={providerRefresh}/></Page>}/>
           <Route path="*" element={<Navigate to="/models" replace/>}/>

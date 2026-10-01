@@ -82,6 +82,7 @@ class AppConfig(BaseModel):
     llama_cpp_dir: str = ""
     model_path: str = ""
     mmproj_path: str = ""
+    chat_template_file: str = ""  # optional --chat-template-file for both engines
     engine: str = "llama.cpp"  # "llama.cpp" (llama-server) or "kvmem" (llama-kvmem-server)
     basic: BasicSettings = Field(default_factory=BasicSettings)
     sampling: SamplingSettings = Field(default_factory=SamplingSettings)

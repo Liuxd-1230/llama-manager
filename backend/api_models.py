@@ -89,23 +89,8 @@ class EvaluationStart(BaseModel):
     allow_code_execution: bool = False
 
 
-class KnowledgeBaseCreate(BaseModel):
-    name: str
-    description: str = ""
-
-
-class KnowledgeSourceCreate(BaseModel):
-    path: str
-    kind: Literal["file", "directory"] = "directory"
-
-
 class KnowledgeSearchRequest(BaseModel):
     knowledge_base_ids: list[str]
     query: str
     limit: int = Field(default=6, ge=1, le=20)
 
-
-class EmbeddingSettings(BaseModel):
-    base_url: str = ""
-    model: str = ""
-    api_key_env: str = "LLAMA_MANAGER_EMBEDDING_API_KEY"

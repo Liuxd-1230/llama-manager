@@ -1,6 +1,9 @@
 """FastAPI main application — routes and WebSocket."""
 from __future__ import annotations
 import asyncio
+import base64
+import binascii
+import io
 import json
 import os
 from pathlib import Path
@@ -13,6 +16,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from .models import AppConfig
+from pypdf import PdfReader
 from . import config_manager as cfg
 from . import provider_manager as providers
 from . import search_manager
@@ -23,11 +27,9 @@ from .chat_state import CandidateContext, conversation_store
 from .storage import database
 from .jobs import JobManager, noop_handler
 from .evaluation import EvaluationService
-from .knowledge import KnowledgeService
 from .routers.conversations import router as conversations_router
 from .routers.evaluation import router as evaluation_router
 from .routers.jobs import router as jobs_router, ws_router as jobs_ws_router
-from .routers.knowledge import router as knowledge_router
 
 
 @asynccontextmanager
@@ -36,16 +38,13 @@ async def lifespan(application: FastAPI):
     client = httpx.AsyncClient(follow_redirects=False)
     jobs = JobManager(database)
     evaluation = EvaluationService(database, client)
-    knowledge = KnowledgeService(database, client)
     jobs.register("noop", noop_handler)
     jobs.register("evaluation", evaluation.run_job)
-    jobs.register("knowledge_sync", knowledge.sync_job)
     cfg.load_config("default")
     application.state.db = database
     application.state.http_client = client
     application.state.jobs = jobs
     application.state.evaluation = evaluation
-    application.state.knowledge = knowledge
     await jobs.initialize()
     await evaluation.initialize()
     try:
@@ -64,8 +63,6 @@ app.include_router(conversations_router)
 app.include_router(jobs_router)
 app.include_router(jobs_ws_router)
 app.include_router(evaluation_router)
-app.include_router(knowledge_router)
-
 
 def _error_payload(request: Request, code: str, message: str, details: dict | None = None) -> dict:
     return {
@@ -1210,6 +1207,38 @@ async def launch_profile(request: Request, body: dict):
     return {"ok": True, "restarted": was_running, "profile": name}
 
 
+# ── Chat attachments ──────────────────────────────────────────
+
+MAX_ATTACHMENT_CHARS = 150_000
+MAX_ATTACHMENT_BYTES = 30 * 1024 * 1024
+
+
+@app.post("/api/attachments/extract")
+async def extract_attachment(request: Request):
+    """Extract text from an uploaded chat attachment (PDF via pypdf, else UTF-8)."""
+    body = await request.json()
+    name = str(body.get("name") or "attachment")
+    data_base64 = str(body.get("data_base64") or "")
+    try:
+        raw = base64.b64decode(data_base64, validate=True)
+    except (binascii.Error, ValueError):
+        return JSONResponse(status_code=400, content={"error": "附件数据不是有效的 base64"})
+    if len(raw) > MAX_ATTACHMENT_BYTES:
+        return JSONResponse(status_code=413, content={"error": f"文件超过 {MAX_ATTACHMENT_BYTES // (1024 * 1024)}MB 上限"})
+    try:
+        if name.lower().endswith(".pdf"):
+            reader = PdfReader(io.BytesIO(raw))
+            text = "\n\n".join((page.extract_text() or "") for page in reader.pages)
+        else:
+            text = raw.decode("utf-8", errors="replace")
+    except Exception as exc:
+        return JSONResponse(status_code=422, content={"error": f"解析失败: {exc}"})
+    truncated = len(text) > MAX_ATTACHMENT_CHARS
+    if truncated:
+        text = text[:MAX_ATTACHMENT_CHARS] + "\n\n…[内容已截断]"
+    return {"name": name, "size": len(raw), "chars": len(text), "truncated": truncated, "content": text}
+
+
 @app.get("/api/scan-models")
 def scan_models(dir: str):
     models = cfg.scan_models(dir)
@@ -1373,18 +1402,6 @@ async def chat_proxy(request: Request):
     if not isinstance(raw_messages, list):
         return JSONResponse(status_code=400, content={"error": "messages must be a list"})
     messages = raw_messages
-    knowledge_base_ids = [str(value) for value in data.get("knowledge_base_ids", []) if value]
-    if knowledge_base_ids:
-        query = _latest_user_text(raw_messages)
-        knowledge = await request.app.state.knowledge.search(knowledge_base_ids, query, 6)
-        if knowledge["results"]:
-            lines = ["以下内容来自用户挂载的本地知识库。关键结论必须引用 [KB编号]；不要把无来源常识伪装成知识库事实。"]
-            for index, item in enumerate(knowledge["results"], 1):
-                location = f"p.{item['page']}" if item.get("page") else f"L{item.get('line_start') or '?'}-{item.get('line_end') or '?'}"
-                lines.append(f"[KB{index}] {item['source_path']} ({location})\n{item['content']}")
-            messages = [{"role": "system", "content": "\n\n".join(lines)}, *messages]
-        else:
-            messages = [{"role": "system", "content": "本地知识库没有找到足够证据。请明确回答未找到依据，不要使用模型常识补写事实。"}, *messages]
     use_web_tool = bool(data.get("web_search_tool") or data.get("web_search") is True)
     messages = await _messages_with_search_context(messages, bool(data.get("search_summary")))
     messages = _messages_with_web_tool_guidance(messages, use_web_tool)

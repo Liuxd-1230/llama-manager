@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { api, ApiError, uid } from '../../api'
 import { Button, Select, Switch, Textarea } from '../../components/ui'
-import type { Candidate, ChatTurn, KnowledgeBase, Provider, SearchSettings, ToolEvent } from '../../types'
+import type { Candidate, ChatTurn, Provider, SearchSettings, ToolEvent } from '../../types'
 import { activeCandidate, chatReducer, initialChatState } from './chatReducer'
 import { canStartChatRequest, SseParser, stripDsml, supportsThinking } from './chatUtils'
 import { Markdown, StreamingMarkdown } from './Markdown'
@@ -23,7 +23,6 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
   const [searchSettings, setSearchSettings] = useState<SearchSettings | null>(null)
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
-  const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([])
   const controller = useRef<AbortController | null>(null)
   const conversationId = useRef(uid('conversation'))
   const discardedConversations = useRef(new Set<string>())
@@ -31,7 +30,6 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
   const messagesRef = useRef<HTMLDivElement>(null)
   const queryClient = useQueryClient()
   const conversations = useQuery({ queryKey: ['conversations'], queryFn: () => api<{ conversations: Array<{ id: string; title: string; turn_count: number }> }>('/api/conversations') })
-  const knowledgeBases = useQuery({ queryKey: ['knowledge-bases'], queryFn: () => api<{ knowledge_bases: KnowledgeBase[] }>('/api/knowledge-bases') })
 
   const loadProviders = async () => {
     const result = await api<{ providers: Provider[] }>('/api/chat/providers')
@@ -87,7 +85,6 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
       thinking_enabled: canThink && thinking,
       reasoning_effort: effort,
       web_search_tool: webSearch,
-      knowledge_base_ids: knowledgeBaseIds,
     }
     try {
       let response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.current.signal })
@@ -163,7 +160,26 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
     await api(`/api/conversations/${targetConversationId}/turns/${turn.id}`, { method: 'PUT', body: JSON.stringify({ id: turn.id, position: turnIndex, user_content: turn.user.display, user_display: turn.user.display, attachments: turn.attachments || [], active_candidate_id: latest.id, candidates: candidates.map(item => ({ id: item.id, backend_id: item.backendId, provider: item.provider, model: item.model, content: item.content, reasoning: item.reasoning, tools: item.tools, status: item.status, error: item.error })) }) })
     void queryClient.invalidateQueries({ queryKey: ['conversations'] })
   }
-  const files = async (list: FileList | null) => { if (!list) return; const next: Attachment[] = []; for (const file of Array.from(list)) { if (file.size > 1024 * 1024) { toast(`文件过大：${file.name}`); continue } next.push({ name: file.name, size: file.size, content: (await file.text()).slice(0, 20000) }) } setAttachments(current => [...current, ...next]) }
+  const files = async (list: FileList | null) => {
+    if (!list) return
+    const next: Attachment[] = []
+    for (const file of Array.from(list)) {
+      if (file.size > 30 * 1024 * 1024) { toast(`文件过大（上限 30MB）：${file.name}`); continue }
+      try {
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+          const data_base64 = await fileToBase64(file)
+          const r = await api<{ content: string; chars: number; truncated: boolean }>('/api/attachments/extract', { method: 'POST', body: JSON.stringify({ name: file.name, data_base64 }) }, 120000)
+          next.push({ name: file.name, size: file.size, content: r.content })
+          if (r.truncated) toast(`${file.name} 内容较长，已截断`)
+        } else {
+          const text = await file.text()
+          const MAX = 150_000
+          next.push({ name: file.name, size: file.size, content: text.length > MAX ? text.slice(0, MAX) + '\n\n…[内容已截断]' : text })
+        }
+      } catch (reason) { toast(`读取失败：${file.name} · ${reason instanceof Error ? reason.message : String(reason)}`) }
+    }
+    setAttachments(current => [...current, ...next])
+  }
 
   return <div className={styles.chat}>
     <div className={styles.toolbar}>
@@ -182,7 +198,6 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
         <Switch checked={webSearch} disabled={!activeSearch?.configured} onChange={setWebSearch} label={<><Search size={14}/>Web Search</>}/>
         {!activeSearch?.configured && <span className={styles.keyWarn} title={`缺少 ${activeSearch?.env_var || '搜索 Key'}，可在设置中配置`}><AlertTriangle size={13}/></span>}
         <Switch checked={stream} onChange={setStream} label={<><Radio size={14}/>流式</>}/>
-        <details className={styles.knowledgePicker}><summary><BookLabel count={knowledgeBaseIds.length}/></summary><div>{(knowledgeBases.data?.knowledge_bases || []).map(item => <label key={item.id}><input type="checkbox" checked={knowledgeBaseIds.includes(item.id)} onChange={event => setKnowledgeBaseIds(current => event.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))}/><span>{item.name}</span><small>{item.chunk_count} 分块</small></label>)}{!knowledgeBases.data?.knowledge_bases.length && <span>暂无知识库</span>}</div></details>
       </div>
     </div>
     <div className={styles.messages} ref={messagesRef}>
@@ -207,6 +222,15 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
   </div>
 }
 
+function fileToBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '')
+    reader.onerror = () => reject(new Error('无法读取文件'))
+    reader.readAsDataURL(file)
+  })
+}
+
 function normalizeTool(event: Record<string, unknown>): ToolEvent {
   const rawType = String(event.type || 'status')
   const type = rawType.includes('call') ? 'call' : rawType.includes('result') ? 'result' : rawType === 'retry' ? 'retry' : rawType === 'limit' ? 'limit' : 'status'
@@ -218,4 +242,3 @@ function normalizeStoredTurn(value: Record<string, unknown>): ChatTurn {
   const candidates = rawCandidates.map(item => ({ id: String(item.id), backendId: item.backend_id ? String(item.backend_id) : undefined, provider: String(item.provider || ''), model: String(item.model || ''), content: String(item.content || ''), reasoning: String(item.reasoning || ''), tools: (item.tools || []) as ToolEvent[], status: String(item.status || 'done') as Candidate['status'], error: item.error ? String(item.error) : undefined }))
   return { id: String(value.id), user, attachments: (value.attachments || []) as Array<{ name: string; size: number }>, candidates, activeCandidateId: String(value.active_candidate_id || candidates.at(-1)?.id || '') }
 }
-function BookLabel({ count }: { count: number }) { return <><FileText size={14}/><span>知识库{count ? ` ${count}` : ''}</span></> }

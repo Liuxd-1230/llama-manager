@@ -346,7 +346,7 @@ class FrontendRegressionTests(unittest.TestCase):
 
     def test_all_seven_workspaces_are_routed(self):
         app = (ROOT / "frontend-src" / "src" / "App.tsx").read_text(encoding="utf-8")
-        for page in ("models", "config", "run", "evaluation", "knowledge", "maintenance", "chat"):
+        for page in ("models", "config", "run", "evaluation", "maintenance", "chat"):
             self.assertIn(f'path="/{page}"', app)
 
     def test_generated_openapi_contract_and_query_client_are_present(self):

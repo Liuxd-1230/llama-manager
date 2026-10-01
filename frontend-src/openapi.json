@@ -810,365 +810,6 @@
         }
       }
     },
-    "/api/knowledge-bases": {
-      "get": {
-        "tags": [
-          "knowledge"
-        ],
-        "summary": "List Knowledge Bases",
-        "operationId": "list_knowledge_bases_api_knowledge_bases_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "knowledge"
-        ],
-        "summary": "Create Knowledge Base",
-        "operationId": "create_knowledge_base_api_knowledge_bases_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/KnowledgeBaseCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/knowledge-bases/{knowledge_base_id}": {
-      "get": {
-        "tags": [
-          "knowledge"
-        ],
-        "summary": "Get Knowledge Base",
-        "operationId": "get_knowledge_base_api_knowledge_bases__knowledge_base_id__get",
-        "parameters": [
-          {
-            "name": "knowledge_base_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Knowledge Base Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "knowledge"
-        ],
-        "summary": "Delete Knowledge Base",
-        "operationId": "delete_knowledge_base_api_knowledge_bases__knowledge_base_id__delete",
-        "parameters": [
-          {
-            "name": "knowledge_base_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Knowledge Base Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/knowledge-bases/{knowledge_base_id}/sources": {
-      "post": {
-        "tags": [
-          "knowledge"
-        ],
-        "summary": "Add Source",
-        "operationId": "add_source_api_knowledge_bases__knowledge_base_id__sources_post",
-        "parameters": [
-          {
-            "name": "knowledge_base_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Knowledge Base Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/KnowledgeSourceCreate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/knowledge-sources/{source_id}": {
-      "delete": {
-        "tags": [
-          "knowledge"
-        ],
-        "summary": "Delete Source",
-        "operationId": "delete_source_api_knowledge_sources__source_id__delete",
-        "parameters": [
-          {
-            "name": "source_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Source Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/knowledge-sources/{source_id}/sync": {
-      "post": {
-        "tags": [
-          "knowledge"
-        ],
-        "summary": "Sync Source",
-        "operationId": "sync_source_api_knowledge_sources__source_id__sync_post",
-        "parameters": [
-          {
-            "name": "source_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Source Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/knowledge/search": {
-      "post": {
-        "tags": [
-          "knowledge"
-        ],
-        "summary": "Search Knowledge",
-        "operationId": "search_knowledge_api_knowledge_search_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/KnowledgeSearchRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/knowledge/settings": {
-      "get": {
-        "tags": [
-          "knowledge"
-        ],
-        "summary": "Get Embedding Settings",
-        "operationId": "get_embedding_settings_api_knowledge_settings_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "knowledge"
-        ],
-        "summary": "Put Embedding Settings",
-        "operationId": "put_embedding_settings_api_knowledge_settings_put",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EmbeddingSettings"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/config": {
       "get": {
         "summary": "Get Config",
@@ -1473,6 +1114,23 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/attachments/extract": {
+      "post": {
+        "summary": "Extract Attachment",
+        "description": "Extract text from an uploaded chat attachment (PDF via pypdf, else UTF-8).",
+        "operationId": "extract_attachment_api_attachments_extract_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           }
@@ -2172,6 +1830,11 @@
             "title": "Mmproj Path",
             "default": ""
           },
+          "chat_template_file": {
+            "type": "string",
+            "title": "Chat Template File",
+            "default": ""
+          },
           "engine": {
             "type": "string",
             "title": "Engine",
@@ -2484,27 +2147,6 @@
         ],
         "title": "DatasetCreate"
       },
-      "EmbeddingSettings": {
-        "properties": {
-          "base_url": {
-            "type": "string",
-            "title": "Base Url",
-            "default": ""
-          },
-          "model": {
-            "type": "string",
-            "title": "Model",
-            "default": ""
-          },
-          "api_key_env": {
-            "type": "string",
-            "title": "Api Key Env",
-            "default": "LLAMA_MANAGER_EMBEDDING_API_KEY"
-          }
-        },
-        "type": "object",
-        "title": "EmbeddingSettings"
-      },
       "EvaluationStart": {
         "properties": {
           "name": {
@@ -2698,74 +2340,6 @@
           "updated_at"
         ],
         "title": "JobRecord"
-      },
-      "KnowledgeBaseCreate": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "description": {
-            "type": "string",
-            "title": "Description",
-            "default": ""
-          }
-        },
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "title": "KnowledgeBaseCreate"
-      },
-      "KnowledgeSearchRequest": {
-        "properties": {
-          "knowledge_base_ids": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Knowledge Base Ids"
-          },
-          "query": {
-            "type": "string",
-            "title": "Query"
-          },
-          "limit": {
-            "type": "integer",
-            "maximum": 20.0,
-            "minimum": 1.0,
-            "title": "Limit",
-            "default": 6
-          }
-        },
-        "type": "object",
-        "required": [
-          "knowledge_base_ids",
-          "query"
-        ],
-        "title": "KnowledgeSearchRequest"
-      },
-      "KnowledgeSourceCreate": {
-        "properties": {
-          "path": {
-            "type": "string",
-            "title": "Path"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "file",
-              "directory"
-            ],
-            "title": "Kind",
-            "default": "directory"
-          }
-        },
-        "type": "object",
-        "required": [
-          "path"
-        ],
-        "title": "KnowledgeSourceCreate"
       },
       "KvmemSettings": {
         "properties": {

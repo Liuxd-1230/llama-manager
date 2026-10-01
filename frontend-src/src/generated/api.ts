@@ -265,128 +265,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/knowledge-bases": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Knowledge Bases */
-        get: operations["list_knowledge_bases_api_knowledge_bases_get"];
-        put?: never;
-        /** Create Knowledge Base */
-        post: operations["create_knowledge_base_api_knowledge_bases_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/knowledge-bases/{knowledge_base_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Knowledge Base */
-        get: operations["get_knowledge_base_api_knowledge_bases__knowledge_base_id__get"];
-        put?: never;
-        post?: never;
-        /** Delete Knowledge Base */
-        delete: operations["delete_knowledge_base_api_knowledge_bases__knowledge_base_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/knowledge-bases/{knowledge_base_id}/sources": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Add Source */
-        post: operations["add_source_api_knowledge_bases__knowledge_base_id__sources_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/knowledge-sources/{source_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete Source */
-        delete: operations["delete_source_api_knowledge_sources__source_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/knowledge-sources/{source_id}/sync": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Sync Source */
-        post: operations["sync_source_api_knowledge_sources__source_id__sync_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/knowledge/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Search Knowledge */
-        post: operations["search_knowledge_api_knowledge_search_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/knowledge/settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Embedding Settings */
-        get: operations["get_embedding_settings_api_knowledge_settings_get"];
-        /** Put Embedding Settings */
-        put: operations["put_embedding_settings_api_knowledge_settings_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/config": {
         parameters: {
             query?: never;
@@ -535,6 +413,26 @@ export interface paths {
         put?: never;
         /** Launch Profile */
         post: operations["launch_profile_api_profiles_launch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/attachments/extract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extract Attachment
+         * @description Extract text from an uploaded chat attachment (PDF via pypdf, else UTF-8).
+         */
+        post: operations["extract_attachment_api_attachments_extract_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1022,6 +920,11 @@ export interface components {
              */
             mmproj_path: string;
             /**
+             * Chat Template File
+             * @default
+             */
+            chat_template_file: string;
+            /**
              * Engine
              * @default llama.cpp
              */
@@ -1228,24 +1131,6 @@ export interface components {
              */
             description: string;
         };
-        /** EmbeddingSettings */
-        EmbeddingSettings: {
-            /**
-             * Base Url
-             * @default
-             */
-            base_url: string;
-            /**
-             * Model
-             * @default
-             */
-            model: string;
-            /**
-             * Api Key Env
-             * @default LLAMA_MANAGER_EMBEDDING_API_KEY
-             */
-            api_key_env: string;
-        };
         /** EvaluationStart */
         EvaluationStart: {
             /**
@@ -1330,39 +1215,6 @@ export interface components {
             started_at?: number | null;
             /** Finished At */
             finished_at?: number | null;
-        };
-        /** KnowledgeBaseCreate */
-        KnowledgeBaseCreate: {
-            /** Name */
-            name: string;
-            /**
-             * Description
-             * @default
-             */
-            description: string;
-        };
-        /** KnowledgeSearchRequest */
-        KnowledgeSearchRequest: {
-            /** Knowledge Base Ids */
-            knowledge_base_ids: string[];
-            /** Query */
-            query: string;
-            /**
-             * Limit
-             * @default 6
-             */
-            limit: number;
-        };
-        /** KnowledgeSourceCreate */
-        KnowledgeSourceCreate: {
-            /** Path */
-            path: string;
-            /**
-             * Kind
-             * @default directory
-             * @enum {string}
-             */
-            kind: "file" | "directory";
         };
         /**
          * KvmemSettings
@@ -2195,304 +2047,6 @@ export interface operations {
             };
         };
     };
-    list_knowledge_bases_api_knowledge_bases_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    create_knowledge_base_api_knowledge_bases_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["KnowledgeBaseCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_knowledge_base_api_knowledge_bases__knowledge_base_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                knowledge_base_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_knowledge_base_api_knowledge_bases__knowledge_base_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                knowledge_base_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    add_source_api_knowledge_bases__knowledge_base_id__sources_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                knowledge_base_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["KnowledgeSourceCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_source_api_knowledge_sources__source_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                source_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    sync_source_api_knowledge_sources__source_id__sync_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                source_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    search_knowledge_api_knowledge_search_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["KnowledgeSearchRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_embedding_settings_api_knowledge_settings_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    put_embedding_settings_api_knowledge_settings_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EmbeddingSettings"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_config_api_config_get: {
         parameters: {
             query?: never;
@@ -2792,6 +2346,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extract_attachment_api_attachments_extract_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

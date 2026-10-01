@@ -17,7 +17,8 @@
 
 ### 配置管理
 - **路径配置**: 引擎目录、模型文件、mmproj 文件（独立文件浏览器，支持盘符切换）
-- **命令导入**: 粘贴完整 llama-server 启动命令，自动解析回填所有字段；未识别的参数原样进入「附加参数」
+- **聊天模板**: 指定自定义 jinja 模板文件（--chat-template-file），llama.cpp 与 KVMem 通用
+- **命令导入**: 粘贴完整 llama-server / llama-kvmem-server 启动命令，自动解析回填所有字段；未识别的参数原样进入「附加参数」
 - **命名配置**: 保存/加载/删除多个命名配置（默认 default）
 - **导入导出**: JSON 格式配置文件导入导出
 
@@ -54,9 +55,9 @@
 - 本地 llama.cpp、DeepSeek、OpenAI Chat/Responses、Anthropic 和 OpenAI 兼容 API
 - 原生工具调用 Web Search（Tavily 或 Brave），支持多轮搜索和可见工具轨迹
 - 真正的流式输出、停止生成、单轮重生成与回答候选切换
-- Markdown、GFM、LaTeX、安全代码块和文件导入
+- Markdown、GFM、LaTeX、安全代码块和文件附件导入（支持 PDF，详见「对话附件」）
+- 思考分层控制：配置页设服务端默认，对话页开关按请求覆盖
 - 会话、消息、候选回答、分支关系和工具轨迹持久化到本地 SQLite
-- 可挂载多个本地知识库，网页搜索与知识库引用分开展示
 
 ### 评测与实验
 - 内置模板与 JSONL/CSV 数据集导入，可把真实任务沉淀为回归样本
@@ -64,14 +65,13 @@
 - 可选独立 Judge 模型，不会默认复用被测模型
 - 对比质量、吞吐、延迟和显存峰值，并展示 Pareto 前沿
 
-### 本地知识库
-- 文本、Markdown、PDF 和常见代码文件的持久集合
-- 显式同步与内容哈希增量更新，修改文件采用事务替换
-- OpenAI-compatible Embedding、SQLite FTS5 与 NumPy 余弦检索
-- RRF 混合召回，回答必须提供文件、页码或代码行引用
+### 对话附件
+- 文本、Markdown、代码文件直接读取，PDF 由服务端 pypdf 抽取文本
+- 单文件上限 30MB / 15 万字符，超出自动截断并提示
+- 长上下文引擎（KVMem 工作区 / 256K 原生模型）可直接吃下整份文档
 
 ### 全局任务中心
-- 评测与知识库同步统一为持久 Job
+- 评测统一为持久 Job
 - GPU、llama-server 和文件系统资源互斥，支持取消、失败重试与检查点
 - 应用重启后将未完成任务标记为 interrupted，不接管旧子进程
 
@@ -130,9 +130,8 @@ llama-manager/
 │   ├── storage.py            # SQLite WAL + 显式迁移
 │   ├── jobs.py               # 持久任务与资源锁
 │   ├── evaluation.py         # 数据集评分、Judge、遥测与 Pareto
-│   ├── knowledge.py          # 增量索引、Embedding 与混合检索
-│   ├── api_models.py         # 新工作区的 Pydantic API 契约
-│   ├── routers/              # 会话、任务、评测和知识库路由
+│   ├── api_models.py         # Pydantic API 契约与附件抽取参数
+│   ├── routers/              # 会话、任务和评测路由
 │   ├── provider_manager.py   # Provider 元数据与环境 Key
 │   ├── search_manager.py     # Tavily / Brave 搜索适配
 │   ├── chat_state.py         # 进程内候选上下文图

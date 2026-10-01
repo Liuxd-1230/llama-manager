@@ -5,12 +5,11 @@ const pages = [
   ['配置', '#/config'],
   ['运行', '#/run'],
   ['评测', '#/evaluation'],
-  ['知识库', '#/knowledge'],
   ['维护', '#/maintenance'],
   ['对话', '#/chat'],
 ] as const
 
-test('seven workspaces, themes, glass header and settings stay usable', async ({ page }) => {
+test('six workspaces, themes, glass header and settings stay usable', async ({ page }) => {
   const errors: string[] = []
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
   page.on('pageerror', error => errors.push(error.message))

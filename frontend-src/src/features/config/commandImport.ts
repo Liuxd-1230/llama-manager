@@ -123,6 +123,7 @@ export function applyLaunchCommand(base: AppConfig, text: string): CommandImport
       case 'host': use(value => { config.server.host = value; config.server.mode = value === '0.0.0.0' ? 'lan' : 'local' }); break
       case 'port': use(value => { const n = integer(value, flag); if (n !== null) config.server.port = n }); break
       case 'system-prompt': use(value => { config.system_prompt = value }); break
+      case 'chat-template-file': use(value => { config.chat_template_file = value }); break
       case 'spec-type': use(value => {
         if (value.includes('draft')) { config.mtp.enabled = true; config.mtp.spec_type = value }
         else if (value === 'none') { config.mtp.enabled = false }
