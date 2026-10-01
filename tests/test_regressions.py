@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import struct
 import time
 import unittest
 from pathlib import Path
@@ -13,6 +14,7 @@ from backend import config_manager as cfg
 from backend import provider_manager as providers
 from backend import search_manager
 from backend.chat_state import CandidateContext, ConversationStore
+from backend.config_manager import read_gguf_metadata
 from backend.main import (
     _deepseek_chat_payload,
     _external_chat_request,
@@ -93,18 +95,126 @@ class SecurityRegressionTests(unittest.TestCase):
             self.assertEqual(TestClient(app).post("/api/chat", json={"provider": "missing-key", "messages": [], "stream": False}).status_code, 409)
 
 
-class OptimizerRegressionTests(unittest.TestCase):
-    def test_optimize_start_returns_before_optimization_finishes(self):
-        async def slow_optimization(**_kwargs):
-            await asyncio.sleep(5)
+class ProfileRegressionTests(unittest.TestCase):
+    def test_profiles_list_duplicate_and_launch_flow(self):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "CONFIG_DIR", Path(tmp)):
+            client = TestClient(app)
+            model_file = Path(tmp) / "m.gguf"
+            model_file.write_bytes(b"x" * (2 * 1024 * 1024))
+            cfg.save_config(
+                AppConfig(llama_cpp_dir="C:\\llama.cpp", model_path=str(model_file), basic=BasicSettings(ctx_size=32768)),
+                name="default",
+            )
+            self.assertEqual(client.post("/api/profiles/duplicate", json={"source": "default", "name": "qwen"}).status_code, 200)
 
-        client = TestClient(app)
-        cfg.save_config(AppConfig(llama_cpp_dir="C:\\llama.cpp", model_path="C:\\model.gguf"))
-        with patch("backend.main.optimizer.run_optimization", side_effect=slow_optimization):
-            started_at = time.monotonic()
-            response = client.post("/api/optimize/start", json={"n_trials": 1})
-        self.assertEqual(response.status_code, 200)
-        self.assertLess(time.monotonic() - started_at, 1.0)
+            profiles = client.get("/api/profiles").json()["profiles"]
+            self.assertEqual({p["name"] for p in profiles}, {"default", "qwen"})
+            default = next(p for p in profiles if p["name"] == "default")
+            self.assertEqual(default["ctx_size"], 32768)
+            self.assertTrue(default["model_exists"])
+            self.assertGreater(default["model_size_mb"], 0)
+            qwen = next(p for p in profiles if p["name"] == "qwen")
+            self.assertFalse(qwen["is_current"])
+            self.assertFalse(qwen["is_running"])
+            # The duplicate references the same model file.
+            self.assertTrue(qwen["model_exists"])
+
+            # No real llama-server binary — the launch must fail cleanly with 400.
+            missing = client.post("/api/profiles/launch", json={"name": "qwen"})
+            self.assertEqual(missing.status_code, 400)
+            self.assertIn("error", missing.json())
+
+    def test_launch_conflicts_with_running_job_are_rejected(self):
+        from backend.jobs import JobManager
+        from backend.storage import database
+
+        with TemporaryDirectory() as tmp, patch.object(cfg, "CONFIG_DIR", Path(tmp)):
+            client = TestClient(app)
+            cfg.save_config(AppConfig(llama_cpp_dir="C:\\llama.cpp", model_path="C:\\models\\m.gguf"), name="default")
+            manager = JobManager(database)
+            lock = manager.resource_locks.setdefault("llama_server", asyncio.Lock())
+            asyncio.run(lock.acquire())  # acquire() is a coroutine — run it to actually hold the lock
+            app.state.jobs = manager
+            try:
+                response = client.post("/api/profiles/launch", json={"name": "default"})
+                self.assertEqual(response.status_code, 409)
+                self.assertIn("llama_server", response.json()["error"])
+                start = client.post("/api/server/start")
+                self.assertEqual(start.status_code, 409)
+            finally:
+                lock.release()
+                del app.state.jobs
+            # Lock released — the request passes the guard (and fails later on the missing binary).
+            self.assertEqual(client.post("/api/server/start").status_code, 400)
+
+    def test_busy_resources_reports_only_held_locks(self):
+        from backend.jobs import JobManager
+        from backend.storage import database
+
+        manager = JobManager(database)
+        lock = manager.resource_locks.setdefault("gpu", asyncio.Lock())
+        self.assertEqual(manager.busy_resources(["gpu", "llama_server"]), [])
+        asyncio.run(lock.acquire())
+        try:
+            self.assertEqual(manager.busy_resources(["gpu", "llama_server"]), ["gpu"])
+        finally:
+            lock.release()
+        self.assertEqual(manager.busy_resources(["gpu", "llama_server"]), [])
+
+    def test_launch_and_duplicate_missing_profiles_return_404(self):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "CONFIG_DIR", Path(tmp)):
+            client = TestClient(app)
+            self.assertEqual(client.post("/api/profiles/launch", json={"name": "ghost"}).status_code, 404)
+            self.assertEqual(client.post("/api/profiles/duplicate", json={"source": "ghost", "name": "x"}).status_code, 404)
+
+    def test_duplicate_rejects_empty_name(self):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "CONFIG_DIR", Path(tmp)):
+            client = TestClient(app)
+            self.assertEqual(client.post("/api/profiles/duplicate", json={"source": "default", "name": "  "}).status_code, 400)
+
+
+def _gguf_kv_string(key: str, value: str) -> bytes:
+    raw = value.encode("utf-8")
+    return _gguf_string(key) + struct.pack("<I", 8) + _gguf_string(value)
+
+
+def _gguf_string(value: str) -> bytes:
+    raw = value.encode("utf-8")
+    return struct.pack("<Q", len(raw)) + raw
+
+
+def _gguf_kv_u32(key: str, value: int) -> bytes:
+    return _gguf_string(key) + struct.pack("<I", 4) + struct.pack("<I", value)
+
+
+def _gguf_kv_string_array(key: str, values) -> bytes:
+    return _gguf_string(key) + struct.pack("<I", 9) + struct.pack("<I", 8) + struct.pack("<Q", len(values)) + b"".join(_gguf_string(v) for v in values)
+
+
+class GgufMetadataTests(unittest.TestCase):
+    def test_parses_layers_experts_and_context_from_header(self):
+        blob = b"GGUF" + struct.pack("<I", 3) + struct.pack("<Q", 0) + struct.pack("<Q", 6)
+        blob += _gguf_kv_string("general.architecture", "llama")
+        blob += _gguf_kv_u32("llama.block_count", 48)
+        blob += _gguf_kv_u32("llama.expert_count", 8)
+        blob += _gguf_kv_string("general.name", "Ternary Bonsai")
+        blob += _gguf_kv_string_array("tokenizer.ggml.tokens", ["<pad>", "hello"])
+        blob += _gguf_kv_u32("llama.context_length", 131072)
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "model.gguf"
+            path.write_bytes(blob)
+            meta = read_gguf_metadata(str(path))
+        self.assertEqual(meta, {"architecture": "llama", "layers": 48, "experts": 8, "name": "Ternary Bonsai", "context_length": 131072})
+
+    def test_missing_or_malformed_files_yield_empty_metadata(self):
+        self.assertEqual(read_gguf_metadata(""), {})
+        self.assertEqual(read_gguf_metadata("Z:/definitely/missing.gguf"), {})
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.gguf"
+            path.write_bytes(b"NOPE" + b"\x00" * 16)
+            self.assertEqual(read_gguf_metadata(str(path)), {})
+            path.write_bytes(b"GGUF" + struct.pack("<I", 1) + b"\x00" * 8)
+            self.assertEqual(read_gguf_metadata(str(path)), {})
 
 
 class CommandRegressionTests(unittest.TestCase):
@@ -137,10 +247,17 @@ class FrontendRegressionTests(unittest.TestCase):
         self.assertNotIn("apple", tokens.lower())
         self.assertIn("Theme", app)
 
-    def test_all_five_workspaces_are_routed(self):
+    def test_all_seven_workspaces_are_routed(self):
         app = (ROOT / "frontend-src" / "src" / "App.tsx").read_text(encoding="utf-8")
-        for page in ("config", "run", "optimize", "maintenance", "chat"):
+        for page in ("models", "config", "run", "evaluation", "knowledge", "maintenance", "chat"):
             self.assertIn(f'path="/{page}"', app)
+
+    def test_generated_openapi_contract_and_query_client_are_present(self):
+        package = json.loads((ROOT / "frontend-src" / "package.json").read_text(encoding="utf-8"))
+        api = (ROOT / "frontend-src" / "src" / "api.ts").read_text(encoding="utf-8")
+        self.assertIn("@tanstack/react-query", package["dependencies"])
+        self.assertIn("./generated/api", api)
+        self.assertTrue((ROOT / "frontend-src" / "src" / "generated" / "api.ts").exists())
 
     def test_chat_is_id_addressed_and_blocks_enter_during_generation(self):
         reducer = (ROOT / "frontend-src" / "src" / "features" / "chat" / "chatReducer.ts").read_text(encoding="utf-8")

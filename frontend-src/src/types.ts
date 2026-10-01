@@ -1,5 +1,5 @@
 export type Theme = 'light' | 'dark'
-export type PageId = 'config' | 'run' | 'optimize' | 'maintenance' | 'chat'
+export type PageId = 'models' | 'config' | 'run' | 'evaluation' | 'knowledge' | 'maintenance' | 'chat'
 
 export interface AppConfig {
   llama_cpp_dir: string
@@ -96,9 +96,18 @@ export interface Candidate {
 export interface ChatTurn {
   id: string
   user: { content: string; display: string }
+  attachments?: Array<{ name: string; size: number }>
   candidates: Candidate[]
   activeCandidateId: string
 }
+
+export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted'
+export interface JobRecord { id: string; kind: string; status: JobStatus; payload: Record<string, unknown>; result: Record<string, unknown>; checkpoint: Record<string, unknown>; resources: string[]; error?: string; created_at: number; updated_at: number }
+export interface DatasetSummary { id: string; name: string; description: string; builtin: number; case_count: number; updated_at: number }
+export interface DatasetCase { id: string; prompt: string; expected: string; evaluator: Record<string, unknown>; metadata: Record<string, unknown>; position: number }
+export interface Experiment { id: string; name: string; dataset_id?: string; provider_id: string; model: string; status: string; metrics: Record<string, number>; config: Record<string, unknown>; created_at: number }
+export interface KnowledgeBase { id: string; name: string; description: string; source_count: number; chunk_count: number; last_sync_at?: number; sources?: KnowledgeSource[] }
+export interface KnowledgeSource { id: string; knowledge_base_id: string; path: string; kind: 'file' | 'directory'; status: string; file_count: number; updated_at: number }
 
 export const defaultConfig: AppConfig = {
   llama_cpp_dir: '', model_path: '', mmproj_path: '',

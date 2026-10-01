@@ -19,6 +19,7 @@ class ProcessManager:
         self._log_buffer: List[str] = []
         self._log_subscribers: List[Any] = []  # WebSocket connections
         self._max_log_lines: int = 5000
+        self._profile_name: str = ""
 
     def get_status(self) -> ServerStatus:
         if self._process and self._process.returncode is None:
@@ -26,6 +27,7 @@ class ProcessManager:
                 state="running",
                 pid=self._process.pid,
                 uptime_seconds=round(time.time() - self._start_time, 1),
+                profile=self._profile_name,
             )
         elif self._process and self._process.returncode is not None:
             return ServerStatus(
@@ -143,11 +145,12 @@ class ProcessManager:
 
         return cmd
 
-    async def start(self, config: AppConfig):
+    async def start(self, config: AppConfig, profile_name: str = ""):
         if self._process and self._process.returncode is None:
             raise RuntimeError("Server is already running. Stop it first.")
 
         cmd = self.build_command(config)
+        self._profile_name = profile_name
         self._log_buffer.clear()
         self._append_log(f"[manager] Starting: {' '.join(cmd)}")
 
@@ -213,6 +216,8 @@ class ProcessManager:
                     self._append_log(f"[manager] Process {pid} killed.")
         except ProcessLookupError:
             self._append_log(f"[manager] Process {pid} already exited.")
+        finally:
+            self._profile_name = ""
 
     def clear_logs(self):
         self._log_buffer.clear()

@@ -1,11 +1,18 @@
 # 🦙 llama.cpp Run Manager
 
-可视化管理 llama.cpp server 的配置、启动、日志、更新编译和贝叶斯自动优化。
+可视化管理 llama.cpp server 的模型档案、启动、日志、对话、评测和更新编译。
 
 ## 功能
 
+### 模型档案
+- 档案 = 模型文件 + mmproj + 启动参数 + 采样 + 提示词，是整个产品的核心对象
+- 档案卡片展示 GGUF 头元数据（架构、层数、MoE 专家数、原生上下文长度）
+- 一键「启动 / 切换」：加载档案并启动 llama-server，运行中切换会自动重启
+- 复制、删除、导入导出，落地页即模型列表
+
 ### 配置管理
 - **路径配置**: llama.cpp 目录、模型文件、mmproj 文件（独立文件浏览器，支持盘符切换）
+- **命令导入**: 粘贴完整 llama-server 启动命令，自动解析回填所有字段；未识别的参数原样进入「附加参数」
 - **命名配置**: 保存/加载/删除多个命名配置（默认 default）
 - **导入导出**: JSON 格式配置文件导入导出
 
@@ -33,14 +40,6 @@
 - 温度、Top-K、Top-P（滑块 + 数字输入）
 - Min-P（可开关）、重复惩罚（可开关）、存在惩罚（可开关）
 
-### 自动优化 (Optuna 贝叶斯优化)
-- 搜索最优参数组合：ngl × n_cpu_moe × 上下文深度 × KV 缓存量化
-- 使用 llama-bench `-d` (n-depth) 测试不同上下文深度
-- 实时 WebSocket 日志流 + 结果表格
-- 自动识别 OOM/错误，失败试验跳过
-- 动态超时（根据上下文大小调整）
-- 一键应用最优结果到配置
-
 ### 服务器控制
 - 启动/停止 llama-server
 - 实时 WebSocket 日志流
@@ -51,6 +50,25 @@
 - 原生工具调用 Web Search（Tavily 或 Brave），支持多轮搜索和可见工具轨迹
 - 真正的流式输出、停止生成、单轮重生成与回答候选切换
 - Markdown、GFM、LaTeX、安全代码块和文件导入
+- 会话、消息、候选回答、分支关系和工具轨迹持久化到本地 SQLite
+- 可挂载多个本地知识库，网页搜索与知识库引用分开展示
+
+### 评测与实验
+- 内置模板与 JSONL/CSV 数据集导入，可把真实任务沉淀为回归样本
+- 精确、关键词、正则、JSON Schema 与显式授权命令评分器
+- 可选独立 Judge 模型，不会默认复用被测模型
+- 对比质量、吞吐、延迟和显存峰值，并展示 Pareto 前沿
+
+### 本地知识库
+- 文本、Markdown、PDF 和常见代码文件的持久集合
+- 显式同步与内容哈希增量更新，修改文件采用事务替换
+- OpenAI-compatible Embedding、SQLite FTS5 与 NumPy 余弦检索
+- RRF 混合召回，回答必须提供文件、页码或代码行引用
+
+### 全局任务中心
+- 评测与知识库同步统一为持久 Job
+- GPU、llama-server 和文件系统资源互斥，支持取消、失败重试与检查点
+- 应用重启后将未完成任务标记为 interrupted，不接管旧子进程
 
 ### 更新管理
 - 检测 llama.cpp 更新 (git fetch)
@@ -104,15 +122,21 @@ Web Search 只使用设置中明确选择的 Tavily 或 Brave，不抓取搜索�
 llama-manager/
 ├── backend/
 │   ├── main.py               # FastAPI 路由 + WebSocket
+│   ├── storage.py            # SQLite WAL + 显式迁移
+│   ├── jobs.py               # 持久任务与资源锁
+│   ├── evaluation.py         # 数据集评分、Judge、遥测与 Pareto
+│   ├── knowledge.py          # 增量索引、Embedding 与混合检索
+│   ├── api_models.py         # 新工作区的 Pydantic API 契约
+│   ├── routers/              # 会话、任务、评测和知识库路由
 │   ├── provider_manager.py   # Provider 元数据与环境 Key
 │   ├── search_manager.py     # Tavily / Brave 搜索适配
 │   ├── chat_state.py         # 进程内候选上下文图
 │   ├── models.py              # Pydantic 数据模型
-│   ├── config_manager.py      # 配置 CRUD + 模型扫描
+│   ├── config_manager.py      # 模型档案 CRUD + GGUF 元数据 + 模型扫描
 │   ├── process_manager.py     # llama-server 进程管理
 │   ├── update_manager.py      # git + cmake 编译
 │   ├── download_manager.py    # llama.cpp 仓库克隆
-│   └── optimizer.py           # Optuna 贝叶斯优化
+│   └── ...
 ├── frontend-src/              # React + Vite + TypeScript 源码
 ├── frontend/                  # 提交到仓库的生产构建产物
 ├── config/
@@ -130,12 +154,11 @@ llama-manager/
 4. 切换到"服务器"页 → 点击"启动"
 5. 在日志页查看实时输出
 
-### 自动优化
-1. 切换到"自动优化"页
-2. 设置 ngl/n_cpu_moe 范围、上下文深度、KV 缓存量化选项
-3. 点击"开始优化"
-4. 等待 Optuna 搜索最优参数组合
-5. 点击"应用"将最优结果应用到配置
+### 模型档案
+1. 打开「模型」页查看所有已保存的档案卡片（含模型元数据与关键参数）
+2. 点击「启动 / 切换」一键加载档案并启动 llama-server，运行中切换会自动重启
+3. 「编辑」跳转配置页调整参数后保存，「复制」基于现有档案快速派生新档案
+4. 右上角「新建档案」把当前配置保存为新档案
 
 ### 配置管理
 1. 在配置页输入配置名称
@@ -149,9 +172,8 @@ llama-manager/
 
 ## 技术栈
 
-- **后端**: Python, FastAPI, WebSocket
-- **前端**: React, Vite, TypeScript, Motion, CSS Modules
-- **优化**: Optuna (贝叶斯优化)
+- **后端**: Python, FastAPI, WebSocket, aiosqlite, httpx, NumPy
+- **前端**: React, Vite, TypeScript, TanStack Query, Motion, CSS Modules
 - **进程管理**: asyncio.subprocess
 
 ## 前端开发
@@ -161,6 +183,7 @@ llama-manager/
 ```bash
 cd frontend-src
 pnpm install
+pnpm generate:api
 pnpm dev
 pnpm test
 pnpm build
@@ -168,3 +191,4 @@ pnpm test:e2e
 ```
 
 Vite 开发服务器会代理 `/api` 和 WebSocket；生产构建使用 `/static/` base 并写入仓库根目录的 `frontend/`。
+OpenAPI 契约由 `scripts/export_openapi.py` 导出，再用 `openapi-typescript` 生成 `src/generated/api.ts`。

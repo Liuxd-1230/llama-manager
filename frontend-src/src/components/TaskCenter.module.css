@@ -1,0 +1,8 @@
+.backdrop { position: fixed; z-index: 58; inset: 0; background: rgba(4,8,13,.18); backdrop-filter: blur(3px) }
+.drawer { position: absolute; top: 82px; right: 10px; bottom: 10px; width: min(420px, calc(100vw - 20px)); border: 1px solid var(--glass-edge); border-radius: var(--radius); background: var(--glass-strong); box-shadow: var(--shadow-shell); backdrop-filter: var(--blur); overflow: hidden; display: grid; grid-template-rows: 52px minmax(0,1fr) }
+.drawer header { padding: 0 12px 0 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line) }
+.list { overflow: auto; padding: 9px; display: grid; align-content: start; gap: 7px }
+.job { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px; background: var(--glass-soft) }
+.jobTop { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 8px }.jobTop div { min-width: 0 }.jobTop strong,.jobTop small { display: block }.jobTop small { color: var(--text-3); font-size: 10px }
+.job code { display: block; margin-top: 8px; overflow-wrap: anywhere; font-size: 10px; color: var(--text-3) }.error { color: var(--red); font-size: 11px }.actions { margin-top: 8px }.empty { min-height: 140px; display: grid; place-items: center; color: var(--text-3) }
+.spin { animation: spin 1s linear infinite }@keyframes spin { to { transform: rotate(360deg) } }

@@ -1,17 +1,22 @@
-import { Copy, Download, FolderOpen, RefreshCw, Save, Trash2, Upload } from 'lucide-react'
+import { ClipboardPaste, Copy, Download, FolderOpen, RefreshCw, Save, Trash2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api'
 import { FileBrowser } from '../../components/FileBrowser'
 import { Button, Field, Input, Panel, Select, Switch, Textarea } from '../../components/ui'
 import type { AppConfig } from '../../types'
+import { applyLaunchCommand } from './commandImport'
 import page from '../pages.module.css'
 
 type BrowseTarget = { key: 'llama_cpp_dir' | 'model_path' | 'mmproj_path'; mode: 'folder' | 'file'; extension?: string } | null
 
 export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; setConfig: (config: AppConfig) => void; toast: (text: string) => void }) {
+  const queryClient = useQueryClient()
   const [name, setName] = useState('default')
   const [configs, setConfigs] = useState<string[]>([])
   const [browse, setBrowse] = useState<BrowseTarget>(null)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importText, setImportText] = useState('')
   const importRef = useRef<HTMLInputElement>(null)
   const basic = config.basic
   const sampling = config.sampling
@@ -29,11 +34,13 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
   const save = async () => {
     await api('/api/config/save-as', { method: 'POST', body: JSON.stringify({ name: name || 'default', config }) })
     toast(`配置已保存：${name || 'default'}`); await refreshNames()
+    await queryClient.invalidateQueries({ queryKey: ['config'] })
   }
   const load = async (selected: string) => {
     if (!selected) return
     setConfig(await api<AppConfig>('/api/config/load', { method: 'POST', body: JSON.stringify({ name: selected }) }))
     setName(selected); toast(`已载入：${selected}`)
+    await queryClient.invalidateQueries({ queryKey: ['config'] })
   }
   const remove = async () => {
     if (!name || name === 'default') return toast('默认配置不能删除')
@@ -48,6 +55,18 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
     if (!file) return
     const imported = await api<AppConfig>('/api/config/import', { method: 'POST', body: JSON.stringify({ content: await file.text() }) })
     setConfig(imported); toast('配置已导入，保存后生效')
+  }
+
+  const importCommand = () => {
+    const result = applyLaunchCommand(config, importText)
+    setConfig(result.config)
+    setImportOpen(false); setImportText('')
+    const extras = result.unknown.length ? `；未识别的已放入附加参数：${result.unknown.join(' ')}` : ''
+    const warned = result.warnings.length ? `；${result.warnings.join('；')}` : ''
+    toast(`已解析 ${result.applied} 项参数${extras}${warned}`)
+  }
+  const pasteFromClipboard = async () => {
+    try { setImportText(await navigator.clipboard.readText()) } catch { toast('无法读取剪贴板，请手动粘贴') }
   }
 
   const command = useMemo(() => {
@@ -145,13 +164,25 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
         </Panel>
       </div>
 
-      <Panel title="启动命令" icon={<RefreshCw size={15}/>} className={page.sticky} actions={<Button size="small" onClick={() => { void navigator.clipboard.writeText(command); toast('命令已复制') }}><Copy size={14}/>复制</Button>}>
+      <Panel title="启动命令" icon={<RefreshCw size={15}/>} className={page.sticky} actions={<div className={page.row}><Button size="small" onClick={() => setImportOpen(true)}><ClipboardPaste size={14}/>从命令导入</Button><Button size="small" onClick={() => { void navigator.clipboard.writeText(command); toast('命令已复制') }}><Copy size={14}/>复制</Button></div>}>
         <pre className={page.code}>{command}</pre>
         <p className={page.hint}>预览与 ProcessManager 使用相同的参数语义；保存配置后运行页会使用当前值。</p>
       </Panel>
     </div>
     {browse && (
       <FileBrowser mode={browse.mode} extension={browse.extension} initialPath={browseValue} onClose={() => setBrowse(null)} onSelect={value => { patch(browse.key, value); setBrowse(null) }}/>
+    )}
+    {importOpen && (
+      <div className={page.overlay} onClick={() => setImportOpen(false)}>
+        <Panel className={page.importDialog} title="从启动命令导入" actions={<Button size="small" onClick={() => void pasteFromClipboard()}><ClipboardPaste size={14}/>粘贴</Button>}>
+          <Textarea rows={7} className={page.importText} value={importText} autoFocus onChange={event => setImportText(event.target.value)} placeholder={'llama-server -m "E:\\models\\model.gguf" --host 127.0.0.1 --port 8081 -ngl 99 -c 32768 -fa on ...'} />
+          <p className={page.hint}>已识别的字段会回填到左侧表单；无法识别的参数会原样放入「附加参数」，不会丢失。</p>
+          <div className={page.row} style={{ justifyContent: 'flex-end', marginTop: 10 }}>
+            <Button onClick={() => setImportOpen(false)}>取消</Button>
+            <Button tone="primary" disabled={!importText.trim()} onClick={importCommand}>解析并应用</Button>
+          </div>
+        </Panel>
+      </div>
     )}
   </>
 }

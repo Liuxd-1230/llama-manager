@@ -3,6 +3,7 @@ import type { Candidate, ChatTurn, ToolEvent } from '../../types'
 export interface ChatState { turns: ChatTurn[]; generating: { turnId: string; candidateId: string } | null }
 export type ChatAction =
   | { type: 'add_turn'; turn: ChatTurn }
+  | { type: 'load'; turns: ChatTurn[] }
   | { type: 'add_candidate'; turnId: string; candidate: Candidate }
   | { type: 'set_backend_id'; turnId: string; candidateId: string; backendId: string }
   | { type: 'append'; turnId: string; candidateId: string; field: 'content' | 'reasoning'; delta: string }
@@ -15,6 +16,7 @@ export const initialChatState: ChatState = { turns: [], generating: null }
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   if (action.type === 'clear') return initialChatState
+  if (action.type === 'load') return { turns: action.turns, generating: null }
   if (action.type === 'add_turn') return { ...state, turns: [...state.turns, action.turn] }
   const turns = state.turns.map(turn => {
     if (turn.id !== ('turnId' in action ? action.turnId : '')) return turn

@@ -1,11 +1,12 @@
-import { BrainCircuit, ChevronLeft, ChevronRight, Copy, FileText, Globe2, Paperclip, Radio, RefreshCw, Search, Send, Square, Trash2, Wrench, X } from 'lucide-react'
+import { AlertTriangle, BrainCircuit, ChevronLeft, ChevronRight, Copy, FileText, Globe2, Paperclip, Radio, RefreshCw, Search, Send, Square, Trash2, Wrench, X } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { api, ApiError, uid } from '../../api'
 import { Button, Select, Switch, Textarea } from '../../components/ui'
-import type { Candidate, ChatTurn, Provider, SearchSettings, ToolEvent } from '../../types'
+import type { Candidate, ChatTurn, KnowledgeBase, Provider, SearchSettings, ToolEvent } from '../../types'
 import { activeCandidate, chatReducer, initialChatState } from './chatReducer'
 import { canStartChatRequest, SseParser, stripDsml, supportsThinking } from './chatUtils'
-import { Markdown } from './Markdown'
+import { Markdown, StreamingMarkdown } from './Markdown'
 import styles from './chat.module.css'
 
 interface Attachment { name: string; content: string; size: number }
@@ -22,10 +23,15 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
   const [searchSettings, setSearchSettings] = useState<SearchSettings | null>(null)
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([])
   const controller = useRef<AbortController | null>(null)
   const conversationId = useRef(uid('conversation'))
+  const discardedConversations = useRef(new Set<string>())
   const fileRef = useRef<HTMLInputElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
+  const queryClient = useQueryClient()
+  const conversations = useQuery({ queryKey: ['conversations'], queryFn: () => api<{ conversations: Array<{ id: string; title: string; turn_count: number }> }>('/api/conversations') })
+  const knowledgeBases = useQuery({ queryKey: ['knowledge-bases'], queryFn: () => api<{ knowledge_bases: KnowledgeBase[] }>('/api/knowledge-bases') })
 
   const loadProviders = async () => {
     const result = await api<{ providers: Provider[] }>('/api/chat/providers')
@@ -64,10 +70,12 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
   const requestAssistant = async (turnIndex: number) => {
     if (controller.current) return toast('请先停止当前生成')
     const turn = state.turns[turnIndex]
+    const requestConversationId = conversationId.current
     const candidateId = uid('candidate')
     const candidate: Candidate = { id: candidateId, provider: providerId, model, content: '', reasoning: '', tools: [], status: 'streaming' }
     dispatch({ type: 'add_candidate', turnId: turn.id, candidate })
     controller.current = new AbortController()
+    let accumulatedContent = ''; let accumulatedReasoning = ''; let backendId = ''; const accumulatedTools: ToolEvent[] = []
     const body = {
       provider: providerId,
       model,
@@ -79,6 +87,7 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
       thinking_enabled: canThink && thinking,
       reasoning_effort: effort,
       web_search_tool: webSearch,
+      knowledge_base_ids: knowledgeBaseIds,
     }
     try {
       let response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.current.signal })
@@ -90,10 +99,10 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
       let received = false
       if (!stream) {
         const result = await response.json()
-        dispatch({ type: 'set_backend_id', turnId: turn.id, candidateId, backendId: result.candidate_id })
-        if (result.content) { received = true; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'content', delta: result.content }) }
-        if (result.reasoning) dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'reasoning', delta: result.reasoning })
-        for (const tool of result.tool_events || []) dispatch({ type: 'tool', turnId: turn.id, candidateId, event: tool })
+        backendId = result.candidate_id || ''; dispatch({ type: 'set_backend_id', turnId: turn.id, candidateId, backendId })
+        if (result.content) { received = true; accumulatedContent += result.content; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'content', delta: result.content }) }
+        if (result.reasoning) { accumulatedReasoning += result.reasoning; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'reasoning', delta: result.reasoning }) }
+        for (const tool of result.tool_events || []) { const normalized = normalizeTool(tool); accumulatedTools.push(normalized); dispatch({ type: 'tool', turnId: turn.id, candidateId, event: normalized }) }
       } else {
         const reader = response.body?.getReader(); if (!reader) throw new Error('浏览器不支持流式响应')
         const decoder = new TextDecoder(); const parser = new SseParser(); let done = false
@@ -103,19 +112,20 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
           for (const raw of frames) {
             if (raw === '[DONE]') continue
             const event = JSON.parse(raw)
-            if (event.type === 'start') dispatch({ type: 'set_backend_id', turnId: turn.id, candidateId, backendId: event.candidate_id })
-            else if (event.type === 'content_delta') { received = true; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'content', delta: event.delta || '' }) }
-            else if (event.type === 'reasoning_delta') dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'reasoning', delta: event.delta || '' })
-            else if (['tool_call', 'tool_result', 'tool_status', 'call', 'result', 'status', 'retry', 'limit'].includes(event.type)) dispatch({ type: 'tool', turnId: turn.id, candidateId, event: normalizeTool(event) })
+            if (event.type === 'start') { backendId = event.candidate_id || ''; dispatch({ type: 'set_backend_id', turnId: turn.id, candidateId, backendId }) }
+            else if (event.type === 'content_delta') { const delta = event.delta || ''; received = true; accumulatedContent += delta; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'content', delta }) }
+            else if (event.type === 'reasoning_delta') { const delta = event.delta || ''; accumulatedReasoning += delta; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'reasoning', delta }) }
+            else if (['tool_call', 'tool_result', 'tool_status', 'call', 'result', 'status', 'retry', 'limit'].includes(event.type)) { const normalized = normalizeTool(event); accumulatedTools.push(normalized); dispatch({ type: 'tool', turnId: turn.id, candidateId, event: normalized }) }
             else if (event.type === 'error') throw new Error(event.message || '生成失败')
           }
         }
       }
-      if (!received) dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'content', delta: '(空回复)' })
+      if (!received) { accumulatedContent = '(空回复)'; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'content', delta: accumulatedContent }) }
       dispatch({ type: 'finish', turnId: turn.id, candidateId, status: 'done' })
+      await persistTurn(turnIndex, { ...candidate, backendId, content: accumulatedContent, reasoning: accumulatedReasoning, tools: accumulatedTools, status: 'done' }, requestConversationId)
     } catch (reason) {
-      if (reason instanceof DOMException && reason.name === 'AbortError') dispatch({ type: 'finish', turnId: turn.id, candidateId, status: 'stopped' })
-      else dispatch({ type: 'finish', turnId: turn.id, candidateId, status: 'error', error: reason instanceof Error ? reason.message : String(reason) })
+      if (reason instanceof DOMException && reason.name === 'AbortError') { dispatch({ type: 'finish', turnId: turn.id, candidateId, status: 'stopped' }); await persistTurn(turnIndex, { ...candidate, backendId, content: accumulatedContent, reasoning: accumulatedReasoning, tools: accumulatedTools, status: 'stopped' }, requestConversationId).catch(() => {}) }
+      else { const error = reason instanceof Error ? reason.message : String(reason); dispatch({ type: 'finish', turnId: turn.id, candidateId, status: 'error', error }); await persistTurn(turnIndex, { ...candidate, backendId, content: accumulatedContent, reasoning: accumulatedReasoning, tools: accumulatedTools, status: 'error', error }, requestConversationId).catch(() => {}) }
     } finally { controller.current = null }
   }
 
@@ -132,23 +142,48 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
     }
     const context = attachments.map(file => `--- 文件: ${file.name} ---\n${file.content}`).join('\n\n')
     const content = `${input.trim() || '请阅读附件内容。'}${context ? `\n\n[用户导入的文件上下文]\n${context}` : ''}`
-    const turn: ChatTurn = { id: uid('turn'), user: { content, display: input.trim() || '(附件)' }, candidates: [], activeCandidateId: '' }
+    const turn: ChatTurn = { id: uid('turn'), user: { content, display: input.trim() || '(附件)' }, attachments: attachments.map(file => ({ name: file.name, size: file.size })), candidates: [], activeCandidateId: '' }
     dispatch({ type: 'add_turn', turn }); setInput(''); setAttachments([])
   }
   const stop = () => controller.current?.abort()
-  const clear = async () => { controller.current?.abort(); await api(`/api/chat/conversations/${encodeURIComponent(conversationId.current)}`, { method: 'DELETE' }).catch(() => {}); conversationId.current = uid('conversation'); dispatch({ type: 'clear' }); setAttachments([]) }
+  const clear = async () => { const deleting = conversationId.current; discardedConversations.current.add(deleting); controller.current?.abort(); await Promise.all([api(`/api/chat/conversations/${encodeURIComponent(deleting)}`, { method: 'DELETE' }).catch(() => {}), api(`/api/conversations/${encodeURIComponent(deleting)}`, { method: 'DELETE' }).catch(() => {})]); conversationId.current = uid('conversation'); dispatch({ type: 'clear' }); setAttachments([]); void queryClient.invalidateQueries({ queryKey: ['conversations'] }) }
+  const newConversation = () => { controller.current?.abort(); conversationId.current = uid('conversation'); dispatch({ type: 'clear' }); setAttachments([]) }
+  const loadConversation = async (id: string) => {
+    if (!id) return newConversation()
+    controller.current?.abort()
+    const result = await api<{ turns: Array<Record<string, unknown>> }>(`/api/conversations/${id}`)
+    conversationId.current = id
+    dispatch({ type: 'load', turns: result.turns.map(normalizeStoredTurn) })
+  }
+  const persistTurn = async (turnIndex: number, latest: Candidate, targetConversationId = conversationId.current) => {
+    if (discardedConversations.current.has(targetConversationId)) return
+    const turn = state.turns[turnIndex]
+    if (!turn) return
+    const candidates = [...turn.candidates.filter(item => item.id !== latest.id), latest]
+    await api(`/api/conversations/${targetConversationId}/turns/${turn.id}`, { method: 'PUT', body: JSON.stringify({ id: turn.id, position: turnIndex, user_content: turn.user.display, user_display: turn.user.display, attachments: turn.attachments || [], active_candidate_id: latest.id, candidates: candidates.map(item => ({ id: item.id, backend_id: item.backendId, provider: item.provider, model: item.model, content: item.content, reasoning: item.reasoning, tools: item.tools, status: item.status, error: item.error })) }) })
+    void queryClient.invalidateQueries({ queryKey: ['conversations'] })
+  }
   const files = async (list: FileList | null) => { if (!list) return; const next: Attachment[] = []; for (const file of Array.from(list)) { if (file.size > 1024 * 1024) { toast(`文件过大：${file.name}`); continue } next.push({ name: file.name, size: file.size, content: (await file.text()).slice(0, 20000) }) } setAttachments(current => [...current, ...next]) }
 
   return <div className={styles.chat}>
     <div className={styles.toolbar}>
-      <Select value={providerId} onChange={event => setProviderId(event.target.value)}>{providers.map(item => <option key={item.id} value={item.id}>{item.name}{item.api_key_set === false ? ' · 未配置' : ''}</option>)}</Select>
-      <Select value={model} onChange={event => setModel(event.target.value)}>{(models.length ? models : [model || 'default']).map(item => <option key={item}>{item}</option>)}</Select>
-      <Select value={effort} disabled={!canThink} onChange={event => setEffort(event.target.value as 'high' | 'max')}><option value="high">High</option><option value="max">Max</option></Select>
-      <Switch checked={thinking} disabled={!canThink} onChange={setThinking} label={<><BrainCircuit size={14}/>思考</>}/>
-      <Switch checked={webSearch} disabled={!activeSearch?.configured} onChange={setWebSearch} label={<><Search size={14}/>Web Search</>}/>
-      <Switch checked={stream} onChange={setStream} label={<><Radio size={14}/>流式</>}/>
-      <span style={{ marginLeft: 'auto', color: 'var(--text-3)', fontSize: 11 }}>{activeSearch?.configured ? `${activeSearch.name} 已就绪` : `缺少 ${activeSearch?.env_var || '搜索 Key'}`}</span>
-      <Button iconOnly title="清空对话" onClick={() => void clear()}><Trash2 size={15}/></Button>
+      <div className={styles.toolGroup}>
+        <Select aria-label="历史会话" value={(conversations.data?.conversations || []).some(item => item.id === conversationId.current) ? conversationId.current : ''} onChange={event => void loadConversation(event.target.value)}><option value="">新对话</option>{(conversations.data?.conversations || []).map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</Select>
+        <Button iconOnly title="新对话" onClick={newConversation}><FileText size={15}/></Button>
+        <Button iconOnly title="删除当前对话" onClick={() => void clear()}><Trash2 size={15}/></Button>
+      </div>
+      <div className={styles.toolGroup}>
+        <Select value={providerId} onChange={event => setProviderId(event.target.value)}>{providers.map(item => <option key={item.id} value={item.id}>{item.name}{item.api_key_set === false ? ' · 未配置' : ''}</option>)}</Select>
+        <Select value={model} onChange={event => setModel(event.target.value)}>{(models.length ? models : [model || 'default']).map(item => <option key={item}>{item}</option>)}</Select>
+        <Select value={effort} disabled={!canThink} onChange={event => setEffort(event.target.value as 'high' | 'max')}><option value="high">High</option><option value="max">Max</option></Select>
+      </div>
+      <div className={styles.toolGroup}>
+        <Switch checked={thinking} disabled={!canThink} onChange={setThinking} label={<><BrainCircuit size={14}/>思考</>}/>
+        <Switch checked={webSearch} disabled={!activeSearch?.configured} onChange={setWebSearch} label={<><Search size={14}/>Web Search</>}/>
+        {!activeSearch?.configured && <span className={styles.keyWarn} title={`缺少 ${activeSearch?.env_var || '搜索 Key'}，可在设置中配置`}><AlertTriangle size={13}/></span>}
+        <Switch checked={stream} onChange={setStream} label={<><Radio size={14}/>流式</>}/>
+        <details className={styles.knowledgePicker}><summary><BookLabel count={knowledgeBaseIds.length}/></summary><div>{(knowledgeBases.data?.knowledge_bases || []).map(item => <label key={item.id}><input type="checkbox" checked={knowledgeBaseIds.includes(item.id)} onChange={event => setKnowledgeBaseIds(current => event.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))}/><span>{item.name}</span><small>{item.chunk_count} 分块</small></label>)}{!knowledgeBases.data?.knowledge_bases.length && <span>暂无知识库</span>}</div></details>
+      </div>
     </div>
     <div className={styles.messages} ref={messagesRef}>
       {!state.turns.length && <div className={styles.empty}><div><Globe2 size={26}/><p>选择模型后开始对话</p><small>模型会在需要当前信息时自行调用 Web Search</small></div></div>}
@@ -157,8 +192,8 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
         return <div key={turn.id} className={styles.turn}><div className={styles.user}>{turn.user.display}</div>{candidate && <article className={styles.assistant} data-streaming={candidate.status === 'streaming'}>
           <div className={styles.assistantBody}>
             {candidate.tools.length > 0 && <details className={styles.tools} open={candidate.status === 'streaming'}><summary><Wrench size={14}/>工具调用</summary><div>{candidate.tools.map((tool, i) => <div className={styles.toolRow} key={`${tool.type}-${i}`}><strong>{tool.type === 'call' ? '调用' : tool.type === 'result' ? '结果' : '状态'}</strong><span>{tool.query || tool.summary || tool.message || tool.name}</span></div>)}</div></details>}
-            {candidate.reasoning && <details className={styles.reasoning}><summary><BrainCircuit size={14}/>思考过程</summary><div><Markdown>{stripDsml(candidate.reasoning)}</Markdown></div></details>}
-            <Markdown>{candidate.content || (candidate.status === 'streaming' ? '生成中…' : '(空回复)')}</Markdown>{candidate.status === 'streaming' && <span className={styles.cursor}/>} {candidate.error && <div className={styles.error}>{candidate.error}</div>}
+            {candidate.reasoning && <details className={styles.reasoning}><summary><BrainCircuit size={14}/>思考过程</summary><div><StreamingMarkdown content={stripDsml(candidate.reasoning)} streaming={candidate.status === 'streaming'}/></div></details>}
+            <StreamingMarkdown content={candidate.content || (candidate.status === 'streaming' ? '生成中…' : '(空回复)')} streaming={candidate.status === 'streaming' && !!candidate.content}/>{candidate.status === 'streaming' && <span className={styles.cursor}/>} {candidate.error && <div className={styles.error}>{candidate.error}</div>}
           </div>
           <div className={styles.actions}><Button size="small" onClick={() => { void navigator.clipboard.writeText(candidate.content); toast('回答已复制') }}><Copy size={13}/>复制</Button><Button size="small" disabled={!!state.generating} onClick={() => void requestAssistant(turnIndex)}><RefreshCw size={13}/>刷新</Button><Button size="small" iconOnly title="上一个回答" disabled={index <= 0} onClick={() => dispatch({ type: 'select', turnId: turn.id, candidateId: turn.candidates[index - 1].id })}><ChevronLeft size={14}/></Button><span className={styles.counter}>{index + 1}/{turn.candidates.length}</span><Button size="small" iconOnly title="下一个回答" disabled={index >= turn.candidates.length - 1} onClick={() => dispatch({ type: 'select', turnId: turn.id, candidateId: turn.candidates[index + 1].id })}><ChevronRight size={14}/></Button></div>
         </article>}</div>
@@ -177,3 +212,10 @@ function normalizeTool(event: Record<string, unknown>): ToolEvent {
   const type = rawType.includes('call') ? 'call' : rawType.includes('result') ? 'result' : rawType === 'retry' ? 'retry' : rawType === 'limit' ? 'limit' : 'status'
   return { type, name: String(event.name || ''), query: String(event.query || ''), message: String(event.message || ''), summary: String(event.summary || ''), limit: event.limit as string | number | undefined }
 }
+function normalizeStoredTurn(value: Record<string, unknown>): ChatTurn {
+  const user = value.user as { content: string; display: string }
+  const rawCandidates = (value.candidates || []) as Array<Record<string, unknown>>
+  const candidates = rawCandidates.map(item => ({ id: String(item.id), backendId: item.backend_id ? String(item.backend_id) : undefined, provider: String(item.provider || ''), model: String(item.model || ''), content: String(item.content || ''), reasoning: String(item.reasoning || ''), tools: (item.tools || []) as ToolEvent[], status: String(item.status || 'done') as Candidate['status'], error: item.error ? String(item.error) : undefined }))
+  return { id: String(value.id), user, attachments: (value.attachments || []) as Array<{ name: string; size: number }>, candidates, activeCandidateId: String(value.active_candidate_id || candidates.at(-1)?.id || '') }
+}
+function BookLabel({ count }: { count: number }) { return <><FileText size={14}/><span>知识库{count ? ` ${count}` : ''}</span></> }

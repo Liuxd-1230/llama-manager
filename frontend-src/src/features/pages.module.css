@@ -27,3 +27,7 @@
   .statusGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) }
   .row { flex-wrap: wrap }
 }
+
+.overlay { position: fixed; z-index: 70; inset: 0; background: rgba(4, 8, 13, .42); backdrop-filter: blur(8px); display: grid; place-items: center; padding: 30px }
+.importDialog { width: min(720px, 92vw) }
+.importDialog textarea { min-height: 150px; font-family: ui-monospace, Consolas, monospace; font-size: 12px }

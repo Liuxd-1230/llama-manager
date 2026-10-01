@@ -17,8 +17,8 @@ export function MaintenancePage({ config, toast }: { config: AppConfig; toast: (
   useWebSocket('/ws/compile', message => setCompileLogs(logs => [...logs.slice(-999), message]))
   const download = async () => { if (!downloadDir) return toast('请输入下载目录'); setDownloading(true); await api('/api/download/start', { method: 'POST', body: JSON.stringify({ target_dir: downloadDir }) }); toast('下载已启动') }
   const stopDownload = async () => { await api('/api/download/stop', { method: 'POST' }); setDownloading(false) }
-  const check = async () => { const result = await api<{ has_update: boolean; current_commit: string; remote_commit: string }>('/api/update/check'); setUpdateInfo(result.has_update ? `有更新：${result.current_commit} → ${result.remote_commit}` : `已是最新：${result.current_commit}`) }
-  const pull = async (force = false) => { const result = await api<{ success?: boolean; output?: string; error?: string }>('/api/update/pull', { method: 'POST', body: JSON.stringify({ force }) }); setUpdateInfo(result.output || result.error || '操作完成') }
+  const check = async () => { const result = await api<{ has_update: boolean; current_commit: string; remote_commit: string }>('/api/update/check', {}, 300000); setUpdateInfo(result.has_update ? `有更新：${result.current_commit} → ${result.remote_commit}` : `已是最新：${result.current_commit}`) }
+  const pull = async (force = false) => { const result = await api<{ success?: boolean; output?: string; error?: string }>('/api/update/pull', { method: 'POST', body: JSON.stringify({ force }) }, 600000); setUpdateInfo(result.output || result.error || '操作完成') }
   const compile = async () => { setCompiling(true); await api('/api/config', { method: 'POST', body: JSON.stringify(config) }); await api('/api/update/compile', { method: 'POST' }); toast('编译已启动') }
   const stopCompile = async () => { await api('/api/update/compile/stop', { method: 'POST' }); setCompiling(false) }
   return <div className={page.stack}>

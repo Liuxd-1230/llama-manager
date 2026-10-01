@@ -7,6 +7,8 @@ from pathlib import Path
 import re
 import time
 import uuid
+from contextlib import asynccontextmanager
+import httpx
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -17,13 +19,74 @@ from . import search_manager
 from .process_manager import process_manager
 from .update_manager import update_manager
 from .download_manager import download_manager
-from .optimizer import optimizer
 from .chat_state import CandidateContext, conversation_store
+from .storage import database
+from .jobs import JobManager, noop_handler
+from .evaluation import EvaluationService
+from .knowledge import KnowledgeService
+from .routers.conversations import router as conversations_router
+from .routers.evaluation import router as evaluation_router
+from .routers.jobs import router as jobs_router, ws_router as jobs_ws_router
+from .routers.knowledge import router as knowledge_router
 
-app = FastAPI(title="llama.cpp Run Manager")
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    await database.initialize()
+    client = httpx.AsyncClient(follow_redirects=False)
+    jobs = JobManager(database)
+    evaluation = EvaluationService(database, client)
+    knowledge = KnowledgeService(database, client)
+    jobs.register("noop", noop_handler)
+    jobs.register("evaluation", evaluation.run_job)
+    jobs.register("knowledge_sync", knowledge.sync_job)
+    cfg.load_config("default")
+    application.state.db = database
+    application.state.http_client = client
+    application.state.jobs = jobs
+    application.state.evaluation = evaluation
+    application.state.knowledge = knowledge
+    await jobs.initialize()
+    await evaluation.initialize()
+    try:
+        yield
+    finally:
+        active_tasks = list(jobs.tasks.values())
+        for task in active_tasks:
+            task.cancel()
+        if active_tasks:
+            await asyncio.gather(*active_tasks, return_exceptions=True)
+        await client.aclose()
+
+
+app = FastAPI(title="llama.cpp Run Manager", version="2.0.0", lifespan=lifespan)
+app.include_router(conversations_router)
+app.include_router(jobs_router)
+app.include_router(jobs_ws_router)
+app.include_router(evaluation_router)
+app.include_router(knowledge_router)
+
+
+def _error_payload(request: Request, code: str, message: str, details: dict | None = None) -> dict:
+    return {
+        "code": code,
+        "message": message,
+        "details": details or {},
+        "request_id": getattr(request.state, "request_id", ""),
+    }
+
+
+@app.exception_handler(KeyError)
+async def not_found_error(request: Request, exc: KeyError):
+    return JSONResponse(status_code=404, content=_error_payload(request, "not_found", str(exc).strip("'")))
+
+
+@app.exception_handler(ValueError)
+async def validation_error(request: Request, exc: ValueError):
+    return JSONResponse(status_code=400, content=_error_payload(request, "invalid_request", str(exc)))
+
 
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
-_optimizer_task: asyncio.Task | None = None
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEFAULT_BASE_URLS = {
     "deepseek": "https://api.deepseek.com",
@@ -975,10 +1038,13 @@ async def _normalize_v2_stream(source, candidate_id: str):
 
 @app.middleware("http")
 async def local_only_api(request: Request, call_next):
+    request.state.request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
     if request.url.path.startswith("/api/") and not _remote_api_enabled():
         if not _is_local_host(request.client.host if request.client else None):
-            return JSONResponse(status_code=403, content={"error": "Remote API access is disabled"})
-    return await call_next(request)
+            return JSONResponse(status_code=403, content=_error_payload(request, "remote_api_disabled", "Remote API access is disabled"))
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request.state.request_id
+    return response
 
 
 async def _reject_remote_websocket(websocket: WebSocket) -> bool:
@@ -1040,6 +1106,95 @@ async def import_config(body: dict):
     return config.model_dump()
 
 
+# ── Model profiles ────────────────────────────────────────────
+
+@app.get("/api/profiles")
+def list_profiles():
+    running = process_manager.get_status()
+    profiles = []
+    for name in cfg.list_configs():
+        profile = cfg.read_config(name)
+        if profile is None:
+            continue
+        summary = _profile_summary(name, profile)
+        summary["is_running"] = running.state == "running" and running.profile == name
+        profiles.append(summary)
+    profiles.sort(key=lambda item: (not item["is_running"], not item["is_current"], item["name"]))
+    return {"profiles": profiles}
+
+
+def _profile_summary(name: str, profile: AppConfig) -> dict:
+    model_path = Path(profile.model_path) if profile.model_path else None
+    model_exists = bool(model_path and model_path.is_file())
+    model_size_mb = 0.0
+    if model_exists:
+        model_size_mb = round(model_path.stat().st_size / (1024 * 1024), 1)
+    basic = profile.basic
+    return {
+        "name": name,
+        "is_current": cfg.get_current_name() == name,
+        "model_path": profile.model_path,
+        "model_name": model_path.name if model_path else "",
+        "model_size_mb": model_size_mb,
+        "model_exists": model_exists,
+        "model_meta": cfg.read_gguf_metadata(profile.model_path),
+        "ctx_size": basic.ctx_size,
+        "ngl": basic.ngl if basic.ngl_enabled else 0,
+        "fit_enabled": basic.fit_enabled,
+        "n_cpu_moe": basic.n_cpu_moe,
+        "kv_cache_quant_k": basic.kv_cache_quant_k,
+        "kv_cache_quant_v": basic.kv_cache_quant_v,
+        "flash_attn": basic.flash_attn,
+        "mtp_enabled": profile.mtp.enabled,
+        "host": profile.server.host,
+        "port": profile.server.port,
+    }
+
+
+@app.post("/api/profiles/duplicate")
+def duplicate_profile(body: dict):
+    raw_name = str(body.get("name", "")).strip()
+    source = cfg._sanitize_name(body.get("source", "default"))
+    name = cfg._sanitize_name(raw_name)
+    # _sanitize_name falls back to "default" on empty input; an explicitly empty
+    # name must be rejected instead of silently cloning into the default profile.
+    if not raw_name or not name:
+        raise ValueError("Profile name is required")
+    try:
+        path = cfg.duplicate_config(source, name)
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+    return {"ok": True, "path": str(path)}
+
+
+def _busy_gpu_resources(request: Request) -> list[str]:
+    jobs = getattr(request.app.state, "jobs", None)
+    return jobs.busy_resources(["gpu", "llama_server"]) if jobs else []
+
+
+@app.post("/api/profiles/launch")
+async def launch_profile(request: Request, body: dict):
+    raw_name = str(body.get("name", "")).strip()
+    name = cfg._sanitize_name(raw_name)
+    if not raw_name:
+        return JSONResponse(status_code=400, content={"error": "Profile name is required"})
+    profile = cfg.read_config(name)
+    if profile is None:
+        return JSONResponse(status_code=404, content={"error": f"Profile not found: {name}"})
+    busy = _busy_gpu_resources(request)
+    if busy:
+        return JSONResponse(status_code=409, content={"error": f"任务正在占用 {'、'.join(busy)}，请等待任务完成或取消后再切换档案"})
+    was_running = process_manager.get_status().state == "running"
+    if was_running:
+        await process_manager.stop()
+    try:
+        await process_manager.start(profile, profile_name=name)
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    cfg.load_config(name)
+    return {"ok": True, "restarted": was_running, "profile": name}
+
+
 @app.get("/api/scan-models")
 def scan_models(dir: str):
     models = cfg.scan_models(dir)
@@ -1055,10 +1210,13 @@ def detect_server(llama_cpp_dir: str):
 # ── Server control endpoints ──────────────────────────────────
 
 @app.post("/api/server/start")
-async def server_start():
+async def server_start(request: Request):
+    busy = _busy_gpu_resources(request)
+    if busy:
+        return JSONResponse(status_code=409, content={"error": f"任务正在占用 {'、'.join(busy)}，暂不能启动 llama-server"})
     try:
         config = cfg.get_config()
-        await process_manager.start(config)
+        await process_manager.start(config, profile_name=cfg.get_current_name())
         return {"ok": True}
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
@@ -1197,6 +1355,18 @@ async def chat_proxy(request: Request):
     if not isinstance(raw_messages, list):
         return JSONResponse(status_code=400, content={"error": "messages must be a list"})
     messages = raw_messages
+    knowledge_base_ids = [str(value) for value in data.get("knowledge_base_ids", []) if value]
+    if knowledge_base_ids:
+        query = _latest_user_text(raw_messages)
+        knowledge = await request.app.state.knowledge.search(knowledge_base_ids, query, 6)
+        if knowledge["results"]:
+            lines = ["以下内容来自用户挂载的本地知识库。关键结论必须引用 [KB编号]；不要把无来源常识伪装成知识库事实。"]
+            for index, item in enumerate(knowledge["results"], 1):
+                location = f"p.{item['page']}" if item.get("page") else f"L{item.get('line_start') or '?'}-{item.get('line_end') or '?'}"
+                lines.append(f"[KB{index}] {item['source_path']} ({location})\n{item['content']}")
+            messages = [{"role": "system", "content": "\n\n".join(lines)}, *messages]
+        else:
+            messages = [{"role": "system", "content": "本地知识库没有找到足够证据。请明确回答未找到依据，不要使用模型常识补写事实。"}, *messages]
     use_web_tool = bool(data.get("web_search_tool") or data.get("web_search") is True)
     messages = await _messages_with_search_context(messages, bool(data.get("search_summary")))
     messages = _messages_with_web_tool_guidance(messages, use_web_tool)
@@ -1480,65 +1650,6 @@ async def ws_download(websocket: WebSocket):
         pass
     finally:
         download_manager.unsubscribe(q)
-
-
-# ── Optimizer endpoints ────────────────────────────────────────
-
-@app.post("/api/optimize/start")
-async def optimize_start(request: Request):
-    global _optimizer_task
-    body = await request.json()
-    config = cfg.get_config()
-    try:
-        if _optimizer_task and not _optimizer_task.done():
-            return JSONResponse(status_code=400, content={"error": "Optimization already running."})
-        _optimizer_task = asyncio.create_task(optimizer.run_optimization(
-            llama_cpp_dir=config.llama_cpp_dir,
-            model_path=config.model_path,
-            threads=config.basic.threads,
-            ngl_range=tuple(body.get("ngl_range", [0, 99])),
-            n_cpu_moe_range=tuple(body.get("n_cpu_moe_range", [0, 99])),
-            ctx_options=body.get("ctx_options", [4096]),
-            kv_options=body.get("kv_options", ["f16"]),
-            n_trials=body.get("n_trials", 50),
-            mmap=config.basic.mmap,
-            mlock=config.basic.mlock,
-            kv_offload=config.basic.kv_offload,
-            flash_attn=config.basic.flash_attn,
-            fit_target=config.basic.fit_target if config.basic.fit_enabled else 0,
-        ))
-        return {"ok": True}
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"error": str(e)})
-
-
-@app.post("/api/optimize/stop")
-async def optimize_stop():
-    await optimizer.stop()
-    return {"ok": True}
-
-
-@app.get("/api/optimize/status")
-def optimize_status():
-    return optimizer.get_status()
-
-
-@app.websocket("/ws/optimize")
-async def ws_optimize(websocket: WebSocket):
-    if await _reject_remote_websocket(websocket):
-        return
-    await websocket.accept()
-    q = optimizer.subscribe()
-    try:
-        for line in optimizer.get_status()["logs"]:
-            await websocket.send_text(line if isinstance(line, str) else json.dumps(line))
-        while True:
-            text = await q.get()
-            await websocket.send_text(text if isinstance(text, str) else json.dumps(text))
-    except (WebSocketDisconnect, asyncio.CancelledError):
-        pass
-    finally:
-        optimizer.unsubscribe(q)
 
 
 # ── Static files ──────────────────────────────────────────────

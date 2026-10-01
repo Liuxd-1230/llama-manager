@@ -15,3 +15,4 @@ frontend-src/*.tsbuildinfo
 frontend-src/vite.config.js
 frontend-src/vite.config.d.ts
 .codex-*.log
+.claude/

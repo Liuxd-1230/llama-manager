@@ -89,6 +89,7 @@ class ServerStatus(BaseModel):
     pid: Optional[int] = None
     uptime_seconds: float = 0
     error: Optional[str] = None
+    profile: str = ""  # name of the model profile the running server was launched from
 
 
 class UpdateStatus(BaseModel):

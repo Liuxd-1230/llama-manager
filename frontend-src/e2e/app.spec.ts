@@ -1,13 +1,16 @@
 import { expect, test, type Page } from '@playwright/test'
 
 const pages = [
+  ['模型', '#/models'],
   ['配置', '#/config'],
   ['运行', '#/run'],
-  ['优化', '#/optimize'],
+  ['评测', '#/evaluation'],
+  ['知识库', '#/knowledge'],
   ['维护', '#/maintenance'],
+  ['对话', '#/chat'],
 ] as const
 
-test('five workspaces, themes, glass header and settings stay usable', async ({ page }) => {
+test('seven workspaces, themes, glass header and settings stay usable', async ({ page }) => {
   const errors: string[] = []
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
   page.on('pageerror', error => errors.push(error.message))

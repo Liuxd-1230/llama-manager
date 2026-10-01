@@ -6,12 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "generate:api": "..\\.venv\\Scripts\\python.exe ..\\scripts\\export_openapi.py && openapi-typescript openapi.json -o src/generated/api.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.2",
     "@vitejs/plugin-react": "latest",
     "katex": "latest",
     "lucide-react": "latest",
@@ -34,7 +36,8 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "jsdom": "latest",
-    "typescript": "latest",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3",
     "vite": "latest",
     "vitest": "latest"
   },

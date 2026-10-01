@@ -1,0 +1,180 @@
+import { Copy, PackageOpen, Pencil, Play, Plus, Square, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
+import { api } from '../../api'
+import { Badge, Button, ConfirmButton, Input, Panel } from '../../components/ui'
+import type { AppConfig } from '../../types'
+import page from '../pages.module.css'
+import styles from './models.module.css'
+
+type ProfileMeta = { name?: string; architecture?: string; layers?: number; experts?: number; active_experts?: number; context_length?: number }
+
+type Profile = {
+  name: string
+  is_current: boolean
+  is_running: boolean
+  model_path: string
+  model_name: string
+  model_size_mb: number
+  model_exists: boolean
+  model_meta: ProfileMeta
+  ctx_size: number
+  ngl: number
+  fit_enabled: boolean
+  n_cpu_moe: number
+  kv_cache_quant_k: string
+  kv_cache_quant_v: string
+  flash_attn: boolean
+  mtp_enabled: boolean
+  host: string
+  port: number
+}
+
+function errorMessage(reason: unknown) { return reason instanceof Error ? reason.message : String(reason) }
+
+export function ModelsPage({ config, setConfig, dirty, server, toast }: {
+  config: AppConfig
+  setConfig: (config: AppConfig) => void
+  dirty: boolean
+  server: { state: string; pid?: number; profile?: string }
+  toast: (text: string) => void
+}) {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const profilesQuery = useQuery({ queryKey: ['profiles'], queryFn: () => api<{ profiles: Profile[] }>('/api/profiles') })
+  const profiles = profilesQuery.data?.profiles || []
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [busy, setBusy] = useState('')
+  const serverRunning = server.state === 'running'
+
+  useEffect(() => { void queryClient.invalidateQueries({ queryKey: ['profiles'] }) }, [queryClient, server.state, server.profile])
+
+  const afterServerAction = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['profiles'] }),
+      queryClient.invalidateQueries({ queryKey: ['server-status'] }),
+      queryClient.invalidateQueries({ queryKey: ['config'] }),
+    ])
+  }
+
+  const launch = async (profile: Profile) => {
+    setBusy(profile.name)
+    try {
+      const result = await api<{ restarted: boolean }>('/api/profiles/launch', { method: 'POST', body: JSON.stringify({ name: profile.name }) })
+      toast(result.restarted ? `已切换到档案：${profile.name}` : `已启动档案：${profile.name}`)
+      await afterServerAction()
+    } catch (reason) { toast(`启动失败：${errorMessage(reason)}`) } finally { setBusy('') }
+  }
+
+  const stop = async () => {
+    setBusy('__stop__')
+    try { await api('/api/server/stop', { method: 'POST' }); toast('服务已停止'); await afterServerAction() } catch (reason) { toast(`停止失败：${errorMessage(reason)}`) } finally { setBusy('') }
+  }
+
+  const edit = async (profile: Profile) => {
+    setConfig(await api<AppConfig>('/api/config/load', { method: 'POST', body: JSON.stringify({ name: profile.name }) }))
+    await queryClient.invalidateQueries({ queryKey: ['config'] })
+    navigate('/config')
+  }
+
+  const duplicate = async (profile: Profile) => {
+    const taken = new Set(profiles.map(item => item.name))
+    let name = `${profile.name}-copy`
+    for (let index = 2; taken.has(name); index += 1) name = `${profile.name}-copy${index}`
+    try {
+      await api('/api/profiles/duplicate', { method: 'POST', body: JSON.stringify({ source: profile.name, name }) })
+      toast(`已复制为：${name}`); await queryClient.invalidateQueries({ queryKey: ['profiles'] })
+    } catch (reason) { toast(`复制失败：${errorMessage(reason)}`) }
+  }
+
+  const remove = async (profile: Profile) => {
+    if (profile.name === 'default') return toast('默认档案不能删除')
+    setBusy(profile.name)
+    try {
+      await api('/api/config/delete', { method: 'POST', body: JSON.stringify({ name: profile.name }) })
+      if (profile.is_current) setConfig(await api<AppConfig>('/api/config/load', { method: 'POST', body: JSON.stringify({ name: 'default' }) }))
+      toast('档案已删除'); await queryClient.invalidateQueries({ queryKey: ['profiles'] })
+    } catch (reason) { toast(`删除失败：${errorMessage(reason)}`) } finally { setBusy('') }
+  }
+
+  const create = async () => {
+    const name = newName.trim()
+    if (!name) return
+    try {
+      await api('/api/config/save-as', { method: 'POST', body: JSON.stringify({ name, config }) })
+      toast(`已创建档案：${name}（来自当前配置）`); setNewName(''); setCreating(false); await queryClient.invalidateQueries({ queryKey: ['profiles'] })
+    } catch (reason) { toast(`创建失败：${errorMessage(reason)}`) }
+  }
+
+  return <>
+    <div className={page.row} style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+      <p className={page.hint}>模型档案 = 模型文件 + 启动参数 + 采样 + 提示词{dirty ? ' · 当前有未保存的配置修改' : ''}</p>
+      {creating
+        ? <div className={styles.createRow}><Input placeholder="档案名称" value={newName} onChange={event => setNewName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && newName.trim()) void create() }} autoFocus /><Button tone="primary" disabled={!newName.trim()} onClick={() => void create()}>确定</Button><Button onClick={() => { setCreating(false); setNewName('') }}>取消</Button></div>
+        : <Button tone="primary" onClick={() => setCreating(true)}><Plus size={15}/>新建档案</Button>}
+    </div>
+    {profilesQuery.isError && <Panel><p className={page.hint}>加载档案失败：{errorMessage(profilesQuery.error)}　<Button size="small" onClick={() => void profilesQuery.refetch()}>重试</Button></p></Panel>}
+    {profilesQuery.isPending && !profilesQuery.isError && <Panel><p className={page.hint}>正在加载档案…</p></Panel>}
+    {profilesQuery.isSuccess && profiles.length === 0 && <Panel><p className={page.hint}><PackageOpen size={14} style={{ verticalAlign: -2 }}/> 还没有档案。在「配置」页填写模型与参数后保存，或点击右上角「新建档案」。</p></Panel>}
+    {profilesQuery.isSuccess && profiles.length > 0 && <div className={styles.grid}>
+      {profiles.map(profile => <ProfileCard key={profile.name} profile={profile} busy={busy === profile.name} stopping={busy === '__stop__'} serverRunning={serverRunning} dirty={dirty} onLaunch={() => void launch(profile)} onStop={() => void stop()} onEdit={() => void edit(profile)} onDuplicate={() => void duplicate(profile)} onRemove={() => void remove(profile)} />)}
+    </div>}
+  </>
+}
+
+function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, onStop, onEdit, onDuplicate, onRemove }: {
+  profile: Profile
+  busy: boolean
+  stopping: boolean
+  serverRunning: boolean
+  dirty: boolean
+  onLaunch: () => void
+  onStop: () => void
+  onEdit: () => void
+  onDuplicate: () => void
+  onRemove: () => void
+}) {
+  const meta = profile.model_meta || {}
+  const sizeLabel = profile.model_size_mb >= 1024 ? `${(profile.model_size_mb / 1024).toFixed(1)} GB` : profile.model_size_mb ? `${profile.model_size_mb.toFixed(0)} MB` : ''
+  const chips: { label: string; active?: boolean }[] = [
+    { label: `ctx ${profile.ctx_size >= 1024 ? `${Math.round(profile.ctx_size / 1024)}K` : profile.ctx_size}`, active: true },
+    profile.fit_enabled ? { label: 'GPU 自动适配' } : { label: `ngl ${profile.ngl}` },
+    ...(profile.n_cpu_moe > 0 ? [{ label: `MoE→CPU ${profile.n_cpu_moe}` }] : []),
+    ...(profile.kv_cache_quant_k || profile.kv_cache_quant_v ? [{ label: `KV ${profile.kv_cache_quant_k || profile.kv_cache_quant_v}` }] : []),
+    ...(profile.flash_attn ? [{ label: 'FlashAttn' }] : []),
+    ...(profile.mtp_enabled ? [{ label: 'MTP' }] : []),
+    { label: `${profile.host}:${profile.port}` },
+  ]
+  const parts = [
+    meta.architecture || '',
+    meta.layers ? `${meta.layers} 层${meta.experts ? ` · MoE ${meta.experts}${meta.active_experts ? `/${meta.active_experts}` : ''}` : ''}` : '',
+    meta.context_length ? `原生 ${meta.context_length >= 1024 ? `${Math.round(meta.context_length / 1024)}K` : meta.context_length}` : '',
+  ].filter(Boolean)
+  const needsSwitch = serverRunning && !profile.is_running
+  const fileMissing = !profile.model_exists && !!profile.model_path
+  return (
+    <Panel className={profile.is_running ? styles.cardRunning : ''} title={<span className={styles.titleRow}><span className={styles.titleName}>{profile.name}</span>{profile.is_running && <Badge tone="good">运行中</Badge>}{profile.is_current && !profile.is_running && <Badge>当前</Badge>}</span>} actions={
+      <div className={page.row}>
+        <ConfirmButton size="small" confirm={dirty} confirmLabel="丢弃修改?" title="编辑参数" onConfirm={onEdit}><Pencil size={14}/>编辑</ConfirmButton>
+        <Button size="small" onClick={onDuplicate}><Copy size={14}/>复制</Button>
+        <ConfirmButton size="small" tone="danger" disabled={profile.is_running || profile.name === 'default'} confirmLabel="确认删除?" onConfirm={onRemove}><Trash2 size={14}/>删除</ConfirmButton>
+      </div>
+    }>
+      <p className={styles.metaLine} title={profile.model_path}>
+        {profile.model_name ? <>{profile.model_name}{sizeLabel && ` · ${sizeLabel}`}</> : '未选择模型文件'}
+      </p>
+      {parts.length > 0 && <p className={styles.metaLine}>{parts.join(' · ')}</p>}
+      <div className={styles.chips}>
+        {fileMissing && <span className={`${styles.chip} ${styles.chipMissing}`}>文件缺失</span>}
+        {chips.map(chip => <span key={chip.label} className={`${styles.chip} ${chip.active ? styles.chipActive : ''}`}>{chip.label}</span>)}
+      </div>
+      <div className={styles.actions}>
+        {profile.is_running
+          ? <Button tone="danger" size="small" disabled={stopping} onClick={onStop}><Square size={14}/>{stopping ? '停止中…' : '停止'}</Button>
+          : <ConfirmButton tone="primary" size="small" confirm={needsSwitch || dirty} confirmLabel={dirty ? '未保存修改将丢弃，再点确认' : '会停止当前服务，再点确认'} disabled={busy || fileMissing} title={fileMissing ? '模型文件不存在' : undefined} onConfirm={onLaunch}>{busy ? <><Play size={14}/>启动中…</> : needsSwitch ? <><Play size={14}/>切换到此档案</> : <><Play size={14}/>启动</>}</ConfirmButton>}
+      </div>
+    </Panel>
+  )
+}

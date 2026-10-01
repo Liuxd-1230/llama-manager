@@ -1,8 +1,35 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 import styles from './ui.module.css'
 
-export function Button({ tone = 'default', size = 'normal', iconOnly = false, className = '', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { tone?: 'default' | 'primary' | 'danger' | 'success'; size?: 'normal' | 'small'; iconOnly?: boolean }) {
-  return <button {...props} className={[styles.button, styles[tone], size === 'small' ? styles.small : '', iconOnly ? styles.iconButton : '', className].filter(Boolean).join(' ')} />
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { tone?: 'default' | 'primary' | 'danger' | 'success'; size?: 'normal' | 'small'; iconOnly?: boolean }
+
+export function Button({ tone = 'default', size = 'normal', iconOnly = false, className = '', ...props }: ButtonProps) {
+  const { title, 'aria-label': ariaLabel, ...rest } = props
+  return <button {...rest} title={title} aria-label={ariaLabel ?? (iconOnly ? title : undefined)} className={[styles.button, styles[tone], size === 'small' ? styles.small : '', iconOnly ? styles.iconButton : '', className].filter(Boolean).join(' ')} />
+}
+
+// Two-stage confirm for actions with consequences: the first click arms the
+// button (swapping in confirmLabel), the second click within `timeout` fires.
+// With confirm=false it passes straight through.
+export function ConfirmButton({ confirmLabel, onConfirm, confirm = true, timeout = 3000, children, ...props }: ButtonProps & { confirmLabel: string; onConfirm: () => void; confirm?: boolean; timeout?: number }) {
+  const [armed, setArmed] = useState(false)
+  const timer = useRef(0)
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+  const handleClick = () => {
+    if (!confirm) {
+      onConfirm()
+      return
+    }
+    if (armed) {
+      window.clearTimeout(timer.current)
+      setArmed(false)
+      onConfirm()
+      return
+    }
+    setArmed(true)
+    timer.current = window.setTimeout(() => setArmed(false), timeout)
+  }
+  return <Button {...props} onClick={handleClick}>{armed ? confirmLabel : children}</Button>
 }
 
 export function Field({ label, children, className = '' }: { label: string; children: ReactNode; className?: string }) {
