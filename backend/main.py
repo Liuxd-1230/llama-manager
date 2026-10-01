@@ -238,6 +238,11 @@ def _local_chat_payload(data: dict, config: AppConfig, messages: list[dict]) -> 
         "top_k": sampling.top_k,
         "top_p": sampling.top_p,
     }
+    # Only an explicit OFF is sent: it must reliably suppress thinking (otherwise
+    # a reasoning model eats the whole small max_tokens budget). An ON defers to
+    # the server-side default so servers launched without --jinja keep working.
+    if data.get("thinking_enabled") is False:
+        payload["chat_template_kwargs"] = {"enable_thinking": False}
     if sampling.min_p_enabled:
         payload["min_p"] = sampling.min_p
     if sampling.repeat_penalty_enabled:
@@ -1210,8 +1215,11 @@ def scan_models(dir: str):
 
 
 @app.get("/api/detect-server")
-def detect_server(llama_cpp_dir: str):
-    path = cfg.detect_server_binary(llama_cpp_dir)
+def detect_server(llama_cpp_dir: str, engine: str = "llama.cpp"):
+    if engine == "kvmem":
+        path = cfg.detect_kvmem_binary(llama_cpp_dir)
+    else:
+        path = cfg.detect_server_binary(llama_cpp_dir)
     return {"path": path, "found": bool(path)}
 
 

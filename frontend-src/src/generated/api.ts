@@ -2831,6 +2831,7 @@ export interface operations {
         parameters: {
             query: {
                 llama_cpp_dir: string;
+                engine?: string;
             };
             header?: never;
             path?: never;

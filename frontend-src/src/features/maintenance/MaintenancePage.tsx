@@ -22,6 +22,7 @@ export function MaintenancePage({ config, toast }: { config: AppConfig; toast: (
   const compile = async () => { setCompiling(true); await api('/api/config', { method: 'POST', body: JSON.stringify(config) }); await api('/api/update/compile', { method: 'POST' }); toast('编译已启动') }
   const stopCompile = async () => { await api('/api/update/compile/stop', { method: 'POST' }); setCompiling(false) }
   return <div className={page.stack}>
+    {config.engine === 'kvmem' && <p className={page.hint} style={{ margin: 0 }}>当前档案使用 KVMem 引擎（预编译包，非 git 仓库）：检查更新、拉取和编译不适用，仅「下载 llama.cpp」可用。</p>}
     <div className={page.grid}>
       <Panel title="下载 llama.cpp" icon={<Download size={15}/>}>
         <Field label="目标目录"><Input value={downloadDir} onChange={event => setDownloadDir(event.target.value)} placeholder="D:\\workspace\\llama.cpp"/></Field>

@@ -1,9 +1,9 @@
 import { ClipboardPaste, Copy, Download, FolderOpen, RefreshCw, Save, Trash2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api'
 import { FileBrowser } from '../../components/FileBrowser'
-import { Button, Field, Input, Panel, Select, Switch, Textarea } from '../../components/ui'
+import { Badge, Button, Field, Input, Panel, Select, Switch, Textarea } from '../../components/ui'
 import type { AppConfig } from '../../types'
 import { applyLaunchCommand } from './commandImport'
 import page from '../pages.module.css'
@@ -28,6 +28,13 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
   const patchSampling = (value: Partial<AppConfig['sampling']>) => patch('sampling', { ...sampling, ...value })
   const patchMtp = (value: Partial<AppConfig['mtp']>) => patch('mtp', { ...mtp, ...value })
   const patchKvmem = (value: Partial<AppConfig['kvmem']>) => patch('kvmem', { ...kvmem, ...value })
+  const isKvmem = config.engine === 'kvmem'
+  const detectQuery = useQuery({
+    queryKey: ['detect-binary', config.engine, config.llama_cpp_dir],
+    queryFn: () => api<{ found: boolean; path: string }>(`/api/detect-server?llama_cpp_dir=${encodeURIComponent(config.llama_cpp_dir)}&engine=${config.engine}`),
+    enabled: !!config.llama_cpp_dir.trim(),
+    staleTime: 30000,
+  })
   const refreshNames = async () => {
     try { setConfigs((await api<{ configs: string[] }>('/api/config/list')).configs || []) } catch { setConfigs([]) }
   }
@@ -128,7 +135,7 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
         <Panel title="模型与运行目录">
           <div className={page.formGrid}>
             <Field label="推理引擎"><Select value={config.engine} onChange={event => patch('engine', event.target.value as AppConfig['engine'])}><option value="llama.cpp">本地 llama.cpp</option><option value="kvmem">KVMem(KV 缓存虚拟化)</option></Select></Field>
-            <Field label="llama.cpp 目录"><div className={page.row}><Input value={config.llama_cpp_dir} onChange={event => patch('llama_cpp_dir', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'llama_cpp_dir', mode: 'folder' })}><FolderOpen size={16}/></Button></div></Field>
+            <Field label="引擎目录"><div className={page.row}><Input value={config.llama_cpp_dir} onChange={event => patch('llama_cpp_dir', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'llama_cpp_dir', mode: 'folder' })}><FolderOpen size={16}/></Button></div></Field>
             <Field label="GGUF 模型"><div className={page.row}><Input value={config.model_path} onChange={event => patch('model_path', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'model_path', mode: 'file', extension: '.gguf' })}><FolderOpen size={16}/></Button></div></Field>
             <Field label="MMProj"><div className={page.row}><Input value={config.mmproj_path} onChange={event => patch('mmproj_path', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'mmproj_path', mode: 'file', extension: '.gguf' })}><FolderOpen size={16}/></Button></div></Field>
             <Field label="监听模式"><Select value={config.server.mode} onChange={event => patch('server', { ...config.server, mode: event.target.value, host: event.target.value === 'lan' ? '0.0.0.0' : '127.0.0.1' })}><option value="local">本地 127.0.0.1</option><option value="lan">局域网 0.0.0.0</option></Select></Field>
@@ -139,26 +146,30 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
 
         <Panel title="推理与显存">
           <div className={page.formGridThree}>
-            <NumberField label="上下文" value={basic.ctx_size} onChange={ctx_size => patchBasic({ ctx_size })} />
-            <NumberField label="CPU 线程" value={basic.threads} onChange={threads => patchBasic({ threads })} />
-            <NumberField label="并行数" value={basic.parallel} onChange={parallel => patchBasic({ parallel })} />
-            <Field label="GPU 卸载"><div className={page.row}><Switch checked={basic.ngl_enabled} disabled={basic.fit_enabled} onChange={ngl_enabled => patchBasic({ ngl_enabled })} label="NGL"/><Input type="number" disabled={!basic.ngl_enabled || basic.fit_enabled} value={basic.ngl} onChange={event => patchBasic({ ngl: Number(event.target.value) })}/></div></Field>
-            <Field label="自动适配 GPU"><div className={page.row}><Switch checked={basic.fit_enabled} onChange={fit_enabled => patchBasic({ fit_enabled })} label="Fit"/><Input type="number" disabled={!basic.fit_enabled} value={basic.fit_target} onChange={event => patchBasic({ fit_target: Number(event.target.value) })}/></div></Field>
-            <NumberField label="MoE CPU 层" value={basic.n_cpu_moe} onChange={n_cpu_moe => patchBasic({ n_cpu_moe })} />
-            <Field label="KV Cache K"><Select value={basic.kv_cache_quant_k} onChange={event => patchBasic({ kv_cache_quant_k: event.target.value })}><option value="">默认</option><option>q8_0</option><option>q4_0</option></Select></Field>
-            <Field label="KV Cache V"><Select value={basic.kv_cache_quant_v} onChange={event => patchBasic({ kv_cache_quant_v: event.target.value })}><option value="">默认</option><option>q8_0</option><option>q4_0</option></Select></Field>
-            <NumberField label="Cache RAM MiB" value={basic.cache_ram} onChange={cache_ram => patchBasic({ cache_ram })} />
+            {!isKvmem && <NumberField label="上下文" value={basic.ctx_size} onChange={ctx_size => patchBasic({ ctx_size })} />}
+            {!isKvmem && <NumberField label="CPU 线程" value={basic.threads} onChange={threads => patchBasic({ threads })} />}
+            {!isKvmem && <NumberField label="并行数" value={basic.parallel} onChange={parallel => patchBasic({ parallel })} />}
+            <Field label="GPU 卸载"><div className={page.row}><Switch checked={basic.ngl_enabled} disabled={basic.fit_enabled && !isKvmem} onChange={ngl_enabled => patchBasic({ ngl_enabled })} label="NGL"/><Input type="number" disabled={!basic.ngl_enabled || (basic.fit_enabled && !isKvmem)} value={basic.ngl} onChange={event => patchBasic({ ngl: Number(event.target.value) })}/></div></Field>
+            {!isKvmem && <Field label="自动适配 GPU"><div className={page.row}><Switch checked={basic.fit_enabled} onChange={fit_enabled => patchBasic({ fit_enabled })} label="Fit"/><Input type="number" disabled={!basic.fit_enabled} value={basic.fit_target} onChange={event => patchBasic({ fit_target: Number(event.target.value) })}/></div></Field>}
+            {!isKvmem && <NumberField label="MoE CPU 层" value={basic.n_cpu_moe} onChange={n_cpu_moe => patchBasic({ n_cpu_moe })} />}
+            {!isKvmem && <Field label="KV Cache K"><Select value={basic.kv_cache_quant_k} onChange={event => patchBasic({ kv_cache_quant_k: event.target.value })}><option value="">默认</option><option>q8_0</option><option>q4_0</option></Select></Field>}
+            {!isKvmem && <Field label="KV Cache V"><Select value={basic.kv_cache_quant_v} onChange={event => patchBasic({ kv_cache_quant_v: event.target.value })}><option value="">默认</option><option>q8_0</option><option>q4_0</option></Select></Field>}
+            {!isKvmem && <NumberField label="Cache RAM MiB" value={basic.cache_ram} onChange={cache_ram => patchBasic({ cache_ram })} />}
+            {isKvmem && <p className={page.hint} style={{ gridColumn: '1 / -1', margin: 0 }}>仅 llama.cpp 引擎使用的参数已隐藏;上下文由下方 KVMem 面板的「逻辑工作区」控制。</p>}
           </div>
           <div className={page.wrap} style={{ marginTop: 14 }}>
-            <Switch checked={basic.mmap} onChange={mmap => patchBasic({ mmap })} label="MMap"/><Switch checked={basic.mlock} onChange={mlock => patchBasic({ mlock })} label="MLock"/>
-            <Switch checked={basic.kv_offload} onChange={kv_offload => patchBasic({ kv_offload })} label="KV GPU"/><Switch checked={basic.flash_attn} onChange={flash_attn => patchBasic({ flash_attn })} label="Flash Attention"/>
-            <Switch checked={basic.kv_unified} onChange={kv_unified => patchBasic({ kv_unified })} label="Unified KV"/><Switch checked={basic.context_shift} onChange={context_shift => patchBasic({ context_shift })} label="Context Shift"/>
-            <Switch checked={basic.enable_thinking} onChange={enable_thinking => patchBasic({ enable_thinking })} label="Reasoning"/>
+            {!isKvmem && <Switch checked={basic.mmap} onChange={mmap => patchBasic({ mmap })} label="MMap"/>}
+            {!isKvmem && <Switch checked={basic.mlock} onChange={mlock => patchBasic({ mlock })} label="MLock"/>}
+            {!isKvmem && <Switch checked={basic.kv_offload} onChange={kv_offload => patchBasic({ kv_offload })} label="KV GPU"/>}
+            <Switch checked={basic.flash_attn} onChange={flash_attn => patchBasic({ flash_attn })} label="Flash Attention"/>
+            {!isKvmem && <Switch checked={basic.kv_unified} onChange={kv_unified => patchBasic({ kv_unified })} label="Unified KV"/>}
+            {!isKvmem && <Switch checked={basic.context_shift} onChange={context_shift => patchBasic({ context_shift })} label="Context Shift"/>}
+            <Switch checked={isKvmem ? kvmem.enable_thinking : basic.enable_thinking} onChange={value => isKvmem ? patchKvmem({ enable_thinking: value }) : patchBasic({ enable_thinking: value })} label="思考(默认)"/>
           </div>
-          <div className={page.formGrid} style={{ marginTop: 12 }}><NumberField label="Batch" value={basic.batch_size} onChange={batch_size => patchBasic({ batch_size })}/><NumberField label="Micro Batch" value={basic.ubatch_size} onChange={ubatch_size => patchBasic({ ubatch_size })}/></div>
+          {!isKvmem && <div className={page.formGrid} style={{ marginTop: 12 }}><NumberField label="Batch" value={basic.batch_size} onChange={batch_size => patchBasic({ batch_size })}/><NumberField label="Micro Batch" value={basic.ubatch_size} onChange={ubatch_size => patchBasic({ ubatch_size })}/></div>}
         </Panel>
 
-        {config.engine === 'kvmem' && (
+        {isKvmem && (
           <Panel title="KVMem(KV 缓存虚拟化)">
             <div className={page.formGridThree}>
               <NumberField label="逻辑工作区" value={kvmem.workspace} onChange={workspace => patchKvmem({ workspace })}/>
@@ -168,14 +179,13 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
               <NumberField label="批次" value={kvmem.batch} onChange={batch => patchKvmem({ batch })}/>
               <Field label="KV 类型"><Select value={kvmem.kv_dtype} onChange={event => patchKvmem({ kv_dtype: event.target.value })}><option>q8_0</option><option>q5_0</option><option>q4_0</option></Select></Field>
               <Field label="查询策略"><Input value={kvmem.query_policy} onChange={event => patchKvmem({ query_policy: event.target.value })}/></Field>
-              <Field label="思考"><Switch checked={kvmem.enable_thinking} onChange={enable_thinking => patchKvmem({ enable_thinking })} label="开启"/></Field>
               <NumberField label="推理预算" value={kvmem.reasoning_budget} disabled={!kvmem.enable_thinking} onChange={reasoning_budget => patchKvmem({ reasoning_budget })}/>
             </div>
-            <p className={page.hint}>-c 是逻辑 KV 工作区，不是显存上限；显存由「GPU 预算 + 生成预留」决定，两者之和不能超过工作区。采样参数在此引擎下走请求级设置。</p>
+            <p className={page.hint}>-c 是逻辑 KV 工作区，不是显存上限；显存由「GPU 预算 + 生成预留」决定，两者之和不能超过工作区。「思考(默认)」开关在上方共用一行。采样参数在此引擎下走请求级设置。</p>
           </Panel>
         )}
 
-        <Panel title="采样与 MTP">
+        <Panel title={isKvmem ? '采样(MTP 仅 llama.cpp 引擎)' : '采样与 MTP'}>
           <div className={page.formGridThree}>
             <NumberField label="温度" value={sampling.temperature} step="0.05" onChange={temperature => patchSampling({ temperature })}/>
             <NumberField label="Top-K" value={sampling.top_k} onChange={top_k => patchSampling({ top_k })}/>
@@ -184,13 +194,13 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
             <OptionalNumber label="重复惩罚" enabled={sampling.repeat_penalty_enabled} value={sampling.repeat_penalty} step="0.05" onEnabled={repeat_penalty_enabled => patchSampling({ repeat_penalty_enabled })} onChange={repeat_penalty => patchSampling({ repeat_penalty })}/>
             <OptionalNumber label="存在惩罚" enabled={sampling.presence_penalty_enabled} value={sampling.presence_penalty} step="0.1" onEnabled={presence_penalty_enabled => patchSampling({ presence_penalty_enabled })} onChange={presence_penalty => patchSampling({ presence_penalty })}/>
           </div>
-          <div className={page.formGridThree} style={{ marginTop: 14 }}>
+          {!isKvmem && <div className={page.formGridThree} style={{ marginTop: 14 }}>
             <Field label="MTP"><Switch checked={mtp.enabled} onChange={enabled => patchMtp({ enabled })} label="启用投机解码"/></Field>
             <NumberField label="最大草稿 Token" value={mtp.draft_n_max} disabled={!mtp.enabled} onChange={draft_n_max => patchMtp({ draft_n_max })}/>
             <NumberField label="最小草稿 Token" value={mtp.draft_n_min} disabled={!mtp.enabled} onChange={draft_n_min => patchMtp({ draft_n_min })}/>
             <NumberField label="P Min" value={mtp.p_min} step="0.01" disabled={!mtp.enabled} onChange={p_min => patchMtp({ p_min })}/>
             <NumberField label="P Split" value={mtp.p_split} step="0.01" disabled={!mtp.enabled} onChange={p_split => patchMtp({ p_split })}/>
-          </div>
+          </div>}
         </Panel>
 
         <Panel title="提示词与附加参数">
@@ -200,6 +210,7 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
 
       <Panel title="启动命令" icon={<RefreshCw size={15}/>} className={page.sticky} actions={<div className={page.row}><Button size="small" onClick={() => setImportOpen(true)}><ClipboardPaste size={14}/>从命令导入</Button><Button size="small" onClick={() => { void navigator.clipboard.writeText(command); toast('命令已复制') }}><Copy size={14}/>复制</Button></div>}>
         <pre className={page.code}>{command}</pre>
+        {!!config.llama_cpp_dir.trim() && <p className={page.hint} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}><Badge tone={detectQuery.data?.found ? 'good' : 'bad'}>{detectQuery.data?.found ? '引擎二进制已找到' : '未找到引擎二进制'}</Badge>{detectQuery.data?.found && <span>{detectQuery.data.path}</span>}{detectQuery.isFetching && <span>检测中…</span>}</p>}
         <p className={page.hint}>预览与 ProcessManager 使用相同的参数语义；保存配置后运行页会使用当前值。</p>
       </Panel>
     </div>

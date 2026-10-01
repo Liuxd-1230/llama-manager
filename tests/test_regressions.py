@@ -19,8 +19,7 @@ from backend.main import (
     _deepseek_chat_payload,
     _external_chat_request,
     _local_chat_payload,
-    _messages_with_web_tool_guidance,
-    _normalize_non_stream_response,
+    _messages_with_web_tool_guidance,    _normalize_non_stream_response,
     _normalize_v2_stream,
     _parse_dsml_tool_calls,
     _stream_anthropic_with_tools,
@@ -267,6 +266,31 @@ class KvmemCommandTests(unittest.TestCase):
         config = AppConfig(engine="kvmem", llama_cpp_dir="C:\\definitely-not-here")
         with self.assertRaises(FileNotFoundError):
             process_manager.build_command(config)
+
+
+class LocalPayloadThinkingTests(unittest.TestCase):
+    def test_explicit_thinking_off_is_sent_as_template_override(self):
+        payload = _local_chat_payload({"thinking_enabled": False}, AppConfig(model_path="C:\\m.gguf"), [])
+        self.assertEqual(payload["chat_template_kwargs"], {"enable_thinking": False})
+
+    def test_thinking_on_or_absent_defers_to_server_default(self):
+        for data in ({"thinking_enabled": True}, {}):
+            payload = _local_chat_payload(data, AppConfig(model_path="C:\\m.gguf"), [])
+            self.assertNotIn("chat_template_kwargs", payload)
+
+
+class DetectEndpointTests(unittest.TestCase):
+    def test_detect_endpoint_is_engine_aware(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            (bin_dir / "llama-kvmem-server.exe").write_text("", encoding="utf-8")
+            client = TestClient(app)
+            kvmem_hit = client.get("/api/detect-server", params={"llama_cpp_dir": str(root), "engine": "kvmem"}).json()
+            self.assertTrue(kvmem_hit["found"])
+            llama_miss = client.get("/api/detect-server", params={"llama_cpp_dir": str(root), "engine": "llama.cpp"}).json()
+            self.assertFalse(llama_miss["found"])
 
 
 class FrontendRegressionTests(unittest.TestCase):

@@ -1529,6 +1529,16 @@
               "type": "string",
               "title": "Llama Cpp Dir"
             }
+          },
+          {
+            "name": "engine",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "llama.cpp",
+              "title": "Engine"
+            }
           }
         ],
         "responses": {
