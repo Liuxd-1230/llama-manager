@@ -9,7 +9,7 @@ import { canStartChatRequest, SseParser, stripDsml, supportsThinking } from './c
 import { Markdown, StreamingMarkdown } from './Markdown'
 import styles from './chat.module.css'
 
-interface Attachment { name: string; content: string; size: number }
+interface Attachment { name: string; content?: string; size: number; kind?: 'text' | 'image'; dataUrl?: string }
 
 export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string) => void; providerRefresh?: number }) {
   const [state, dispatch] = useReducer(chatReducer, initialChatState)
@@ -50,13 +50,22 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
   const activeSearch = searchSettings?.providers.find(item => item.id === searchSettings.provider)
 
   const visibleMessages = (turnIndex: number) => {
-    const messages: Array<{ role: string; content: string }> = []
+    const messages: Array<{ role: string; content: unknown }> = []
+    const userPart = (turn: ChatTurn) => {
+      if (providerId === 'local' && turn.images?.length) {
+        return [
+          { type: 'text', text: turn.user.content },
+          ...turn.images.map(url => ({ type: 'image_url', image_url: { url } })),
+        ]
+      }
+      return turn.user.content
+    }
     state.turns.slice(0, turnIndex).forEach(turn => {
-      messages.push({ role: 'user', content: turn.user.content })
+      messages.push({ role: 'user', content: userPart(turn) })
       const candidate = activeCandidate(turn)
       if (candidate) messages.push({ role: 'assistant', content: candidate.content })
     })
-    messages.push({ role: 'user', content: state.turns[turnIndex].user.content })
+    messages.push({ role: 'user', content: userPart(state.turns[turnIndex]) })
     return messages
   }
   const parentCandidate = (turnIndex: number) => {
@@ -144,9 +153,18 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
       if (controller.current) toast('当前回答仍在生成')
       return
     }
-    const context = attachments.map(file => `--- 文件: ${file.name} ---\n${file.content}`).join('\n\n')
-    const content = `${input.trim() || '请阅读附件内容。'}${context ? `\n\n[用户导入的文件上下文]\n${context}` : ''}`
-    const turn: ChatTurn = { id: uid('turn'), user: { content, display: input.trim() || '(附件)' }, attachments: attachments.map(file => ({ name: file.name, size: file.size })), candidates: [], activeCandidateId: '' }
+    const imageFiles = attachments.filter(file => file.kind === 'image')
+    const textFiles = attachments.filter(file => file.kind !== 'image')
+    if (imageFiles.length && providerId !== 'local') toast('图片仅支持本地模型，已忽略附件中的图片')
+    const context = textFiles.map(file => `--- 文件: ${file.name} ---\n${file.content}`).join('\n\n')
+    const content = `${input.trim() || (imageFiles.length ? '请描述这些图片。' : '请阅读附件内容。')}${context ? `\n\n[用户导入的文件上下文]\n${context}` : ''}`
+    const turn: ChatTurn = {
+      id: uid('turn'),
+      user: { content, display: input.trim() || (imageFiles.length ? '(图片)' : '(附件)') },
+      images: imageFiles.length && providerId === 'local' ? imageFiles.map(file => file.dataUrl!) : undefined,
+      attachments: attachments.map(file => ({ name: file.name, size: file.size, kind: file.kind, dataUrl: file.kind === 'image' ? file.dataUrl : undefined })),
+      candidates: [], activeCandidateId: '',
+    }
     dispatch({ type: 'add_turn', turn }); setInput(''); setAttachments([])
   }
   const stop = () => controller.current?.abort()
@@ -172,6 +190,14 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
     const next: Attachment[] = []
     for (const file of Array.from(list)) {
       if (file.size > 30 * 1024 * 1024) { toast(`文件过大（上限 30MB）：${file.name}`); continue }
+      const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name)
+      if (isImage) {
+        try {
+          const dataUrl = await fileToBase64DataUrl(file)
+          next.push({ name: file.name, size: file.size, kind: 'image', dataUrl })
+        } catch (reason) { toast(`读取失败：${file.name} · ${reason instanceof Error ? reason.message : String(reason)}`) }
+        continue
+      }
       try {
         if (file.name.toLowerCase().endsWith('.pdf')) {
           const data_base64 = await fileToBase64(file)
@@ -211,7 +237,7 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
       {!state.turns.length && <div className={styles.empty}><div><Globe2 size={26}/><p>选择模型后开始对话</p><small>模型会在需要当前信息时自行调用 Web Search</small></div></div>}
       {state.turns.map((turn, turnIndex) => {
         const candidate = activeCandidate(turn); const index = candidate ? turn.candidates.findIndex(item => item.id === candidate.id) : -1
-        return <div key={turn.id} className={styles.turn}><div className={styles.user}>{turn.user.display}</div>{candidate && <article className={styles.assistant} data-streaming={candidate.status === 'streaming'}>
+        return <div key={turn.id} className={styles.turn}><div className={styles.user}>{turn.user.display}{turn.images?.length ? <div className={styles.userImages}>{turn.images.map((url, i) => <img key={i} src={url} alt="" />)}</div> : null}</div>{candidate && <article className={styles.assistant} data-streaming={candidate.status === 'streaming'}>
           <div className={styles.assistantBody}>
             {candidate.tools.length > 0 && <details className={styles.tools} open={candidate.status === 'streaming'}><summary><Wrench size={14}/>工具调用</summary><div>{candidate.tools.map((tool, i) => <div className={styles.toolRow} key={`${tool.type}-${i}`}><strong>{tool.type === 'call' ? '调用' : tool.type === 'result' ? '结果' : '状态'}</strong><span>{tool.query || tool.summary || tool.message || tool.name}</span></div>)}</div></details>}
             {candidate.reasoning && <details className={styles.reasoning}><summary><BrainCircuit size={14}/>思考过程</summary><div><StreamingMarkdown content={stripDsml(candidate.reasoning)} streaming={candidate.status === 'streaming'}/></div></details>}
@@ -222,7 +248,7 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
       })}
     </div>
     <div className={styles.composer}>
-      {attachments.length > 0 && <div className={styles.attachments}>{attachments.map((file, index) => <span className={styles.attachment} key={`${file.name}-${index}`}><FileText size={13}/>{file.name}<button onClick={() => setAttachments(items => items.filter((_, i) => i !== index))}><X size={12}/></button></span>)}</div>}
+      {attachments.length > 0 && <div className={styles.attachments}>{attachments.map((file, index) => <span className={styles.attachment} key={`${file.name}-${index}`}>{file.kind === 'image' && file.dataUrl ? <img src={file.dataUrl} alt="" className={styles.attachmentThumb}/> : <FileText size={13}/>}{file.name}<button onClick={() => setAttachments(items => items.filter((_, i) => i !== index))}><X size={12}/></button></span>)}</div>}
       <div className={styles.composeRow}><Button iconOnly title="导入文本文件" onClick={() => fileRef.current?.click()}><Paperclip size={16}/></Button><Textarea value={input} placeholder="输入消息，Enter 发送，Shift+Enter 换行" onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (controller.current) toast('请先停止当前生成'); else void send() } }}/><Button tone={state.generating ? 'danger' : 'primary'} onClick={state.generating ? stop : () => void send()}>{state.generating ? <><Square size={15}/>停止</> : <><Send size={15}/>发送</>}</Button></div>
       <input ref={fileRef} hidden type="file" multiple onChange={event => { void files(event.target.files); event.target.value = '' }}/>
     </div>
@@ -233,6 +259,15 @@ function fileToBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result).split(',')[1] || '')
+    reader.onerror = () => reject(new Error('无法读取文件'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function fileToBase64DataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
     reader.onerror = () => reject(new Error('无法读取文件'))
     reader.readAsDataURL(file)
   })

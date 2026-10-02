@@ -113,7 +113,8 @@ export interface Candidate {
 export interface ChatTurn {
   id: string
   user: { content: string; display: string }
-  attachments?: Array<{ name: string; size: number }>
+  images?: string[]
+  attachments?: Array<{ name: string; size: number; kind?: string; dataUrl?: string }>
   candidates: Candidate[]
   activeCandidateId: string
 }
