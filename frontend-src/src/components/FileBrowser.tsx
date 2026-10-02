@@ -43,7 +43,7 @@ export function FileBrowser({ mode, extension = '', initialPath = '', onSelect, 
     <Panel className={styles.dialog} title={mode === 'folder' ? '选择文件夹' : '选择文件'} actions={<Button iconOnly onClick={onClose} title="关闭"><X size={16} /></Button>}>
       <div className={styles.path}><Button onClick={up}>上一级</Button><Input value={path} onChange={event => setPath(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void browse() }} /><Button onClick={() => void browse()}>前往</Button></div>
       <div className={styles.list}>
-        {entries.map(entry => <button key={entry.path} className={`${styles.entry} ${selected === entry.path ? styles.selected : ''}`} onDoubleClick={() => open(entry)} onClick={() => entry.is_dir ? setSelected(entry.path) : setSelected(entry.path)}>
+        {entries.map(entry => <button key={entry.path} className={`${styles.entry} ${selected === entry.path ? styles.selected : ''}`} onDoubleClick={() => open(entry)} onClick={() => open(entry)}>
           {entry.is_dir ? (path ? <Folder size={16} /> : <HardDrive size={16} />) : <File size={16} />}
           <span>{entry.name}</span>{!entry.is_dir && <small>{entry.size_mb.toFixed(1)} MB</small>}
         </button>)}
