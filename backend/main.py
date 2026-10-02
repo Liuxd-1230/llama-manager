@@ -40,6 +40,10 @@ async def lifespan(application: FastAPI):
     evaluation = EvaluationService(database, client)
     jobs.register("noop", noop_handler)
     jobs.register("evaluation", evaluation.run_job)
+    from .process_manager import reap_orphan_engines
+    orphans = await asyncio.to_thread(reap_orphan_engines)
+    if orphans:
+        print(f"[startup] reaped orphan engine processes: {orphans}", flush=True)
     cfg.load_config(cfg.initial_profile_name())
     application.state.db = database
     application.state.http_client = client

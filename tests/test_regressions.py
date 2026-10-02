@@ -248,6 +248,17 @@ class GgufMetadataTests(unittest.TestCase):
             self.assertEqual(read_gguf_metadata(str(path)), {})
 
 
+class EnginePidReaperTests(unittest.TestCase):
+    def test_record_forget_and_reap_cycle(self):
+        from backend import process_manager as pm
+        with TemporaryDirectory() as tmp, patch.object(pm, "engine_pid_file", return_value=Path(tmp) / ".engine-pid"):
+            pm.record_engine_pid(424242)
+            self.assertTrue(pm.engine_pid_file().exists())
+            # A PID that is not an engine process is never killed.
+            self.assertEqual(pm.reap_orphan_engines(), [])
+            self.assertFalse(pm.engine_pid_file().exists())
+
+
 class CommandRegressionTests(unittest.TestCase):
     def test_fit_mode_leaves_ngl_unset_for_llama_cpp_auto_fit(self):
         with TemporaryDirectory() as tmp:

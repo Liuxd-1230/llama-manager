@@ -2,6 +2,7 @@
 from __future__ import annotations
 import asyncio
 import shlex
+import subprocess
 import time
 import sys
 import os
@@ -11,6 +12,60 @@ from .models import AppConfig, ServerStatus
 from .config_manager import detect_server_binary, detect_kvmem_binary
 
 IS_WINDOWS = sys.platform == "win32"
+
+ENGINE_IMAGE_NAMES = ("llama-server", "llama-kvmem-server")
+
+
+def engine_pid_file() -> Path:
+    """Records the managed engine PID so a backend restart can reap the
+    orphaned engine process it left behind."""
+    from .config_manager import CONFIG_DIR
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    return CONFIG_DIR / ".engine-pid"
+
+
+def record_engine_pid(pid: int) -> None:
+    try:
+        engine_pid_file().write_text(str(pid), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def forget_engine_pid(pid: int) -> None:
+    try:
+        if engine_pid_file().exists():
+            engine_pid_file().unlink()
+    except OSError:
+        pass
+
+
+def reap_orphan_engines() -> list[int]:
+    """Kill engine processes left over from a previous backend run.
+
+    The backend loses all process memory on restart, so an engine that was
+    running would otherwise hold VRAM forever with no way to stop it from
+    the UI. PIDs are verified against the engine image names before the kill.
+    """
+    path = engine_pid_file()
+    if not path.exists():
+        return []
+    killed: list[int] = []
+    for token in path.read_text(encoding="utf-8").split():
+        if not token.isdigit():
+            continue
+        out = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {token}"],
+            capture_output=True,
+        ).stdout.decode("utf-8", errors="replace").lower()
+        if not any(name in out for name in ENGINE_IMAGE_NAMES):
+            continue
+        subprocess.run(["taskkill", "/F", "/PID", token], capture_output=True)
+        killed.append(int(token))
+    try:
+        path.unlink()
+    except OSError:
+        pass
+    return killed
 
 
 class ProcessManager:
@@ -232,6 +287,7 @@ class ProcessManager:
             cwd=config.llama_cpp_dir or None,
         )
         self._start_time = time.time()
+        record_engine_pid(self._process.pid)
         self._append_log(f"[manager] Process started, PID={self._process.pid}")
 
         # Start log reader task
@@ -302,6 +358,7 @@ class ProcessManager:
                     await self._process.wait()
             except ProcessLookupError:
                 pass
+            forget_engine_pid(pid)
             self._profile_name = ""
 
     def clear_logs(self):
