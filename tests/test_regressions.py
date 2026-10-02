@@ -322,6 +322,17 @@ class KvmemCommandTests(unittest.TestCase):
             self.assertEqual(command[command.index("--spec-kv-dtype") + 1], "f16")
             self.assertEqual(command[command.index("--kvmem-mtp-state") + 1], "snapshots")
 
+    def test_kvmem_thinking_budget_leaves_answer_headroom(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            (bin_dir / "llama-kvmem-server.exe").write_text("", encoding="utf-8")
+            config = AppConfig(llama_cpp_dir=str(root), engine="kvmem", kvmem=KvmemSettings(enable_thinking=True, reasoning_budget=4096, gen_reserve=4096))
+            command = process_manager.build_command(config)
+            self.assertEqual(command[command.index("--reasoning-budget") + 1], "3072")
+
+
     def test_kvmem_binary_missing_fails_cleanly(self):
         config = AppConfig(engine="kvmem", llama_cpp_dir="C:\\definitely-not-here")
         with self.assertRaises(FileNotFoundError):

@@ -250,7 +250,11 @@ class ProcessManager:
         if config.basic.flash_attn:
             cmd += ["--flash-attn", "on"]
         if k.enable_thinking:
-            cmd += ["--enable-thinking", "--reasoning-budget", str(k.reasoning_budget)]
+            # reasoning-budget caps THINKING tokens; -n (= gen_reserve) caps the
+            # whole output. Keep at least 1024 tokens of headroom for the answer
+            # or the model gets cut mid-thinking with nothing left to say.
+            thinking_budget = max(0, min(k.reasoning_budget, k.gen_reserve - 1024))
+            cmd += ["--enable-thinking", "--reasoning-budget", str(thinking_budget)]
         if config.chat_template_file.strip():
             cmd += ["--chat-template-file", config.chat_template_file.strip()]
         if config.mtp.enabled:
