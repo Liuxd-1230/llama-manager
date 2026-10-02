@@ -221,7 +221,7 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
               <NumberField label="微批" value={kvmem.ubatch} onChange={ubatch => patchKvmem({ ubatch })}/>
               <Field label="KV 类型"><Select value={kvmem.kv_dtype} onChange={event => patchKvmem({ kv_dtype: event.target.value })}><option>q8_0</option><option>q5_0</option><option>q4_0</option></Select></Field>
               <Field label="查询策略"><Input value={kvmem.query_policy} onChange={event => patchKvmem({ query_policy: event.target.value })}/></Field>
-              <Field label="MTP 状态"><Select value={kvmem.mtp_state} onChange={event => patchKvmem({ mtp_state: event.target.value })}><option value="snapshots">snapshots(当前构建)</option><option value="replay">replay(需 v0.17+ 构建)</option></Select></Field>
+              <Field label="MTP 状态"><Select value={kvmem.mtp_state} onChange={event => patchKvmem({ mtp_state: event.target.value })}><option value="snapshots">snapshots(当前构建)</option><option value="replay">replay(当前二进制不支持)</option></Select></Field>
               <NumberField label="推理预算" value={kvmem.reasoning_budget} disabled={!kvmem.enable_thinking} onChange={reasoning_budget => patchKvmem({ reasoning_budget })}/>
             </div>
             <p className={page.hint}>-c 是逻辑 KV 工作区，不是显存上限；显存由「GPU 预算 + 生成预留」决定，两者之和不能超过工作区。「思考(默认)」开关在上方共用一行。采样参数在此引擎下走请求级设置。</p>

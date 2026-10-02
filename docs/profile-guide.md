@@ -41,7 +41,7 @@ c.post(f'{BASE}/api/profiles/launch', json={'name': '<档案名>'})             
 - KVMem `batch` 必须 128：512 会把解码砍半（29→12 t/s）、prefill 打六折
 - KVMem 预算(常驻历史)越小 prefill 越稳：24.5K 预算灌 29K 文档会衰减到 101 t/s，8K 预算稳定 245 t/s
 - MTP 收益强依赖内容可预测性：数数/代码 60 t/s，自由文风 32-35 t/s（无 MTP 基线 29）
-- MTP 草稿数实测（推荐配置，Heretic + r3 头）：数数 44/55/61（MTP1/2/3），真实文风 34/35/28——**MTP2 是自由文本最优**，MTP3 只在高可预测内容继续加速；`--kvmem-mtp-state replay` 需要 v0.17+ 构建，prism.3 预编译只支持 snapshots
+- MTP 草稿数实测（推荐配置，Heretic + r3 头）：数数 44/55/61（MTP1/2/3），真实文风 34/35/28——**MTP2 是自由文本最优**，MTP3 只在高可预测内容继续加速；ReplaySSM 上游 v0.15 起推荐、master 默认，但实测 prism.3 预编译二进制仅支持 snapshots（`--help` 仅列出 snapshots；传 replay 启动即报 "Record/Fold is not available in this Bonsai build"），等新预编译或源码构建后再切
 - KVMem 引擎要 WebUI：`llama_cpp_dir` 指向含 `share/kvmem/ui` 的包根，命令自动带 `--ui-dir/--webui`
 - 思考模型 + 小 max_tokens = 空回复（token 被思考吃掉）：对话页思考开关关掉，或放大 max_tokens
 
