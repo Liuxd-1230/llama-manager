@@ -55,6 +55,14 @@ Frontend ↔ FastAPI REST/WebSocket ↔ Manager singletons ↔ llama-server subp
 
 Config round-trip: UI form → `cfgFromUI()` → POST `/api/config` → `config_manager.py` → JSON on disk. Reverse: GET `/api/config` → `uiFromCfg()`.
 
+## Profile Creation Guide
+
+AI agents creating or tuning inference profiles MUST read `docs/profile-guide.md`
+first: it documents the API sequence, per-engine field semantics, measured VRAM
+accounting for the 8GB laptop GPU, tuning lore (batch=128 for KVMem, budget
+size vs prefill stability, MTP acceptance behavior), verified profiles, and
+known traps (backend restarts for version skew, orphan processes).
+
 ## Key Conventions
 
 - UI text and README are in Chinese; code identifiers and comments are in English.
