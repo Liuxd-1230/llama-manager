@@ -50,3 +50,13 @@
 .userImages { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap }
 .userImages img { max-height: 140px; border-radius: var(--radius-sm); display: block }
 .attachmentThumb { width: 30px; height: 30px; object-fit: cover; border-radius: 4px }
+
+.prefillWait { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 12px }
+.prefillDots { display: inline-flex; gap: 4px }
+.prefillDots i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: prefillBounce 1.2s ease-in-out infinite }
+.prefillDots i:nth-child(2) { animation-delay: .15s }
+.prefillDots i:nth-child(3) { animation-delay: .3s }
+@keyframes prefillBounce { 0%, 60%, 100% { transform: translateY(0); opacity: .35 } 30% { transform: translateY(-4px); opacity: 1 } }
+.userFiles { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px }
+.userFile { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-2); background: rgba(255,255,255,.14); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.userFileThumb { width: 26px; height: 26px; object-fit: cover; border-radius: 4px }

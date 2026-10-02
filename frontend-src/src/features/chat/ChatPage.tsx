@@ -237,11 +237,12 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
       {!state.turns.length && <div className={styles.empty}><div><Globe2 size={26}/><p>选择模型后开始对话</p><small>模型会在需要当前信息时自行调用 Web Search</small></div></div>}
       {state.turns.map((turn, turnIndex) => {
         const candidate = activeCandidate(turn); const index = candidate ? turn.candidates.findIndex(item => item.id === candidate.id) : -1
-        return <div key={turn.id} className={styles.turn}><div className={styles.user}>{turn.user.display}{turn.images?.length ? <div className={styles.userImages}>{turn.images.map((url, i) => <img key={i} src={url} alt="" />)}</div> : null}</div>{candidate && <article className={styles.assistant} data-streaming={candidate.status === 'streaming'}>
+        return <div key={turn.id} className={styles.turn}><div className={styles.user}>{turn.user.display}{turn.images?.length ? <div className={styles.userImages}>{turn.images.map((url, i) => <img key={i} src={url} alt="" />)}</div> : null}{(turn.attachments?.length || 0) > 0 && <div className={styles.userFiles}>{turn.attachments!.map(file => <span key={file.name} className={styles.userFile}>{file.kind === 'image' && file.dataUrl ? <img src={file.dataUrl} alt="" className={styles.userFileThumb}/> : <FileText size={13}/>}{file.name}</span>)}</div>}</div>{candidate && <article className={styles.assistant} data-streaming={candidate.status === 'streaming'}>
           <div className={styles.assistantBody}>
             {candidate.tools.length > 0 && <details className={styles.tools} open={candidate.status === 'streaming'}><summary><Wrench size={14}/>工具调用</summary><div>{candidate.tools.map((tool, i) => <div className={styles.toolRow} key={`${tool.type}-${i}`}><strong>{tool.type === 'call' ? '调用' : tool.type === 'result' ? '结果' : '状态'}</strong><span>{tool.query || tool.summary || tool.message || tool.name}</span></div>)}</div></details>}
-            {candidate.reasoning && <details className={styles.reasoning}><summary><BrainCircuit size={14}/>思考过程</summary><div><StreamingMarkdown content={stripDsml(candidate.reasoning)} streaming={candidate.status === 'streaming'}/></div></details>}
-            <StreamingMarkdown content={candidate.content || (candidate.status === 'streaming' ? '生成中…' : '(空回复)')} streaming={candidate.status === 'streaming' && !!candidate.content}/>{candidate.status === 'streaming' && <span className={styles.cursor}/>} {candidate.error && <div className={styles.error}>{candidate.error}</div>}
+            {candidate.status === 'streaming' && !candidate.content && !candidate.reasoning && !candidate.tools.length && <PrefillWait/>}
+            {candidate.reasoning && <details className={styles.reasoning} open={candidate.status === 'streaming'}><summary><BrainCircuit size={14}/>思考过程{candidate.status === 'streaming' ? '（进行中）' : ''}</summary><div><StreamingMarkdown content={stripDsml(candidate.reasoning)} streaming={candidate.status === 'streaming'}/></div></details>}
+            <StreamingMarkdown content={candidate.content || (candidate.status === 'streaming' ? '' : '(空回复)')} streaming={candidate.status === 'streaming' && !!candidate.content}/>{candidate.status === 'streaming' && candidate.content && <span className={styles.cursor}/>} {candidate.error && <div className={styles.error}>{candidate.error}</div>}
           </div>
           <div className={styles.actions}><Button size="small" onClick={() => { void navigator.clipboard.writeText(candidate.content); toast('回答已复制') }}><Copy size={13}/>复制</Button><Button size="small" disabled={!!state.generating} onClick={() => void requestAssistant(turnIndex)}><RefreshCw size={13}/>刷新</Button><Button size="small" iconOnly title="上一个回答" disabled={index <= 0} onClick={() => dispatch({ type: 'select', turnId: turn.id, candidateId: turn.candidates[index - 1].id })}><ChevronLeft size={14}/></Button><span className={styles.counter}>{index + 1}/{turn.candidates.length}</span><Button size="small" iconOnly title="下一个回答" disabled={index >= turn.candidates.length - 1} onClick={() => dispatch({ type: 'select', turnId: turn.id, candidateId: turn.candidates[index + 1].id })}><ChevronRight size={14}/></Button>{candidate.stats && <span className={styles.genStats}>{[candidate.stats.tokPerSec != null && `${candidate.stats.tokPerSec.toFixed(1)} tok/s`, candidate.stats.firstTokenMs != null && `首token ${candidate.stats.firstTokenMs}ms`, candidate.stats.totalTokens != null && `${candidate.stats.totalTokens} tok`, candidate.stats.elapsedMs != null && `${(candidate.stats.elapsedMs / 1000).toFixed(1)}s`].filter(Boolean).join(' · ')}</span>}</div>
         </article>}</div>
@@ -271,6 +272,18 @@ function fileToBase64DataUrl(file: File) {
     reader.onerror = () => reject(new Error('无法读取文件'))
     reader.readAsDataURL(file)
   })
+}
+
+function PrefillWait() {
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    const id = window.setInterval(() => setSeconds(value => value + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [])
+  return <div className={styles.prefillWait}>
+    <span className={styles.prefillDots}><i/><i/><i/></span>
+    <span>正在阅读上下文{seconds > 0 ? ` · ${seconds}s` : '…'}</span>
+  </div>
 }
 
 function normalizeTool(event: Record<string, unknown>): ToolEvent {
