@@ -1,5 +1,6 @@
 import { ClipboardPaste, Copy, Download, FolderOpen, RefreshCw, Save, Trash2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api'
 import { FileBrowser } from '../../components/FileBrowser'
@@ -258,7 +259,7 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
     {browse && (
       <FileBrowser mode={browse.mode} extension={browse.extension} initialPath={browseValue} onClose={() => setBrowse(null)} onSelect={value => { patch(browse.key, value); setBrowse(null) }}/>
     )}
-    {importOpen && (
+    {importOpen && createPortal(
       <div className={page.overlay} onClick={() => setImportOpen(false)}>
         <Panel className={page.importDialog} title="从启动命令导入" actions={<Button size="small" onClick={() => void pasteFromClipboard()}><ClipboardPaste size={14}/>粘贴</Button>}>
           <Textarea rows={7} className={page.importText} value={importText} autoFocus onChange={event => setImportText(event.target.value)} placeholder={'llama-server -m "E:\\models\\model.gguf" --host 127.0.0.1 --port 8081 -ngl 99 -c 32768 -fa on ...'} />
@@ -268,7 +269,8 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
             <Button tone="primary" disabled={!importText.trim()} onClick={importCommand}>解析并应用</Button>
           </div>
         </Panel>
-      </div>
+      </div>,
+      document.body
     )}
   </>
 }

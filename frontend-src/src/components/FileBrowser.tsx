@@ -1,5 +1,6 @@
-import { File, Folder, HardDrive, X } from 'lucide-react'
+import { File, Folder, HardDrive, ArrowUp, ArrowRight, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { api } from '../api'
 import { Button, Input, Panel } from './ui'
 import styles from './FileBrowser.module.css'
@@ -39,9 +40,12 @@ export function FileBrowser({ mode, extension = '', initialPath = '', onSelect, 
     void browse(index <= 2 ? '' : normalized.slice(0, index))
   }
 
-  return <div className={styles.overlay} role="dialog" aria-modal="true">
+  // Portal to <body>: ancestors like .main carry backdrop-filter, which turns
+  // position:fixed into "fixed to the scroll container" — the dialog would
+  // otherwise anchor to the top of the scrolled content and appear off-screen.
+  return createPortal(<div className={styles.overlay} role="dialog" aria-modal="true">
     <Panel className={styles.dialog} title={mode === 'folder' ? '选择文件夹' : '选择文件'} actions={<Button iconOnly onClick={onClose} title="关闭"><X size={16} /></Button>}>
-      <div className={styles.path}><Button onClick={up}>上一级</Button><Input value={path} onChange={event => setPath(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void browse() }} /><Button onClick={() => void browse()}>前往</Button></div>
+      <div className={styles.path}><Button iconOnly title="上一级" onClick={up}><ArrowUp size={15}/></Button><Input value={path} onChange={event => setPath(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void browse() }} /><Button iconOnly title="前往" onClick={() => void browse()}><ArrowRight size={15}/></Button></div>
       <div className={styles.list}>
         {entries.map(entry => <button key={entry.path} className={`${styles.entry} ${selected === entry.path ? styles.selected : ''}`} onDoubleClick={() => open(entry)} onClick={() => open(entry)}>
           {entry.is_dir ? (path ? <Folder size={16} /> : <HardDrive size={16} />) : <File size={16} />}
@@ -51,5 +55,5 @@ export function FileBrowser({ mode, extension = '', initialPath = '', onSelect, 
       </div>
       <div className={styles.footer}><Button onClick={onClose}>取消</Button><Button tone="primary" disabled={mode === 'file' ? !selected || entries.find(entry => entry.path === selected)?.is_dir : false} onClick={() => onSelect(mode === 'folder' ? (selected || path) : selected)}>选择</Button></div>
     </Panel>
-  </div>
+  </div>, document.body)
 }
