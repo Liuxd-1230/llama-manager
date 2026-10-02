@@ -1338,12 +1338,43 @@ def clear_logs():
 
 # ── Update endpoints ──────────────────────────────────────────
 
+MIRROR_CANDIDATES = [
+    {"id": "github", "name": "GitHub 直连", "prefix": ""},
+    {"id": "ghproxy", "name": "ghproxy.net", "prefix": "https://ghproxy.net/https://github.com"},
+    {"id": "gh-proxy", "name": "gh-proxy.com", "prefix": "https://gh-proxy.com/https://github.com"},
+    {"id": "ghfast", "name": "ghfast.top", "prefix": "https://ghfast.top/https://github.com"},
+    {"id": "moeyy", "name": "moeyy.xyz", "prefix": "https://github.moeyy.xyz/https://github.com"},
+]
+
+
+@app.get("/api/mirrors")
+async def probe_mirrors():
+    """Probe each candidate's git smart-HTTP handshake endpoint; rank by latency."""
+    import httpx
+    probe_path = "/ggml-org/llama.cpp.git/info/refs?service=git-upload-pack"
+
+    async def probe(candidate: dict) -> dict:
+        url = (candidate["prefix"] + "/https://github.com" if candidate["prefix"] else "https://github.com") + probe_path
+        t0 = time.perf_counter()
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=8) as client:
+                resp = await client.get(url)
+            latency = int((time.perf_counter() - t0) * 1000)
+            ok = resp.status_code == 200 and "git-upload-pack" in resp.headers.get("content-type", "")
+            return {**candidate, "ok": ok, "latency_ms": latency if ok else None}
+        except Exception:
+            return {**candidate, "ok": False, "latency_ms": None}
+
+    results = await asyncio.gather(*(probe(c) for c in MIRROR_CANDIDATES))
+    return {"mirrors": sorted(results, key=lambda m: (not m["ok"], m["latency_ms"] if m["latency_ms"] is not None else 10**9))}
+
+
 @app.get("/api/update/check")
-async def update_check():
+async def update_check(mirror: str = ""):
     config = cfg.get_config()
     if not config.llama_cpp_dir:
         return JSONResponse(status_code=400, content={"error": "llama.cpp directory not set"})
-    return await update_manager.check_update(config.llama_cpp_dir)
+    return await update_manager.check_update(config.llama_cpp_dir, mirror_prefix=mirror)
 
 
 @app.post("/api/update/pull")
@@ -1353,7 +1384,8 @@ async def update_pull(request: Request):
         return JSONResponse(status_code=400, content={"error": "llama.cpp directory not set"})
     body = await request.json() if request.headers.get("content-type","") == "application/json" else {}
     force = body.get("force", False)
-    return await update_manager.pull_update(config.llama_cpp_dir, force=force)
+    mirror = str(body.get("mirror", "") or "")
+    return await update_manager.pull_update(config.llama_cpp_dir, mirror_prefix=mirror, force=force)
 
 
 @app.post("/api/update/compile")

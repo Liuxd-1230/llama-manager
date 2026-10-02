@@ -59,7 +59,7 @@ export function RunPage({ config, toast }: { config: AppConfig; toast: (text: st
       </div>
     </div>
     <div className={`${styles.webuiBox} ${fullscreen ? styles.fullscreen : ''}`}>
-      <iframe key={frameKey} src={serverUrl} title="llama-server WebUI" />
+      {running && <iframe key={frameKey} src={serverUrl} title="llama-server WebUI" />}
       {!running && <div className={styles.overlay}><div><p style={{ margin: 0 }}>服务未启动。</p><p className={page.hint}>在「模型」页或上方启动后，此处按当前引擎显示自带 WebUI（llama.cpp 或 KVMem）。</p></div></div>}
       {fullscreen && <Button className={styles.exitButton} iconOnly title="退出全屏 (Esc)" onClick={() => setFullscreen(false)}><Minimize2 size={16}/></Button>}
     </div>

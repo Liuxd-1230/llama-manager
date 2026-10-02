@@ -22,68 +22,85 @@ class UpdateManager:
             except Exception:
                 self._subscribers.remove(q)
 
-    async def check_update(self, llama_cpp_dir: str) -> dict:
-        """Check if there are remote updates available."""
+    @staticmethod
+    def _mirror_url(origin_url: str, mirror_prefix: str) -> str:
+        """Compose the fetch URL for a mirror prefix. SSH origins are converted
+        to their https form — mirror prefixes proxy https only."""
+        origin_url = origin_url.strip()
+        if origin_url.startswith("git@"):
+            origin_url = "https://github.com/" + origin_url.split(":", 1)[1]
+        prefix = (mirror_prefix or "").strip().rstrip("/")
+        if not prefix:
+            return origin_url
+        return f"{prefix}/{origin_url}"
+
+    @staticmethod
+    def _origin_url(d: Path) -> str:
+        r = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, cwd=str(d), timeout=10)
+        if r.returncode != 0:
+            raise ValueError("无法读取 origin 远程地址")
+        return r.stdout.strip()
+
+    async def check_update(self, llama_cpp_dir: str, mirror_prefix: str = "") -> dict:
+        """Check for remote updates via git ls-remote — no object transfer."""
         d = Path(llama_cpp_dir)
         if not (d / ".git").exists():
             return {"has_update": False, "error": "Not a git repository"}
-
         try:
-            # Get current commit. git runs off the event loop: a slow fetch
-            # must not freeze websocket pushes and unrelated requests.
             r1 = await asyncio.to_thread(
                 subprocess.run,
                 ["git", "rev-parse", "--short", "HEAD"],
                 capture_output=True, text=True, cwd=str(d), timeout=30
             )
             current = r1.stdout.strip()
-
-            # Fetch only the primary branches (the full ref set is huge).
+            origin = self._origin_url(d)
+            r0 = await asyncio.to_thread(
+                subprocess.run,
+                ["git", "symbolic-ref", "refs/remotes/origin/HEAD"],
+                capture_output=True, text=True, cwd=str(d), timeout=10
+            )
+            branch = r0.stdout.strip().replace("refs/remotes/origin/", "") if r0.returncode == 0 else "master"
+            final = self._mirror_url(origin, mirror_prefix)
             r2 = await asyncio.to_thread(
                 subprocess.run,
-                ["git", "fetch", "origin", "main", "master"],
-                capture_output=True, text=True, cwd=str(d), timeout=300
+                ["git", "ls-remote", final, branch],
+                capture_output=True, text=True, timeout=60
             )
-
-            # Get remote commit
-            r3 = subprocess.run(
-                ["git", "rev-parse", "--short", "origin/main"],
-                capture_output=True, text=True, cwd=str(d), timeout=30
-            )
-            # Try origin/master if origin/main fails
-            if r3.returncode != 0:
-                r3 = subprocess.run(
-                    ["git", "rev-parse", "--short", "origin/master"],
-                    capture_output=True, text=True, cwd=str(d), timeout=30
-                )
-            remote = r3.stdout.strip()
-
+            if r2.returncode != 0:
+                return {"has_update": False, "error": f"镜像探测失败: {r2.stderr.strip()[:200]}"}
+            remote_full = (r2.stdout.splitlines() or [""])[0]
+            remote = remote_full.split("	")[0][:7] if remote_full else ""
             return {
-                "has_update": current != remote,
+                "has_update": bool(remote) and current != remote,
                 "current_commit": current,
                 "remote_commit": remote,
             }
         except Exception as e:
             return {"has_update": False, "error": str(e)}
 
-    async def pull_update(self, llama_cpp_dir: str, force: bool = False) -> dict:
-        """Pull latest changes. If force=True, reset to remote first."""
+    async def pull_update(self, llama_cpp_dir: str, mirror_prefix: str = "", force: bool = False) -> dict:
+        """Pull (or force-reset) from the selected mirror. The mirror URL is
+        passed per-invocation — the checkout's own remote stays untouched."""
         d = Path(llama_cpp_dir)
         try:
-            if force:
-                # Stash local changes and reset to remote
-                await asyncio.to_thread(subprocess.run, ["git", "stash"], capture_output=True, text=True, cwd=str(d), timeout=30)
-                await asyncio.to_thread(subprocess.run, ["git", "fetch", "origin"], capture_output=True, text=True, cwd=str(d), timeout=300)
-                # Detect default branch
-                r0 = await asyncio.to_thread(subprocess.run, ["git", "symbolic-ref", "refs/remotes/origin/HEAD"], capture_output=True, text=True, cwd=str(d), timeout=10)
-                branch = r0.stdout.strip().replace("refs/remotes/origin/", "") if r0.returncode == 0 else "master"
-                await asyncio.to_thread(subprocess.run, ["git", "reset", "--hard", f"origin/{branch}"], capture_output=True, text=True, cwd=str(d), timeout=60)
-
-            r = await asyncio.to_thread(
+            origin = self._origin_url(d)
+            r0 = await asyncio.to_thread(
                 subprocess.run,
-                ["git", "pull"],
-                capture_output=True, text=True, cwd=str(d), timeout=600
+                ["git", "symbolic-ref", "refs/remotes/origin/HEAD"],
+                capture_output=True, text=True, cwd=str(d), timeout=10
             )
+            branch = r0.stdout.strip().replace("refs/remotes/origin/", "") if r0.returncode == 0 else "master"
+            final = self._mirror_url(origin, mirror_prefix)
+            if force:
+                await asyncio.to_thread(subprocess.run, ["git", "stash"], capture_output=True, text=True, cwd=str(d), timeout=30)
+                await asyncio.to_thread(subprocess.run, ["git", "fetch", final, branch], capture_output=True, text=True, cwd=str(d), timeout=600)
+                r = await asyncio.to_thread(subprocess.run, ["git", "reset", "--hard", "FETCH_HEAD"], capture_output=True, text=True, cwd=str(d), timeout=60)
+            else:
+                r = await asyncio.to_thread(
+                    subprocess.run,
+                    ["git", "pull", final, branch],
+                    capture_output=True, text=True, cwd=str(d), timeout=600
+                )
             return {
                 "success": r.returncode == 0,
                 "output": r.stdout + r.stderr,
