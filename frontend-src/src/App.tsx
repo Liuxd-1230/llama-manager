@@ -84,7 +84,7 @@ function Shell() {
         <Suspense fallback={<div className={styles.page}>正在加载工作区…</div>}><Routes>
           <Route path="/" element={<Navigate to="/models" replace/>}/>
           <Route path="/models" element={<Page title="模型" description="一键加载并切换整套推理配置"><ModelsPage config={config} dirty={dirty} server={server} toast={toast}/></Page>}/>
-          <Route path="/config" element={<Page title="配置" description="编辑当前档案的模型、推理、采样和服务参数"><ConfigPage config={config} setConfig={setConfig} toast={toast}/></Page>}/>
+          <Route path="/config" element={<Page title="配置" description="编辑当前档案的模型、推理、采样和服务参数"><ConfigPage config={config} setConfig={setConfig} dirty={dirty} toast={toast}/></Page>}/>
           <Route path="/run" element={<Page title="运行" description="控制 llama-server 并观察实时状态"><RunPage config={config} toast={toast}/></Page>}/>
           <Route path="/evaluation" element={<Page title="评测" description="用真实任务比较模型质量与响应表现"><EvaluationPage toast={toast}/></Page>}/>
           <Route path="/maintenance" element={<Page title="维护" description="下载、更新和编译 llama.cpp"><MaintenancePage config={config} setConfig={setConfig} toast={toast}/></Page>}/>

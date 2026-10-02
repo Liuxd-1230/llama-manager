@@ -109,6 +109,13 @@ def _chat_completions_url(base_url: str) -> str:
     return f"{base}/chat/completions"
 
 
+def _local_base_url(config: AppConfig) -> str:
+    """Loopback URL for the managed llama-server. A client connection to
+    0.0.0.0 is invalid on Windows (WinError 10049), so map it back."""
+    host = config.server.host if config.server.host not in ("", "0.0.0.0") else "127.0.0.1"
+    return f"http://{host}:{config.server.port}"
+
+
 def _provider_api_key(provider: providers.ProviderConfig) -> str:
     return providers.resolve_api_key(provider)
 
@@ -195,27 +202,18 @@ def _messages_with_web_tool_guidance(messages: list[dict], enabled: bool) -> lis
     return [{"role": "system", "content": guidance}, *messages]
 
 
+_MISSED_WEB_SEARCH_PATTERN = re.compile(
+    r"(无法|不能|没法)(联网|连接互联网|访问互联网|浏览网页|获取(最新|实时))"
+    r"|(don't|do not|cannot|can't)\s+(have\s+|be able to\s+)?(access|browse)\s+(the\s+)?(internet|web|online)"
+    r"|beyond my (knowledge )?cutoff|knowledge cutoff",
+    re.IGNORECASE,
+)
+
+
 def _looks_like_missed_web_search(content: str) -> bool:
-    text = str(content or "").lower()
-    markers = [
-        "无法联网",
-        "不能联网",
-        "无法访问互联网",
-        "无法实时",
-        "无法获取最新",
-        "不能获取最新",
-        "不能浏览",
-        "无法浏览",
-        "知识库",
-        "not have access to the internet",
-        "cannot access the internet",
-        "can't browse",
-        "cannot browse",
-        "knowledge cutoff",
-        "real-time",
-        "latest information",
-    ]
-    return any(marker in text for marker in markers)
+    """Only refusal-to-browse intent sentences count; bare nouns like
+    知识库 or real-time appear in perfectly valid answers."""
+    return bool(_MISSED_WEB_SEARCH_PATTERN.search(str(content or "")))
 
 
 def _force_web_search_tool_choice(payload: dict) -> dict:
@@ -614,9 +612,10 @@ async def _stream_chat_with_tools(
                             reasoning_delta = delta.get("reasoning_content") or delta.get("reasoning") or delta.get("thinking") or ""
                             if reasoning_delta:
                                 reasoning_buffer += reasoning_delta
-                                if not tool_payload.get("tools"):
-                                    reasoning_streamed = True
-                                    yield _openai_chunk(reasoning=reasoning_delta)
+                                # Stream thinking even with tools mounted: the
+                                # frontend strips DSML from reasoning display.
+                                reasoning_streamed = True
+                                yield _openai_chunk(reasoning=reasoning_delta)
                             if delta.get("content"):
                                 content_buffer += delta.get("content")
                                 clean_chunk = dict(chunk)
@@ -1242,12 +1241,16 @@ async def extract_attachment(request: Request):
         return JSONResponse(status_code=400, content={"error": "附件数据不是有效的 base64"})
     if len(raw) > MAX_ATTACHMENT_BYTES:
         return JSONResponse(status_code=413, content={"error": f"文件超过 {MAX_ATTACHMENT_BYTES // (1024 * 1024)}MB 上限"})
-    try:
+    def _extract_sync() -> str:
         if name.lower().endswith(".pdf"):
             reader = PdfReader(io.BytesIO(raw))
-            text = "\n\n".join((page.extract_text() or "") for page in reader.pages)
-        else:
-            text = raw.decode("utf-8", errors="replace")
+            return "\n\n".join((page.extract_text() or "") for page in reader.pages)
+        return raw.decode("utf-8", errors="replace")
+
+    try:
+        # pypdf is CPU-bound; keep it off the event loop so long PDFs do not
+        # freeze websocket pushes and unrelated requests.
+        text = await asyncio.to_thread(_extract_sync)
     except Exception as exc:
         return JSONResponse(status_code=422, content={"error": f"解析失败: {exc}"})
     truncated = len(text) > MAX_ATTACHMENT_CHARS
@@ -1302,7 +1305,7 @@ async def server_health():
     """Check if llama-server is accepting requests."""
     import httpx
     config = cfg.get_config()
-    url = f"http://{config.server.host}:{config.server.port}/health"
+    url = f"{_local_base_url(config)}/health"
     try:
         async with httpx.AsyncClient(timeout=3) as client:
             resp = await client.get(url)
@@ -1447,7 +1450,7 @@ async def chat_proxy(request: Request):
         target, payload = _external_chat_request(provider_config, data, messages)
         provider_kind = provider_config.kind
     else:
-        target = f"http://{config.server.host}:{config.server.port}/v1/chat/completions"
+        target = f"{_local_base_url(config)}/v1/chat/completions"
         headers = {"Content-Type": "application/json"}
         payload = _local_chat_payload(data, config, messages)
         provider_kind = "openai_chat"
@@ -1575,7 +1578,7 @@ async def list_models(provider: str = "local"):
     if provider_config:
         return {"data": [{"id": model} for model in provider_config.models]}
     config = cfg.get_config()
-    target = f"http://{config.server.host}:{config.server.port}/v1/models"
+    target = f"{_local_base_url(config)}/v1/models"
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(target)

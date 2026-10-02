@@ -2,7 +2,7 @@ import { AlertTriangle, Download, Hammer, RefreshCw, Square } from 'lucide-react
 import { useState } from 'react'
 import { api } from '../../api'
 import { Button, Field, Input, Panel, Textarea } from '../../components/ui'
-import { useWebSocket } from '../../hooks'
+import { useInterval, useWebSocket } from '../../hooks'
 import type { AppConfig } from '../../types'
 import page from '../pages.module.css'
 
@@ -15,6 +15,12 @@ export function MaintenancePage({ config, setConfig, toast }: { config: AppConfi
   const [compiling, setCompiling] = useState(false)
   useWebSocket('/ws/download', message => setDownloadLogs(logs => [...logs.slice(-999), message]))
   useWebSocket('/ws/compile', message => setCompileLogs(logs => [...logs.slice(-999), message]))
+  // Reconcile busy flags with server truth: without this a finished or failed
+  // task leaves the buttons permanently disabled until a page reload.
+  useInterval(() => {
+    void api<{ is_compiling: boolean }>('/api/update/compile/logs').then(result => setCompiling(Boolean(result.is_compiling))).catch(() => {})
+    void api<{ is_downloading: boolean }>('/api/download/status').then(result => setDownloading(Boolean(result.is_downloading))).catch(() => {})
+  }, 3000)
   const download = async () => { if (!downloadDir) return toast('请输入下载目录'); setDownloading(true); await api('/api/download/start', { method: 'POST', body: JSON.stringify({ target_dir: downloadDir }) }); toast('下载已启动') }
   const stopDownload = async () => { await api('/api/download/stop', { method: 'POST' }); setDownloading(false) }
   const check = async () => { const result = await api<{ has_update: boolean; current_commit: string; remote_commit: string }>('/api/update/check', {}, 300000); setUpdateInfo(result.has_update ? `有更新：${result.current_commit} → ${result.remote_commit}` : `已是最新：${result.current_commit}`) }

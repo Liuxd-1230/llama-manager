@@ -6,6 +6,7 @@ import uuid
 
 from fastapi import APIRouter, Request
 
+from ..chat_state import conversation_store
 from ..api_models import ConversationCreate, TurnWrite
 
 
@@ -68,6 +69,9 @@ async def rename_conversation(conversation_id: str, body: ConversationCreate, re
 
 @router.delete("/{conversation_id}")
 async def delete_conversation(conversation_id: str, request: Request):
+    # Single endpoint owns both sides: the SQLite rows and the in-memory
+    # candidate context, so the frontend does not juggle two endpoints.
+    conversation_store.delete(conversation_id)
     await request.app.state.db.execute("DELETE FROM conversations WHERE id=?", (conversation_id,))
     return {"ok": True}
 

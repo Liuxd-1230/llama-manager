@@ -121,6 +121,11 @@ class UpdateManager:
         except Exception as e:
             self._append(f"[compile] Reader error: {e}")
         finally:
+            try:
+                if self._compile_process and self._compile_process.returncode is None:
+                    await self._compile_process.wait()
+            except ProcessLookupError:
+                pass
             rc = self._compile_process.returncode if self._compile_process else -1
             self._append(f"[compile] Finished with exit code {rc}")
             self._is_compiling = False

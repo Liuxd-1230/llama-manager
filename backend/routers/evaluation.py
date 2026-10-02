@@ -79,7 +79,10 @@ async def start_evaluation(body: EvaluationStart, request: Request):
         (experiment_id, body.name, body.dataset_id, body.provider_id, body.model, json.dumps(body.config_snapshot, ensure_ascii=False), now),
     )
     payload = {**body.model_dump(), "experiment_id": experiment_id}
-    job = await request.app.state.jobs.create(JobCreate(kind="evaluation", payload=payload, resources=["gpu", "llama_server"]))
+    # Lock GPU/llama-server only when the target is the local engine; a remote
+    # API target must not block (or be blocked by) local server lifecycle.
+    resources = ["gpu", "llama_server"] if body.provider_id == "local" else []
+    job = await request.app.state.jobs.create(JobCreate(kind="evaluation", payload=payload, resources=resources))
     return {"experiment_id": experiment_id, "job": job}
 
 

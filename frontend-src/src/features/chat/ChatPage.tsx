@@ -157,7 +157,7 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
     const turn = state.turns[turnIndex]
     if (!turn) return
     const candidates = [...turn.candidates.filter(item => item.id !== latest.id), latest]
-    await api(`/api/conversations/${targetConversationId}/turns/${turn.id}`, { method: 'PUT', body: JSON.stringify({ id: turn.id, position: turnIndex, user_content: turn.user.display, user_display: turn.user.display, attachments: turn.attachments || [], active_candidate_id: latest.id, candidates: candidates.map(item => ({ id: item.id, backend_id: item.backendId, provider: item.provider, model: item.model, content: item.content, reasoning: item.reasoning, tools: item.tools, status: item.status, error: item.error })) }) })
+    await api(`/api/conversations/${targetConversationId}/turns/${turn.id}`, { method: 'PUT', body: JSON.stringify({ id: turn.id, position: turnIndex, user_content: turn.user.content || turn.user.display, user_display: turn.user.display, attachments: turn.attachments || [], active_candidate_id: latest.id, candidates: candidates.map(item => ({ id: item.id, backend_id: item.backendId, provider: item.provider, model: item.model, content: item.content, reasoning: item.reasoning, tools: item.tools, status: item.status, error: item.error })) }) })
     void queryClient.invalidateQueries({ queryKey: ['conversations'] })
   }
   const files = async (list: FileList | null) => {

@@ -200,7 +200,7 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
       </div>
       <div className={styles.actions}>
         {profile.is_running
-          ? <div className={page.row}><Button tone="danger" size="small" disabled={stopping} onClick={onStop}><Square size={14}/>{stopping ? '停止中…' : '停止'}</Button><Button size="small" onClick={() => window.open(`http://${profile.host}:${profile.port}/`, '_blank')}><ExternalLink size={14}/>WebUI</Button></div>
+          ? <div className={page.row}><Button tone="danger" size="small" disabled={stopping} onClick={onStop}><Square size={14}/>{stopping ? '停止中…' : '停止'}</Button><Button size="small" onClick={() => window.open(`http://${profile.host === '0.0.0.0' ? location.hostname : profile.host}:${profile.port}/`, '_blank')}><ExternalLink size={14}/>WebUI</Button></div>
           : <ConfirmButton tone="primary" size="small" confirm={needsSwitch || dirty} confirmLabel={dirty ? '未保存修改将丢弃，再点确认' : '会停止当前服务，再点确认'} disabled={busy || fileMissing} title={fileMissing ? '模型文件不存在' : undefined} onConfirm={onLaunch}>{busy ? <><Play size={14}/>启动中…</> : needsSwitch ? <><Play size={14}/>切换到此档案</> : <><Play size={14}/>启动</>}</ConfirmButton>}
       </div>
     </Panel>

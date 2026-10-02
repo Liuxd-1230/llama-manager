@@ -1,4 +1,5 @@
 import { ExternalLink, Maximize2, Minimize2, Play, RefreshCw, Square, Trash2 } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../../api'
 import { Badge, Button } from '../../components/ui'
@@ -10,6 +11,7 @@ import styles from './run.module.css'
 interface Status { state: string; pid?: number; uptime_seconds?: number; error?: string }
 
 export function RunPage({ config, toast }: { config: AppConfig; toast: (text: string) => void }) {
+  const queryClient = useQueryClient()
   const [status, setStatus] = useState<Status>({ state: 'stopped' })
   const [healthy, setHealthy] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
@@ -34,6 +36,9 @@ export function RunPage({ config, toast }: { config: AppConfig; toast: (text: st
   const running = status.state === 'running'
   const start = async () => {
     await api('/api/config', { method: 'POST', body: JSON.stringify(config) })
+    // The POST just made the server state match this buffer — refresh the
+    // cache so the topbar dirty badge does not linger as a false positive.
+    await queryClient.invalidateQueries({ queryKey: ['config'] })
     await api('/api/server/start', { method: 'POST' }); toast('服务器正在启动'); await refresh()
   }
   const stop = async () => { await api('/api/server/stop', { method: 'POST' }); toast('服务器已停止'); await refresh() }

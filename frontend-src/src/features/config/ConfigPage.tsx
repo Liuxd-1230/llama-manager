@@ -10,10 +10,16 @@ import page from '../pages.module.css'
 
 type BrowseTarget = { key: 'llama_cpp_dir' | 'model_path' | 'mmproj_path' | 'chat_template_file'; mode: 'folder' | 'file'; extension?: string } | null
 
-export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; setConfig: (config: AppConfig) => void; toast: (text: string) => void }) {
+export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppConfig; setConfig: (config: AppConfig) => void; dirty: boolean; toast: (text: string) => void }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState('default')
   const [nameTouched, setNameTouched] = useState(false)
+  const [pendingLoad, setPendingLoad] = useState('')
+  const requestLoad = (selected: string) => {
+    if (!selected) return
+    if (dirty) { setPendingLoad(selected); return }
+    void load(selected)
+  }
   const currentNameQuery = useQuery({ queryKey: ['current-profile'], queryFn: () => api<{ name: string }>('/api/profiles/current'), staleTime: 0 })
   useEffect(() => { if (!nameTouched && currentNameQuery.data?.name) setName(currentNameQuery.data.name) }, [currentNameQuery.data, nameTouched])
   const [configs, setConfigs] = useState<string[]>([])
@@ -111,12 +117,14 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
       if (basic.flash_attn) args.push('--flash-attn', 'on')
       if (k.enable_thinking) args.push('--enable-thinking', '--reasoning-budget', String(k.reasoning_budget))
       if (config.chat_template_file.trim()) args.push('--chat-template-file', quote(config.chat_template_file.trim()))
-      args.push('--spec-type', 'none')
+      // Mirror _build_kvmem_command: MTP needs a model with a merged MTP head.
+      if (mtp.enabled) args.push('--spec-type', 'draft-mtp', '--spec-draft-n-max', String(Math.max(1, mtp.draft_n_max)), '--spec-kv-dtype', 'f16', '--kvmem-mtp-state', 'snapshots')
+      else args.push('--spec-type', 'none')
       if (config.extra_params.trim()) args.push(config.extra_params.trim())
       return args.join(' ')
     }
     const args: string[] = ['llama-server', '-m', quote(config.model_path || '<model.gguf>'), '-c', String(basic.ctx_size)]
-    if (basic.fit_enabled) args.push('--fit', 'on', '--fit-target', String(basic.fit_target))
+    if (basic.fit_enabled) { args.push('--fit', 'on'); if (basic.fit_target > 0) args.push('--fit-target', String(basic.fit_target)) }
     else args.push('-ngl', String(basic.ngl_enabled ? basic.ngl : 0))
     args.push('-t', String(basic.threads), '-np', String(basic.parallel), basic.mmap ? '--mmap' : '--no-mmap')
     if (basic.mlock) args.push('--mlock')
@@ -134,7 +142,13 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
     if (sampling.min_p_enabled) args.push('--min-p', String(sampling.min_p))
     if (sampling.repeat_penalty_enabled) args.push('--repeat-penalty', String(sampling.repeat_penalty))
     if (sampling.presence_penalty_enabled) args.push('--presence-penalty', String(sampling.presence_penalty))
-    if (mtp.enabled) args.push('--spec-type', mtp.spec_type, '--spec-draft-n-max', String(mtp.draft_n_max))
+    if (mtp.enabled) {
+      args.push('--spec-type', mtp.spec_type, '--spec-draft-n-max', String(mtp.draft_n_max))
+      if (mtp.draft_n_min > 0) args.push('--spec-draft-n-min', String(mtp.draft_n_min))
+      if (mtp.p_min !== 0) args.push('--spec-draft-p-min', String(mtp.p_min))
+      if (mtp.p_split !== 0.1) args.push('--spec-draft-p-split', String(mtp.p_split))
+    }
+    if (config.system_prompt.trim()) args.push('--system-prompt', quote(config.system_prompt.trim()))
     args.push('--host', config.server.host, '--port', String(config.server.port))
     if (config.chat_template_file.trim()) args.push('--chat-template-file', quote(config.chat_template_file.trim()))
     if (config.extra_params.trim()) args.push(config.extra_params.trim())
@@ -149,8 +163,9 @@ export function ConfigPage({ config, setConfig, toast }: { config: AppConfig; se
         <Panel title="配置文件" actions={<div className={page.row}><Button size="small" onClick={exportConfig}><Upload size={14}/>导出</Button><Button size="small" onClick={() => importRef.current?.click()}><Download size={14}/>导入</Button></div>}>
           <div className={page.formGridThree}>
             <Field label="配置名称"><Input value={name} onChange={event => { setName(event.target.value); setNameTouched(true) }} /></Field>
-            <Field label="已保存配置"><Select value={configs.includes(name) ? name : ''} onChange={event => void load(event.target.value)}><option value="">选择配置</option>{configs.map(item => <option key={item}>{item}</option>)}</Select></Field>
+            <Field label="已保存配置"><Select value={configs.includes(name) ? name : ''} onChange={event => requestLoad(event.target.value)}><option value="">选择配置</option>{configs.map(item => <option key={item}>{item}</option>)}</Select></Field>
             <div className={page.row} style={{ alignSelf: 'end' }}><Button tone="primary" onClick={() => void save()}><Save size={15}/>保存</Button><Button tone="danger" onClick={() => void remove()}><Trash2 size={15}/>删除</Button></div>
+            {pendingLoad && <div className={`${page.row} ${page.wide}`}><span className={page.hint}>有未保存的修改，载入「{pendingLoad}」将丢弃它们。</span><Button size="small" tone="danger" onClick={() => { const target = pendingLoad; setPendingLoad(''); void load(target) }}>丢弃并载入</Button><Button size="small" onClick={() => setPendingLoad('')}>取消</Button></div>}
           </div>
           <input ref={importRef} hidden type="file" accept=".json" onChange={event => void importConfig(event.target.files?.[0])} />
         </Panel>

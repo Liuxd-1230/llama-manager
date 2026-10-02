@@ -34,17 +34,20 @@ There is no build step, no test suite, and no linter configured.
 
 All managers are module-level singletons (e.g., `process_manager = ProcessManager()`). Each manager follows the same pub/sub pattern for log streaming: internal `_subscribers: set[asyncio.Queue]` with `subscribe()`/`unsubscribe()` methods.
 
-### Frontend (Vanilla HTML/CSS/JS)
+### Frontend (React + Vite + TypeScript)
 
-- **`frontend/index.html`** — Single-page structure with 11 tab-based pages.
-- **`frontend/style.css`** — Raycast-inspired design using CSS custom properties for light/dark themes. Theme toggled via `data-theme="dark"` on `<html>`, persisted in `localStorage`.
-- **`frontend/app.js`** — All application logic. Key patterns:
-  - `cfgFromUI()` — reads all form values into a config object
-  - `uiFromCfg(c)` — populates all form fields from a config object
-  - `configDirty` flag for unsaved-change tracking
-  - WebSocket connections with exponential backoff reconnection (3s initial, 30s max)
-
-No framework, no bundler, no transpilation. CDN dependencies: Lucide Icons (jsdelivr), Inter + Geist Mono (Google Fonts).
+- **`frontend-src/`** — React 18 + Vite + TypeScript source. Six routed workspaces
+  (models, config, run, evaluation, maintenance, chat) via HashRouter in `src/App.tsx`.
+- **State**: TanStack Query is the source of truth for server state (config,
+  profiles, server status, jobs); profile-context changes invalidate queries and
+  the Shell applies one atomic update. Chat state is a local reducer
+  (`features/chat/chatReducer.ts`).
+- **API contract**: `scripts/export_openapi.py` exports the OpenAPI schema from the
+  FastAPI app; `openapi-typescript` generates `src/generated/api.ts`.
+- **Styling**: CSS Modules with custom-property tokens (`src/styles/tokens.css`),
+  light/dark via `data-theme` on `<html>`, persisted in localStorage.
+- **Production build**: committed to `frontend/` (Vite base `/static/`); normal
+  users do not need Node. Build with `pnpm build` inside `frontend-src/`.
 
 ### Data Flow
 

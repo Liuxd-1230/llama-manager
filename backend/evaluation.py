@@ -96,6 +96,9 @@ class EvaluationService:
         cases = await self.db.fetchall("SELECT * FROM dataset_cases WHERE dataset_id=? ORDER BY position", (dataset_id,))
         if not cases:
             raise ValueError("数据集没有测试用例")
+        # A retried run reuses the experiment row: clear stale per-case results
+        # so the aggregate is not doubled.
+        await self.db.execute("DELETE FROM evaluation_results WHERE experiment_id=?", (experiment_id,))
         sampler = NvidiaSampler()
         sampler.start()
         scores: list[float] = []
@@ -148,8 +151,10 @@ class EvaluationService:
     async def generate(self, provider_id: str, model: str, prompt: str) -> str:
         if provider_id == "local":
             config = cfg.get_config()
+            # 0.0.0.0 is not a connectable address on Windows — loop back.
+            host = config.server.host if config.server.host not in ("", "0.0.0.0") else "127.0.0.1"
             response = await self.client.post(
-                f"http://{config.server.host}:{config.server.port}/v1/chat/completions",
+                f"http://{host}:{config.server.port}/v1/chat/completions",
                 json={"model": model, "messages": [{"role": "user", "content": prompt}], "stream": False},
                 timeout=300,
             )

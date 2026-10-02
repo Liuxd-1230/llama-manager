@@ -210,7 +210,11 @@ def _parse_gguf_header(path: Path) -> dict:
 
 
 def list_drives() -> list[str]:
-    """List available drive letters on Windows, or ['/'] on Linux."""
+    """List available drive roots on Windows, or ['/'] on Linux.
+
+    "D:" alone resolves to the current working directory of drive D — only
+    "D:\\" addresses the drive root.
+    """
     import sys
     if sys.platform == "win32":
         import string
@@ -218,7 +222,7 @@ def list_drives() -> list[str]:
         for letter in string.ascii_uppercase:
             d = f"{letter}:\\"
             if Path(d).exists():
-                drives.append(f"{letter}:")
+                drives.append(d)
         return drives
     return ["/"]
 

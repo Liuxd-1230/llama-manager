@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, CircleStop, Clock3, RefreshCw, RotateCcw, X, XCircle } from 'lucide-react'
-import { useEffect } from 'react'
-import { api, wsUrl } from '../api'
+import { useWebSocket } from '../hooks'
+import { api } from '../api'
 import type { JobRecord } from '../types'
 import { Badge, Button } from './ui'
 import styles from './TaskCenter.module.css'
@@ -10,11 +10,9 @@ export function TaskCenter({ open, onClose }: { open: boolean; onClose: () => vo
   const queryClient = useQueryClient()
   const jobs = useQuery({ queryKey: ['jobs'], queryFn: () => api<JobRecord[]>('/api/jobs'), enabled: open, refetchInterval: open ? 3000 : false })
   const action = useMutation({ mutationFn: ({ id, name }: { id: string; name: 'cancel' | 'retry' }) => api<JobRecord>(`/api/jobs/${id}/${name}`, { method: 'POST' }), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }) })
-  useEffect(() => {
-    const socket = new WebSocket(wsUrl('/ws/jobs'))
-    socket.onmessage = () => { void queryClient.invalidateQueries({ queryKey: ['jobs'] }) }
-    return () => socket.close()
-  }, [queryClient])
+  // Hook provides exponential-backoff reconnect; a dead socket would freeze
+  // the panel over long-running evaluations otherwise.
+  useWebSocket('/ws/jobs', () => { void queryClient.invalidateQueries({ queryKey: ['jobs'] }) })
   if (!open) return null
   return <div className={styles.backdrop} onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}><aside className={styles.drawer}>
     <header><strong>任务中心</strong><Button iconOnly title="关闭" onClick={onClose}><X size={16}/></Button></header>

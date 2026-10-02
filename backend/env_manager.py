@@ -62,8 +62,15 @@ def set_user_env(name: str, value: str) -> None:
     if not USER_ENV_PATH.exists():
         USER_ENV_PATH.touch()
     set_key(str(USER_ENV_PATH), name, value, quote_mode="always")
-    _restrict_windows_acl(USER_ENV_PATH)
-    os.environ.setdefault(name, value)
+    try:
+        _restrict_windows_acl(USER_ENV_PATH)
+    except OSError as exc:
+        # Restricted machines (managed accounts, odd usernames) must not block
+        # saving a key — the file simply keeps broader permissions.
+        print(f"[env] warning: could not restrict ACL on {USER_ENV_PATH}: {exc}")
+    # An explicit UI save overrides even an existing process variable; the
+    # system-env-first priority only applies to the passive startup load.
+    os.environ[name] = value
 
 
 load_user_env()

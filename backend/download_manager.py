@@ -61,6 +61,11 @@ class DownloadManager:
         except Exception as e:
             self._append(f"[download] Error: {e}")
         finally:
+            try:
+                if self._process and self._process.returncode is None:
+                    await self._process.wait()
+            except ProcessLookupError:
+                pass
             rc = self._process.returncode if self._process else -1
             if rc == 0:
                 self._append(f"[download] ✅ Done! llama.cpp cloned to {dest}")

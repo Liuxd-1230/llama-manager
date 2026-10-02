@@ -242,6 +242,14 @@ class ProcessManager:
                 self._append_log(text)
         except Exception as e:
             self._append_log(f"[manager] Log reader error: {e}")
+        finally:
+            # Settle the exit status: on Windows, returncode stays None until
+            # wait() runs, which would leave a crashed server looking alive.
+            try:
+                if self._process and self._process.returncode is None:
+                    await self._process.wait()
+            except ProcessLookupError:
+                pass
 
     def _append_log(self, text: str):
         self._log_buffer.append(text)
