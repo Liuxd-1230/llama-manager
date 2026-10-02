@@ -113,13 +113,13 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
       if (config.mmproj_path) { args.push('--mmproj', quote(config.mmproj_path)); args.push(config.mmproj_gpu ? '--mmproj-offload' : '--no-mmproj-offload') }
       if (basic.ngl_enabled) args.push('-ngl', String(basic.ngl))
       args.push('--host', config.server.host, '--port', String(config.server.port))
-      args.push('-c', String(k.workspace), '-b', String(k.batch), '--ubatch-size', String(k.batch), '-n', String(k.gen_reserve))
+      args.push('-c', String(k.workspace), '-b', String(k.batch), '--ubatch-size', String(k.ubatch), '-n', String(k.gen_reserve))
       args.push('--kvmem-budget', String(k.budget), '--kvmem-gen-reserve', String(k.gen_reserve), '--kvmem-block-tokens', String(k.block_tokens), '--kvmem-query-policy', k.query_policy, '--kvmem-query-replay', 'auto', '--kv-dtype', k.kv_dtype)
       if (basic.flash_attn) args.push('--flash-attn', 'on')
       if (k.enable_thinking) args.push('--enable-thinking', '--reasoning-budget', String(k.reasoning_budget))
       if (config.chat_template_file.trim()) args.push('--chat-template-file', quote(config.chat_template_file.trim()))
       // Mirror _build_kvmem_command: MTP needs a model with a merged MTP head.
-      if (mtp.enabled) args.push('--spec-type', 'draft-mtp', '--spec-draft-n-max', String(Math.max(1, mtp.draft_n_max)), '--spec-kv-dtype', 'f16', '--kvmem-mtp-state', 'snapshots')
+      if (mtp.enabled) args.push('--spec-type', 'draft-mtp', '--spec-draft-n-max', String(Math.max(1, mtp.draft_n_max)), '--spec-kv-dtype', 'f16', '--kvmem-mtp-state', k.mtp_state)
       else args.push('--spec-type', 'none')
       if (config.extra_params.trim()) args.push(config.extra_params.trim())
       return args.join(' ')
@@ -217,9 +217,11 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
               <NumberField label="GPU 预算" value={kvmem.budget} onChange={budget => patchKvmem({ budget })}/>
               <NumberField label="生成预留" value={kvmem.gen_reserve} onChange={gen_reserve => patchKvmem({ gen_reserve })}/>
               <NumberField label="块大小" value={kvmem.block_tokens} onChange={block_tokens => patchKvmem({ block_tokens })}/>
-              <NumberField label="批次" value={kvmem.batch} onChange={batch => patchKvmem({ batch })}/>
+              <NumberField label="逻辑批次" value={kvmem.batch} onChange={batch => patchKvmem({ batch })}/>
+              <NumberField label="微批" value={kvmem.ubatch} onChange={ubatch => patchKvmem({ ubatch })}/>
               <Field label="KV 类型"><Select value={kvmem.kv_dtype} onChange={event => patchKvmem({ kv_dtype: event.target.value })}><option>q8_0</option><option>q5_0</option><option>q4_0</option></Select></Field>
               <Field label="查询策略"><Input value={kvmem.query_policy} onChange={event => patchKvmem({ query_policy: event.target.value })}/></Field>
+              <Field label="MTP 状态"><Select value={kvmem.mtp_state} onChange={event => patchKvmem({ mtp_state: event.target.value })}><option value="snapshots">snapshots(当前构建)</option><option value="replay">replay(需 v0.17+ 构建)</option></Select></Field>
               <NumberField label="推理预算" value={kvmem.reasoning_budget} disabled={!kvmem.enable_thinking} onChange={reasoning_budget => patchKvmem({ reasoning_budget })}/>
             </div>
             <p className={page.hint}>-c 是逻辑 KV 工作区，不是显存上限；显存由「GPU 预算 + 生成预留」决定，两者之和不能超过工作区。「思考(默认)」开关在上方共用一行。采样参数在此引擎下走请求级设置。</p>

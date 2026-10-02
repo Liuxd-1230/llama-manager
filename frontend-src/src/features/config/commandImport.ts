@@ -97,7 +97,7 @@ export function applyLaunchCommand(base: AppConfig, text: string): CommandImport
       case 'ctk': case 'cache-type-k': use(value => { config.basic.kv_cache_quant_k = value }); break
       case 'ctv': case 'cache-type-v': use(value => { config.basic.kv_cache_quant_v = value }); break
       case 'b': case 'batch-size': use(value => { const n = integer(value, flag); if (n !== null) { if (isKvmem) config.kvmem.batch = n; else config.basic.batch_size = n } }); break
-      case 'ub': case 'ubatch-size': use(value => { const n = integer(value, flag); if (n !== null) { if (isKvmem) config.kvmem.batch = n; else config.basic.ubatch_size = n } }); break
+      case 'ub': case 'ubatch-size': use(value => { const n = integer(value, flag); if (n !== null) { if (isKvmem) config.kvmem.ubatch = n; else config.basic.ubatch_size = n } }); break
       case 'cache-ram': case 'cram': use(value => { const n = integer(value, flag); if (n !== null) config.basic.cache_ram = n }); break
       case 'kvmem-budget': use(value => { const n = integer(value, flag); if (n !== null) config.kvmem.budget = n }); break
       case 'kvmem-gen-reserve': use(value => { const n = integer(value, flag); if (n !== null) config.kvmem.gen_reserve = n }); break
@@ -114,6 +114,7 @@ export function applyLaunchCommand(base: AppConfig, text: string): CommandImport
       }
       case 'kv-dtype': use(value => { config.kvmem.kv_dtype = value }); break
       case 'kvmem-query-policy': use(value => { config.kvmem.query_policy = value }); break
+      case 'kvmem-mtp-state': use(value => { config.kvmem.mtp_state = value }); break
       case 'kvmem-query-replay': case 'spec-kv-dtype': case 'kvmem-mtp-state': use(() => {}); break
       case 'reasoning-budget': use(value => { const n = integer(value, flag); if (n !== null && isKvmem) { config.kvmem.enable_thinking = true; config.kvmem.reasoning_budget = n } }); break
       case 'temp': case 'temperature': use(value => { const n = Number(value); if (Number.isFinite(n)) config.sampling.temperature = n }); break

@@ -232,7 +232,7 @@ class ProcessManager:
             cmd += ["-ngl", str(config.basic.ngl)]
         cmd += ["--host", config.server.host, "--port", str(config.server.port)]
         # In KVMem, -c is the logical KV workspace, not a VRAM cap; VRAM = budget + gen_reserve.
-        cmd += ["-c", str(k.workspace), "-b", str(k.batch), "--ubatch-size", str(k.batch), "-n", str(k.gen_reserve)]
+        cmd += ["-c", str(k.workspace), "-b", str(k.batch), "--ubatch-size", str(k.ubatch), "-n", str(k.gen_reserve)]
         cmd += [
             "--kvmem-budget", str(k.budget),
             "--kvmem-gen-reserve", str(k.gen_reserve),
@@ -263,7 +263,7 @@ class ProcessManager:
                 "--spec-type", "draft-mtp",
                 "--spec-draft-n-max", str(max(1, config.mtp.draft_n_max)),
                 "--spec-kv-dtype", "f16",
-                "--kvmem-mtp-state", "snapshots",
+                "--kvmem-mtp-state", k.mtp_state,
             ]
         else:
             cmd += ["--spec-type", "none"]

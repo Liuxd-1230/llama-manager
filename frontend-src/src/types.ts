@@ -55,8 +55,10 @@ export interface AppConfig {
     gen_reserve: number
     block_tokens: number
     batch: number
+    ubatch: number
     kv_dtype: string
     query_policy: string
+    mtp_state: string
     enable_thinking: boolean
     reasoning_budget: number
   }
@@ -140,7 +142,7 @@ export const defaultConfig: AppConfig = {
   engine: 'llama.cpp',
   chat_template_file: '',
   mmproj_gpu: false,
-  kvmem: { workspace: 131072, budget: 24576, gen_reserve: 10240, block_tokens: 128, batch: 128, kv_dtype: 'q8_0', query_policy: 'user', enable_thinking: false, reasoning_budget: 4096 },
+  kvmem: { workspace: 131072, budget: 24576, gen_reserve: 10240, block_tokens: 128, batch: 512, ubatch: 128, kv_dtype: 'q8_0', query_policy: 'user', mtp_state: 'snapshots', enable_thinking: false, reasoning_budget: 4096 },
   system_prompt: '', extra_params: '',
   server: { host: '127.0.0.1', port: 8080, mode: 'local' },
   compile: { command: 'cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release -j12' },

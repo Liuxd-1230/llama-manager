@@ -68,9 +68,11 @@ class KvmemSettings(BaseModel):
     budget: int = 24576  # GPU-resident history tokens (--kvmem-budget)
     gen_reserve: int = 10240  # GPU slots reserved for new tokens (--kvmem-gen-reserve, also -n)
     block_tokens: int = 128  # KV block size (--kvmem-block-tokens)
-    batch: int = 128  # -b / --ubatch-size
-    kv_dtype: str = "q8_0"  # --kv-dtype
+    batch: int = 512  # logical batch (-b)
+    ubatch: int = 128  # physical microbatch (--ubatch-size)
+    kv_dtype: str = "q4_0"  # --kv-dtype
     query_policy: str = "user"  # --kvmem-query-policy
+    mtp_state: str = "snapshots"  # --kvmem-mtp-state; "replay" needs a v0.17+ build (prism.3 prebuilt only supports snapshots)
     enable_thinking: bool = False  # --enable-thinking
     reasoning_budget: int = 4096  # --reasoning-budget
 
