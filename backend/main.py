@@ -583,6 +583,7 @@ async def _stream_chat_with_tools(
             reasoning_buffer = ""
             content_buffer = ""
             reasoning_streamed = False
+            timings: dict | None = None
             try:
                 async with client.stream("POST", target, json=request_payload, headers=headers) as resp:
                     if resp.status_code >= 400:
@@ -616,6 +617,8 @@ async def _stream_chat_with_tools(
                                 # frontend strips DSML from reasoning display.
                                 reasoning_streamed = True
                                 yield _openai_chunk(reasoning=reasoning_delta)
+                            if chunk.get("timings"):
+                                timings = chunk["timings"]
                             if delta.get("content"):
                                 content_buffer += delta.get("content")
                                 clean_chunk = dict(chunk)
@@ -627,6 +630,8 @@ async def _stream_chat_with_tools(
             except Exception as exc:
                 yield "data: " + json.dumps({"error": str(exc)}) + "\n\n"
                 return
+            if timings:
+                yield "data: " + json.dumps({"timings": timings}) + "\n\n"
             tool_calls = [tool_acc[idx] for idx in sorted(tool_acc)]
             if not tool_calls:
                 dsml_tool_calls = _parse_dsml_tool_calls(reasoning_buffer)
@@ -1029,6 +1034,8 @@ async def _normalize_v2_stream(source, candidate_id: str):
                     yield _v2_event("tool_status", status=tool_event.get("type"), **tool_payload)
                 continue
             delta = (event.get("choices") or [{}])[0].get("delta") or {}
+            if event.get("timings"):
+                yield _v2_event("timings", **event["timings"])
             if delta.get("reasoning_content") or delta.get("reasoning") or delta.get("thinking"):
                 yield _v2_event("reasoning_delta", delta=delta.get("reasoning_content") or delta.get("reasoning") or delta.get("thinking"))
             if delta.get("content"):

@@ -86,7 +86,7 @@ describe('ModelsPage', () => {
     client.setQueryData(['current-profile'], { name: 'old' })
 
     await screen.findByText('card')
-    await fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    await fireEvent.click(screen.getByRole('button', { name: '编辑参数' }))
     await waitFor(() => expect(mockedApi).toHaveBeenCalledWith('/api/config/load', expect.objectContaining({ method: 'POST' })))
     await waitFor(() => {
       expect(client.getQueryState(['config'])?.isInvalidated).toBe(true)
@@ -103,8 +103,9 @@ describe('ModelsPage', () => {
     client.setQueryData(['config'], { ...defaultConfig })
 
     await screen.findByText('doomed')
-    await fireEvent.click(screen.getByRole('button', { name: '删除' }))
-    await fireEvent.click(await screen.findByRole('button', { name: '确认删除?' }))
+    const deleteButton = screen.getByRole('button', { name: '删除档案' })
+    await fireEvent.click(deleteButton)
+    await fireEvent.click(deleteButton)
     await waitFor(() => expect(mockedApi).toHaveBeenCalledWith('/api/config/load', expect.objectContaining({ method: 'POST' })))
     await waitFor(() => expect(client.getQueryState(['config'])?.isInvalidated).toBe(true))
   })

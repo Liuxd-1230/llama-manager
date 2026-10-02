@@ -8,6 +8,7 @@ export type ChatAction =
   | { type: 'set_backend_id'; turnId: string; candidateId: string; backendId: string }
   | { type: 'append'; turnId: string; candidateId: string; field: 'content' | 'reasoning'; delta: string }
   | { type: 'tool'; turnId: string; candidateId: string; event: ToolEvent }
+  | { type: 'stats'; turnId: string; candidateId: string; stats: Candidate['stats'] }
   | { type: 'finish'; turnId: string; candidateId: string; status: Candidate['status']; error?: string }
   | { type: 'select'; turnId: string; candidateId: string }
   | { type: 'clear' }
@@ -27,6 +28,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       if (action.type === 'set_backend_id') return { ...candidate, backendId: action.backendId }
       if (action.type === 'append') return { ...candidate, [action.field]: candidate[action.field] + action.delta }
       if (action.type === 'tool') return { ...candidate, tools: [...candidate.tools, action.event] }
+      if (action.type === 'stats') return { ...candidate, stats: { ...candidate.stats, ...action.stats } }
       if (action.type === 'finish') return { ...candidate, status: action.status, error: action.error }
       return candidate
     })

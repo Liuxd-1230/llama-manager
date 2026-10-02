@@ -94,12 +94,17 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
       }
       if (!response.ok) { const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` })); throw new ApiError(error.error || `HTTP ${response.status}`, response.status) }
       let received = false
+      const startedAt = performance.now()
+      let firstTokenAt: number | null = null
+      const noteStats = (extra: Candidate['stats'] = {}) => dispatch({ type: 'stats', turnId: turn.id, candidateId, stats: { firstTokenMs: firstTokenAt !== null ? Math.round(firstTokenAt - startedAt) : undefined, ...extra } })
       if (!stream) {
         const result = await response.json()
         backendId = result.candidate_id || ''; dispatch({ type: 'set_backend_id', turnId: turn.id, candidateId, backendId })
         if (result.content) { received = true; accumulatedContent += result.content; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'content', delta: result.content }) }
         if (result.reasoning) { accumulatedReasoning += result.reasoning; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'reasoning', delta: result.reasoning }) }
         for (const tool of result.tool_events || []) { const normalized = normalizeTool(tool); accumulatedTools.push(normalized); dispatch({ type: 'tool', turnId: turn.id, candidateId, event: normalized }) }
+        const timings = result.timings as { predicted_n?: number; predicted_ms?: number } | undefined
+        noteStats({ tokPerSec: timings?.predicted_ms && timings.predicted_n ? timings.predicted_n / (timings.predicted_ms / 1000) : undefined, totalTokens: timings?.predicted_n, elapsedMs: Math.round(performance.now() - startedAt) })
       } else {
         const reader = response.body?.getReader(); if (!reader) throw new Error('浏览器不支持流式响应')
         const decoder = new TextDecoder(); const parser = new SseParser(); let done = false
@@ -110,14 +115,16 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
             if (raw === '[DONE]') continue
             const event = JSON.parse(raw)
             if (event.type === 'start') { backendId = event.candidate_id || ''; dispatch({ type: 'set_backend_id', turnId: turn.id, candidateId, backendId }) }
-            else if (event.type === 'content_delta') { const delta = event.delta || ''; received = true; accumulatedContent += delta; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'content', delta }) }
-            else if (event.type === 'reasoning_delta') { const delta = event.delta || ''; accumulatedReasoning += delta; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'reasoning', delta }) }
+            else if (event.type === 'content_delta') { const delta = event.delta || ''; received = true; if (firstTokenAt === null) firstTokenAt = performance.now(); accumulatedContent += delta; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'content', delta }) }
+            else if (event.type === 'reasoning_delta') { const delta = event.delta || ''; received = true; if (firstTokenAt === null) firstTokenAt = performance.now(); accumulatedReasoning += delta; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'reasoning', delta }) }
+            else if (event.type === 'timings') { const t = event as { predicted_n?: number; predicted_ms?: number }; noteStats({ tokPerSec: t.predicted_ms && t.predicted_n ? t.predicted_n / (t.predicted_ms / 1000) : undefined, totalTokens: t.predicted_n }) }
             else if (['tool_call', 'tool_result', 'tool_status', 'call', 'result', 'status', 'retry', 'limit'].includes(event.type)) { const normalized = normalizeTool(event); accumulatedTools.push(normalized); dispatch({ type: 'tool', turnId: turn.id, candidateId, event: normalized }) }
             else if (event.type === 'error') throw new Error(event.message || '生成失败')
           }
         }
       }
       if (!received) { accumulatedContent = '(空回复)'; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'content', delta: accumulatedContent }) }
+      noteStats({ elapsedMs: Math.round(performance.now() - startedAt) })
       dispatch({ type: 'finish', turnId: turn.id, candidateId, status: 'done' })
       await persistTurn(turnIndex, { ...candidate, backendId, content: accumulatedContent, reasoning: accumulatedReasoning, tools: accumulatedTools, status: 'done' }, requestConversationId)
     } catch (reason) {
@@ -210,7 +217,7 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
             {candidate.reasoning && <details className={styles.reasoning}><summary><BrainCircuit size={14}/>思考过程</summary><div><StreamingMarkdown content={stripDsml(candidate.reasoning)} streaming={candidate.status === 'streaming'}/></div></details>}
             <StreamingMarkdown content={candidate.content || (candidate.status === 'streaming' ? '生成中…' : '(空回复)')} streaming={candidate.status === 'streaming' && !!candidate.content}/>{candidate.status === 'streaming' && <span className={styles.cursor}/>} {candidate.error && <div className={styles.error}>{candidate.error}</div>}
           </div>
-          <div className={styles.actions}><Button size="small" onClick={() => { void navigator.clipboard.writeText(candidate.content); toast('回答已复制') }}><Copy size={13}/>复制</Button><Button size="small" disabled={!!state.generating} onClick={() => void requestAssistant(turnIndex)}><RefreshCw size={13}/>刷新</Button><Button size="small" iconOnly title="上一个回答" disabled={index <= 0} onClick={() => dispatch({ type: 'select', turnId: turn.id, candidateId: turn.candidates[index - 1].id })}><ChevronLeft size={14}/></Button><span className={styles.counter}>{index + 1}/{turn.candidates.length}</span><Button size="small" iconOnly title="下一个回答" disabled={index >= turn.candidates.length - 1} onClick={() => dispatch({ type: 'select', turnId: turn.id, candidateId: turn.candidates[index + 1].id })}><ChevronRight size={14}/></Button></div>
+          <div className={styles.actions}><Button size="small" onClick={() => { void navigator.clipboard.writeText(candidate.content); toast('回答已复制') }}><Copy size={13}/>复制</Button><Button size="small" disabled={!!state.generating} onClick={() => void requestAssistant(turnIndex)}><RefreshCw size={13}/>刷新</Button><Button size="small" iconOnly title="上一个回答" disabled={index <= 0} onClick={() => dispatch({ type: 'select', turnId: turn.id, candidateId: turn.candidates[index - 1].id })}><ChevronLeft size={14}/></Button><span className={styles.counter}>{index + 1}/{turn.candidates.length}</span><Button size="small" iconOnly title="下一个回答" disabled={index >= turn.candidates.length - 1} onClick={() => dispatch({ type: 'select', turnId: turn.id, candidateId: turn.candidates[index + 1].id })}><ChevronRight size={14}/></Button>{candidate.stats && <span className={styles.genStats}>{[candidate.stats.tokPerSec != null && `${candidate.stats.tokPerSec.toFixed(1)} tok/s`, candidate.stats.firstTokenMs != null && `首token ${candidate.stats.firstTokenMs}ms`, candidate.stats.totalTokens != null && `${candidate.stats.totalTokens} tok`, candidate.stats.elapsedMs != null && `${(candidate.stats.elapsedMs / 1000).toFixed(1)}s`].filter(Boolean).join(' · ')}</span>}</div>
         </article>}</div>
       })}
     </div>

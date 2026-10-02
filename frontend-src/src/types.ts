@@ -104,6 +104,7 @@ export interface Candidate {
   tools: ToolEvent[]
   status: 'streaming' | 'done' | 'stopped' | 'error'
   error?: string
+  stats?: { tokPerSec?: number; firstTokenMs?: number; totalTokens?: number; elapsedMs?: number }
 }
 
 export interface ChatTurn {

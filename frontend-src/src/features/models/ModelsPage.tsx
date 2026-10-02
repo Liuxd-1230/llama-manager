@@ -184,10 +184,10 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
   return (
     <Panel className={profile.is_running ? styles.cardRunning : ''} title={<span className={styles.titleRow}><span className={styles.titleName}>{profile.name}</span>{profile.is_running && <Badge tone="good">运行中</Badge>}{profile.is_current && !profile.is_running && <Badge>当前</Badge>}</span>} actions={
       <div className={page.row}>
-        <ConfirmButton size="small" confirm={dirty} confirmLabel="丢弃修改?" title="编辑参数" onConfirm={onEdit}><Pencil size={14}/>编辑</ConfirmButton>
-        <Button size="small" disabled={busy} onClick={onDuplicate}><Copy size={14}/>复制</Button>
-        {!profile.is_current && <ConfirmButton size="small" confirm={dirty} confirmLabel="丢弃修改?" title="设为当前档案（不启动）" onConfirm={onSetCurrent}><Pin size={14}/>设为当前</ConfirmButton>}
-        <ConfirmButton size="small" tone="danger" disabled={profile.is_running || profile.name === 'default'} confirmLabel="确认删除?" onConfirm={onRemove}><Trash2 size={14}/>删除</ConfirmButton>
+        <ConfirmButton size="small" iconOnly confirm={dirty} confirmLabel="丢弃?" title="编辑参数" onConfirm={onEdit}><Pencil size={14}/></ConfirmButton>
+        <Button size="small" iconOnly title="复制档案" disabled={busy} onClick={onDuplicate}><Copy size={14}/></Button>
+        {!profile.is_current && <ConfirmButton size="small" iconOnly confirm={dirty} confirmLabel="丢弃?" title="设为当前档案（不启动）" onConfirm={onSetCurrent}><Pin size={14}/></ConfirmButton>}
+        <ConfirmButton size="small" iconOnly tone="danger" disabled={profile.is_running || profile.name === 'default'} confirmLabel="确认?" title="删除档案" onConfirm={onRemove}><Trash2 size={14}/></ConfirmButton>
       </div>
     }>
       <p className={styles.metaLine} title={profile.model_path}>

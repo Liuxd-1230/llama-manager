@@ -44,3 +44,5 @@
   .assistant { width: 96% }
   .toolbar > span { width: 100%; margin-left: 0 !important }
 }
+
+.genStats { margin-left: auto; color: var(--text-3); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap }

@@ -2,8 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Beaker, FileUp, Play, Plus, ShieldCheck, Target } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
-import { Button, Field, Input, Panel, Select, Switch, Textarea } from '../../components/ui'
+import { Badge, Button, Field, Input, Panel, Select, Switch, Textarea } from '../../components/ui'
 import type { DatasetCase, DatasetSummary, Experiment, Provider } from '../../types'
+
+interface ExperimentResults extends Experiment { results: Array<{ case_id: string; prompt?: string; response: string; score: number; latency_ms: number; details: Record<string, unknown> }> }
 import page from '../pages.module.css'
 import styles from './evaluation.module.css'
 
@@ -30,6 +32,12 @@ export function EvaluationPage({ toast }: { toast: (text: string) => void }) {
   const detail = useQuery({ queryKey: ['dataset', selectedId], queryFn: () => api<DatasetDetail>(`/api/datasets/${selectedId}`), enabled: !!selectedId })
   const experiments = useQuery({ queryKey: ['experiments'], queryFn: () => api<{ experiments: Experiment[]; pareto: Experiment[] }>('/api/experiments'), refetchInterval: 4000 })
   const providers = useQuery({ queryKey: ['providers'], queryFn: () => api<{ providers: Provider[] }>('/api/chat/providers') })
+  const [openExperiment, setOpenExperiment] = useState('')
+  const expResults = useQuery({
+    queryKey: ['exp-results', openExperiment],
+    queryFn: () => api<ExperimentResults>(`/api/experiments/${openExperiment}`),
+    enabled: !!openExperiment,
+  })
   const invalidate = () => { void queryClient.invalidateQueries({ queryKey: ['datasets'] }); void queryClient.invalidateQueries({ queryKey: ['dataset', selectedId] }) }
   const createDataset = useMutation({ mutationFn: () => api<DatasetSummary>('/api/datasets', { method: 'POST', body: JSON.stringify({ name: datasetName, description: '' }) }), onSuccess: item => { setDatasetName(''); setSelectedId(item.id); invalidate(); toast('数据集已创建') }, onError: reason => toast(`创建失败：${errText(reason)}`) })
   const addCase = useMutation({ mutationFn: () => api(`/api/datasets/${selectedId}/cases`, { method: 'POST', body: JSON.stringify({ prompt, expected, evaluator: evaluatorBody(evaluator, expected) }) }), onSuccess: () => { setPrompt(''); setExpected(''); invalidate(); toast('测试用例已添加') }, onError: reason => toast(`添加失败：${errText(reason)}`) })
@@ -55,7 +63,16 @@ export function EvaluationPage({ toast }: { toast: (text: string) => void }) {
       </Panel>
       <Panel title="实验与 Pareto">
         <div className={styles.pareto}>{(experiments.data?.pareto || []).map(item => <div key={item.id}><strong>{item.model}</strong><span>质量 {format(item.metrics.quality)} · 延迟 {format(item.metrics.avg_latency_ms)}ms · 吞吐 {format(item.metrics.throughput_chars_s)}</span></div>)}</div>
-        <table className={page.table}><thead><tr><th>实验</th><th>模型</th><th>状态</th><th>质量</th><th>延迟</th></tr></thead><tbody>{(experiments.data?.experiments || []).map(item => <tr key={item.id}><td>{item.name}</td><td>{item.model}</td><td>{item.status}</td><td>{format(item.metrics.quality)}</td><td>{item.metrics.avg_latency_ms == null ? '—' : `${format(item.metrics.avg_latency_ms)}ms`}</td></tr>)}</tbody></table>
+        <table className={page.table}><thead><tr><th>实验</th><th>模型</th><th>状态</th><th>质量</th><th>延迟</th></tr></thead><tbody>{(experiments.data?.experiments || []).map(item => <tr key={item.id} style={{ cursor: 'pointer' }} title="点击查看逐用例结果" onClick={() => setOpenExperiment(current => current === item.id ? '' : item.id)}><td>{item.name}{openExperiment === item.id ? ' ▾' : ' ▸'}</td><td>{item.model}</td><td>{item.status}</td><td>{format(item.metrics.quality)}</td><td>{item.metrics.avg_latency_ms == null ? '—' : `${format(item.metrics.avg_latency_ms)}ms`}</td></tr>)}</tbody></table>
+        {openExperiment && <div className={styles.drill}>
+          <p className={page.hint} style={{ margin: '0 0 6px' }}>逐用例结果（点行收起）</p>
+          {expResults.isFetching && <p className={page.hint}>加载中…</p>}
+          {(expResults.data?.results || []).map(item => <div key={item.case_id} className={styles.drillRow}>
+            <header><Badge tone={item.score >= 1 ? 'good' : item.score > 0 ? 'warn' : 'bad'}>{item.score}</Badge><strong>{item.prompt || item.case_id}</strong><span>{item.latency_ms}ms</span></header>
+            <pre>{item.response || '(空回复)'}</pre>
+          </div>)}
+          {expResults.data && !expResults.data.results.length && <p className={page.hint}>该实验没有逐用例记录。</p>}
+        </div>}
       </Panel>
     </div>
   </div>
