@@ -55,7 +55,7 @@ class ServerSettings(BaseModel):
 
 
 class CompileSettings(BaseModel):
-    command: str = 'cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="89" && cmake --build build --config Release -j12'
+    command: str = 'cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="89" && cmake --build build --config Release --target llama-server -j12'
 
 
 class KvmemSettings(BaseModel):
@@ -83,6 +83,7 @@ class AppConfig(BaseModel):
     model_path: str = ""
     mmproj_path: str = ""
     chat_template_file: str = ""  # optional --chat-template-file for both engines
+    mmproj_gpu: bool = False  # offload the vision projector to VRAM (default: keep in RAM)
     engine: str = "llama.cpp"  # "llama.cpp" (llama-server) or "kvmem" (llama-kvmem-server)
     basic: BasicSettings = Field(default_factory=BasicSettings)
     sampling: SamplingSettings = Field(default_factory=SamplingSettings)

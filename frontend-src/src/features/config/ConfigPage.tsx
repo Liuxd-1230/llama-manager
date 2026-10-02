@@ -110,7 +110,7 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
     if (config.engine === 'kvmem') {
       const k = kvmem
       const args: string[] = ['llama-kvmem-server', '-m', quote(config.model_path || '<model.gguf>')]
-      if (config.mmproj_path) args.push('--mmproj', quote(config.mmproj_path))
+      if (config.mmproj_path) { args.push('--mmproj', quote(config.mmproj_path)); args.push(config.mmproj_gpu ? '--mmproj-offload' : '--no-mmproj-offload') }
       if (basic.ngl_enabled) args.push('-ngl', String(basic.ngl))
       args.push('--host', config.server.host, '--port', String(config.server.port))
       args.push('-c', String(k.workspace), '-b', String(k.batch), '--ubatch-size', String(k.batch), '-n', String(k.gen_reserve))
@@ -125,6 +125,7 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
       return args.join(' ')
     }
     const args: string[] = ['llama-server', '-m', quote(config.model_path || '<model.gguf>'), '-c', String(basic.ctx_size)]
+    if (config.mmproj_path) { args.push('--mmproj', quote(config.mmproj_path)); args.push(config.mmproj_gpu ? '--mmproj-offload' : '--no-mmproj-offload') }
     if (basic.fit_enabled) { args.push('--fit', 'on'); if (basic.fit_target > 0) args.push('--fit-target', String(basic.fit_target)) }
     else args.push('-ngl', String(basic.ngl_enabled ? basic.ngl : 0))
     args.push('-t', String(basic.threads), '-np', String(basic.parallel), basic.mmap ? '--mmap' : '--no-mmap')
@@ -177,6 +178,7 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
             <Field label="引擎目录"><div className={page.row}><Input value={config.llama_cpp_dir} onChange={event => patch('llama_cpp_dir', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'llama_cpp_dir', mode: 'folder' })}><FolderOpen size={16}/></Button></div></Field>
             <Field label="GGUF 模型"><div className={page.row}><Input value={config.model_path} onChange={event => patch('model_path', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'model_path', mode: 'file', extension: '.gguf' })}><FolderOpen size={16}/></Button></div></Field>
             <Field label="MMProj"><div className={page.row}><Input value={config.mmproj_path} onChange={event => patch('mmproj_path', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'mmproj_path', mode: 'file', extension: '.gguf' })}><FolderOpen size={16}/></Button></div></Field>
+            {config.mmproj_path && <Field label="视觉投影器"><div className={page.row}><Switch checked={config.mmproj_gpu} onChange={mmproj_gpu => patch('mmproj_gpu', mmproj_gpu)} label="进显存"/></div></Field>}
             <Field label="监听模式"><Select value={config.server.mode} onChange={event => patch('server', { ...config.server, mode: event.target.value, host: event.target.value === 'lan' ? '0.0.0.0' : '127.0.0.1' })}><option value="local">本地 127.0.0.1</option><option value="lan">局域网 0.0.0.0</option></Select></Field>
             <Field label="监听地址"><Input value={config.server.host} onChange={event => patch('server', { ...config.server, host: event.target.value })} /></Field>
             <Field label="端口"><Input type="number" value={config.server.port} onChange={event => patch('server', { ...config.server, port: Number(event.target.value) })} /></Field>

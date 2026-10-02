@@ -6,6 +6,7 @@ export interface AppConfig {
   model_path: string
   mmproj_path: string
   chat_template_file: string
+  mmproj_gpu: boolean
   basic: {
     ctx_size: number
     ngl_enabled: boolean
@@ -138,6 +139,7 @@ export const defaultConfig: AppConfig = {
   mtp: { enabled: false, spec_type: 'draft-mtp', draft_n_max: 3, draft_n_min: 0, p_min: 0, p_split: .1 },
   engine: 'llama.cpp',
   chat_template_file: '',
+  mmproj_gpu: false,
   kvmem: { workspace: 131072, budget: 24576, gen_reserve: 10240, block_tokens: 128, batch: 128, kv_dtype: 'q8_0', query_policy: 'user', enable_thinking: false, reasoning_budget: 4096 },
   system_prompt: '', extra_params: '',
   server: { host: '127.0.0.1', port: 8080, mode: 'local' },

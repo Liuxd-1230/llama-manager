@@ -81,6 +81,8 @@ export function applyLaunchCommand(base: AppConfig, text: string): CommandImport
     switch (flag) {
       case 'm': case 'model': use(value => { config.model_path = value }); break
       case 'mmproj': use(value => { config.mmproj_path = value }); break
+      case 'mmproj-offload': config.mmproj_gpu = true; applied += 1; break
+      case 'no-mmproj-offload': config.mmproj_gpu = false; applied += 1; break
       case 'c': case 'ctx-size': use(value => {
         const n = integer(value, flag)
         if (n === null) return

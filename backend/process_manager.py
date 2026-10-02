@@ -53,6 +53,7 @@ class ProcessManager:
 
         if config.mmproj_path:
             cmd += ["--mmproj", config.mmproj_path]
+            cmd += ["--mmproj-offload" if config.mmproj_gpu else "--no-mmproj-offload"]
 
         b = config.basic
         cmd += ["-c", str(b.ctx_size)]
@@ -169,6 +170,9 @@ class ProcessManager:
         cmd = [server_bin, "-m", config.model_path]
         if config.mmproj_path:
             cmd += ["--mmproj", config.mmproj_path]
+            # The projector defaults to system RAM: on the 8GB card its VRAM
+            # footprint crowds out decode. --mmproj-offload opts into VRAM.
+            cmd += ["--mmproj-offload" if config.mmproj_gpu else "--no-mmproj-offload"]
         if config.basic.ngl_enabled:
             cmd += ["-ngl", str(config.basic.ngl)]
         cmd += ["--host", config.server.host, "--port", str(config.server.port)]

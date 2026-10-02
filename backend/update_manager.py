@@ -29,17 +29,20 @@ class UpdateManager:
             return {"has_update": False, "error": "Not a git repository"}
 
         try:
-            # Get current commit
-            r1 = subprocess.run(
+            # Get current commit. git runs off the event loop: a slow fetch
+            # must not freeze websocket pushes and unrelated requests.
+            r1 = await asyncio.to_thread(
+                subprocess.run,
                 ["git", "rev-parse", "--short", "HEAD"],
                 capture_output=True, text=True, cwd=str(d), timeout=30
             )
             current = r1.stdout.strip()
 
-            # Fetch (dry-run style — just fetch, don't merge)
-            r2 = subprocess.run(
-                ["git", "fetch"],
-                capture_output=True, text=True, cwd=str(d), timeout=60
+            # Fetch only the primary branches (the full ref set is huge).
+            r2 = await asyncio.to_thread(
+                subprocess.run,
+                ["git", "fetch", "origin", "main", "master"],
+                capture_output=True, text=True, cwd=str(d), timeout=300
             )
 
             # Get remote commit
@@ -69,16 +72,17 @@ class UpdateManager:
         try:
             if force:
                 # Stash local changes and reset to remote
-                subprocess.run(["git", "stash"], capture_output=True, text=True, cwd=str(d), timeout=30)
-                subprocess.run(["git", "fetch", "origin"], capture_output=True, text=True, cwd=str(d), timeout=60)
+                await asyncio.to_thread(subprocess.run, ["git", "stash"], capture_output=True, text=True, cwd=str(d), timeout=30)
+                await asyncio.to_thread(subprocess.run, ["git", "fetch", "origin"], capture_output=True, text=True, cwd=str(d), timeout=300)
                 # Detect default branch
-                r0 = subprocess.run(["git", "symbolic-ref", "refs/remotes/origin/HEAD"], capture_output=True, text=True, cwd=str(d), timeout=10)
+                r0 = await asyncio.to_thread(subprocess.run, ["git", "symbolic-ref", "refs/remotes/origin/HEAD"], capture_output=True, text=True, cwd=str(d), timeout=10)
                 branch = r0.stdout.strip().replace("refs/remotes/origin/", "") if r0.returncode == 0 else "master"
-                subprocess.run(["git", "reset", "--hard", f"origin/{branch}"], capture_output=True, text=True, cwd=str(d), timeout=30)
+                await asyncio.to_thread(subprocess.run, ["git", "reset", "--hard", f"origin/{branch}"], capture_output=True, text=True, cwd=str(d), timeout=60)
 
-            r = subprocess.run(
+            r = await asyncio.to_thread(
+                subprocess.run,
                 ["git", "pull"],
-                capture_output=True, text=True, cwd=str(d), timeout=120
+                capture_output=True, text=True, cwd=str(d), timeout=600
             )
             return {
                 "success": r.returncode == 0,
