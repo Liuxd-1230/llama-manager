@@ -28,9 +28,11 @@ type Profile = {
   kv_cache_quant_v: string
   flash_attn: boolean
   mtp_enabled: boolean
+  thinking?: boolean
+  chat_template_file?: string
   host: string
   port: number
-  kvmem?: { workspace: number; budget: number; gen_reserve: number; kv_dtype: string }
+  kvmem?: { workspace: number; budget: number; gen_reserve: number; kv_dtype: string; enable_thinking?: boolean }
 }
 
 function errorMessage(reason: unknown) { return reason instanceof Error ? reason.message : String(reason) }
@@ -164,14 +166,16 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
   const fmtK = (n: number) => (n >= 1024 ? `${Math.round(n / 1024)}K` : String(n))
   const sizeLabel = profile.model_size_mb >= 1024 ? `${(profile.model_size_mb / 1024).toFixed(1)} GB` : profile.model_size_mb ? `${profile.model_size_mb.toFixed(0)} MB` : ''
   const chips: { label: string; active?: boolean }[] = [
+    ...(isKvmem ? [{ label: 'KVMem', active: true }] : []),
     { label: `ctx ${isKvmem ? fmtK(profile.kvmem?.workspace ?? profile.ctx_size) : fmtK(profile.ctx_size)}`, active: true },
-    ...(isKvmem ? [{ label: `KVMem 预算 ${fmtK(profile.kvmem?.budget ?? 0)}` }] : []),
-    ...(isKvmem && profile.kvmem?.kv_dtype ? [{ label: `KV ${profile.kvmem.kv_dtype}` }] : []),
+    ...(isKvmem ? [{ label: `预算 ${fmtK(profile.kvmem?.budget ?? 0)}` }, { label: `预留 ${fmtK(profile.kvmem?.gen_reserve ?? 0)}` }, ...(profile.kvmem?.kv_dtype ? [{ label: `KV ${profile.kvmem.kv_dtype}` }] : [])] : []),
     profile.fit_enabled ? { label: 'GPU 自动适配' } : { label: `ngl ${profile.ngl}` },
     ...(profile.n_cpu_moe > 0 ? [{ label: `MoE→CPU ${profile.n_cpu_moe}` }] : []),
     ...(!isKvmem && (profile.kv_cache_quant_k || profile.kv_cache_quant_v) ? [{ label: `KV ${profile.kv_cache_quant_k || profile.kv_cache_quant_v}` }] : []),
-    ...(profile.flash_attn ? [{ label: 'FlashAttn' }] : []),
-    ...(profile.mtp_enabled ? [{ label: 'MTP' }] : []),
+    ...(profile.flash_attn ? [{ label: 'FlashAttn', active: true }] : []),
+    ...(profile.mtp_enabled ? [{ label: 'MTP', active: true }] : []),
+    ...(profile.thinking ? [{ label: '思考', active: true }] : []),
+    ...(profile.chat_template_file ? [{ label: '自定义模板', active: true }] : []),
     { label: `${profile.host}:${profile.port}` },
   ]
   const parts = [

@@ -1141,10 +1141,13 @@ def _profile_summary(name: str, profile: AppConfig) -> dict:
         model_size_mb = round(model_path.stat().st_size / (1024 * 1024), 1)
     basic = profile.basic
     kvmem = profile.kvmem
+    thinking = kvmem.enable_thinking if profile.engine == "kvmem" else basic.enable_thinking
     return {
         "name": name,
         "is_current": cfg.get_current_name() == name,
         "engine": profile.engine,
+        "thinking": thinking,
+        "chat_template_file": profile.chat_template_file,
         "model_path": profile.model_path,
         "model_name": model_path.name if model_path else "",
         "model_size_mb": model_size_mb,
@@ -1156,6 +1159,7 @@ def _profile_summary(name: str, profile: AppConfig) -> dict:
             "budget": kvmem.budget,
             "gen_reserve": kvmem.gen_reserve,
             "kv_dtype": kvmem.kv_dtype,
+            "enable_thinking": kvmem.enable_thinking,
         },
         "ngl": basic.ngl if basic.ngl_enabled else 0,
         "fit_enabled": basic.fit_enabled,
