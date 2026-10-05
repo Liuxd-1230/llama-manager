@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../../api'
 import { Badge, Button, ConfirmButton, Input, Panel } from '../../components/ui'
 import type { AppConfig } from '../../types'
+import { estimateVram } from '../../utils/vram'
 import page from '../pages.module.css'
 import styles from './models.module.css'
 
@@ -141,7 +142,7 @@ export function ModelsPage({ config, dirty, server, toast }: {
         : <Button tone="primary" onClick={() => setCreating(true)}><Plus size={15}/>新建档案</Button>}
     </div>
     {profilesQuery.isError && <Panel><p className={page.hint}>加载档案失败：{errorMessage(profilesQuery.error)}　<Button size="small" onClick={() => void profilesQuery.refetch()}>重试</Button></p></Panel>}
-    {profilesQuery.isPending && !profilesQuery.isError && <Panel><p className={page.hint}>正在加载档案…</p></Panel>}
+    {profilesQuery.isPending && !profilesQuery.isError && <div className={styles.grid}>{[0, 1, 2].map(i => <div key={i} className={styles.skeletonCard}><span/><span/><span/></div>)}</div>}
     {profilesQuery.isSuccess && profiles.length === 0 && <Panel><p className={page.hint}><PackageOpen size={14} style={{ verticalAlign: -2 }}/> 还没有档案。在「配置」页填写模型与参数后保存，或点击右上角「新建档案」。</p></Panel>}
     {profilesQuery.isSuccess && profiles.length > 0 && <div className={styles.grid}>
       {profiles.map(profile => <ProfileCard key={profile.name} profile={profile} busy={busy === profile.name} stopping={busy === '__stop__'} serverRunning={serverRunning} dirty={dirty} onLaunch={() => void launch(profile)} onStop={() => void stop()} onEdit={() => void edit(profile)} onSetCurrent={() => void setCurrent(profile)} onDuplicate={() => void duplicate(profile)} onRemove={() => void remove(profile)} />)}
@@ -167,6 +168,13 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
   const isNinfer = profile.engine === 'ninfer'
   const fmtK = (n: number) => (n >= 1024 ? `${Math.round(n / 1024)}K` : String(n))
   const sizeLabel = profile.model_size_mb >= 1024 ? `${(profile.model_size_mb / 1024).toFixed(1)} GB` : profile.model_size_mb ? `${profile.model_size_mb.toFixed(0)} MB` : ''
+  const vram = estimateVram({
+    engine: profile.engine || 'llama.cpp', modelSizeMb: profile.model_size_mb,
+    ctxSize: profile.ctx_size, kvCacheQuant: profile.kv_cache_quant_k || profile.kv_cache_quant_v || 'q8_0',
+    flashAttn: profile.flash_attn,
+    kvmem: { budget: profile.kvmem?.budget ?? 0, gen_reserve: profile.kvmem?.gen_reserve ?? 0, kv_dtype: profile.kvmem?.kv_dtype ?? 'q8_0' },
+    ninfer: { kv_capacity: profile.ninfer?.kv_capacity ?? 0, prefill_chunk: 256, cuda_graph: false },
+  })
   const chips: { label: string; active?: boolean }[] = [
     ...(isKvmem ? [{ label: 'KVMem', active: true }] : []),
     ...(isNinfer ? [{ label: 'NInfer', active: true }] : []),
@@ -187,6 +195,7 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
     ...(profile.thinking ? [{ label: '思考', active: true }] : []),
     ...(profile.chat_template_file ? [{ label: '自定义模板', active: true }] : []),
     { label: `${profile.host}:${profile.port}` },
+    { label: `显存 ≈${vram.totalGb.toFixed(1)}G${vram.over ? ' ⚠' : ''}` },
   ]
   const parts = [
     meta.name && meta.architecture ? `${meta.name} · ${meta.architecture}` : meta.architecture || '',

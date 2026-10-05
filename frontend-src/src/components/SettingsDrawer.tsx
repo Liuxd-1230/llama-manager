@@ -2,7 +2,7 @@ import { KeyRound, Moon, Plus, RefreshCw, Save, Search, Settings, Sun, Trash2, X
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useState } from 'react'
 import { api, uid } from '../api'
-import type { Provider, SearchSettings, Theme } from '../types'
+import type { Accent, Provider, SearchSettings, Theme } from '../types'
 import { Button, Field, Input, Select, Switch } from './ui'
 import styles from './SettingsDrawer.module.css'
 
@@ -15,7 +15,7 @@ const defaults: Record<string, Partial<Provider>> = {
   openai_compatible: { name: '兼容 API', base_url: '', default_model: '' },
 }
 
-export function SettingsDrawer({ open, onClose, theme, setTheme, onProvidersChanged, toast }: { open: boolean; onClose: () => void; theme: Theme; setTheme: (theme: Theme) => void; onProvidersChanged: () => void; toast: (text: string) => void }) {
+export function SettingsDrawer({ open, onClose, theme, setTheme, accent, setAccent, onProvidersChanged, toast }: { open: boolean; onClose: () => void; theme: Theme; setTheme: (theme: Theme) => void; accent: Accent; setAccent: (accent: Accent) => void; onProvidersChanged: () => void; toast: (text: string) => void }) {
   const [tab, setTab] = useState<Tab>('providers')
   const [providers, setProviders] = useState<Provider[]>([])
   const [selectedId, setSelectedId] = useState('deepseek')
@@ -50,7 +50,21 @@ export function SettingsDrawer({ open, onClose, theme, setTheme, onProvidersChan
           </div>}
         </div>}
         {tab === 'search' && search && <div className={styles.searchChoice}><p>选择模型调用 <code>web_search</code> 时使用的搜索 API。失败会直接返回，不会自动切换厂商。</p>{search.providers.map(provider => <label key={provider.id} className={styles.searchCard} data-active={search.provider === provider.id}><input type="radio" checked={search.provider === provider.id} onChange={() => void updateSearch(provider.id)}/><Search size={18}/><div><strong>{provider.name}</strong><span>{provider.configured ? `已配置 · ${provider.env_var}` : `未配置 · 需要 ${provider.env_var}`}</span></div></label>)}</div>}
-        {tab === 'appearance' && <div><p>仅保留浅色和深色两套液态玻璃主题。</p><div className={styles.themeGrid}><button className={styles.themeCard} data-theme-option="light" data-active={theme === 'light'} onClick={() => setTheme('light')}><Sun size={20}/><strong>浅色</strong></button><button className={styles.themeCard} data-theme-option="dark" data-active={theme === 'dark'} onClick={() => setTheme('dark')}><Moon size={20}/><strong>深色</strong></button></div></div>}
+        {tab === 'appearance' && <div>
+          <p>液态玻璃主题与强调色。强调色影响按钮、选中态与高亮。</p>
+          <div className={styles.themeGrid}><button className={styles.themeCard} data-theme-option="light" data-active={theme === 'light'} onClick={() => setTheme('light')}><Sun size={20}/><strong>浅色</strong></button><button className={styles.themeCard} data-theme-option="dark" data-active={theme === 'dark'} onClick={() => setTheme('dark')}><Moon size={20}/><strong>深色</strong></button></div>
+          <p style={{ marginTop: 14, marginBottom: 8, color: 'var(--text-3)', fontSize: 12 }}>强调色</p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {([['coral', '#ee6266', '珊瑚'], ['violet', '#8a5cf6', '紫罗兰'], ['ocean', '#3578e5', '海洋'], ['amber', '#e08a3c', '琥珀']] as const).map(([value, color, label]) => (
+              <button key={value} onClick={() => setAccent(value)} title={label}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10,
+                  border: `1px solid ${accent === value ? 'var(--accent)' : 'var(--line)'}`, background: accent === value ? 'var(--accent-soft)' : 'transparent', cursor: 'pointer', color: 'var(--text-2)', fontSize: 11 }}>
+                <span style={{ width: 22, height: 22, borderRadius: '50%', background: color, boxShadow: accent === value ? `0 0 0 3px ${color}44` : 'none' }}/>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>}
       </div>
     </motion.aside>
   </motion.div>}</AnimatePresence>

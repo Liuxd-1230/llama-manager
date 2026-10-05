@@ -1,4 +1,5 @@
 export type Theme = 'light' | 'dark'
+export type Accent = 'coral' | 'violet' | 'ocean' | 'amber'
 export type PageId = 'models' | 'config' | 'run' | 'evaluation' | 'maintenance' | 'chat'
 
 export interface AppConfig {

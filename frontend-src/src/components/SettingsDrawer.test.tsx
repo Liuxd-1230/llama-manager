@@ -12,7 +12,7 @@ describe('SettingsDrawer', () => {
       return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }))
 
-    render(<SettingsDrawer open onClose={vi.fn()} theme="light" setTheme={vi.fn()} onProvidersChanged={vi.fn()} toast={vi.fn()} />)
+    render(<SettingsDrawer open onClose={vi.fn()} theme="light" setTheme={vi.fn()} accent="coral" setAccent={vi.fn()} onProvidersChanged={vi.fn()} toast={vi.fn()} />)
     await screen.findByText(/请在 .*\.env 中设置 DEEPSEEK_API_KEY/)
     expect(document.querySelector('input[type="password"]')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Web Search' }))

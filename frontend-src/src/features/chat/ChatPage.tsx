@@ -1,4 +1,4 @@
-import { AlertTriangle, BrainCircuit, ChevronLeft, ChevronRight, Copy, FileText, Globe2, Paperclip, Radio, RefreshCw, Search, Send, Square, Trash2, Wrench, X } from 'lucide-react'
+import { AlertTriangle, BrainCircuit, ChevronLeft, ChevronRight, Copy, Download, FileText, Globe2, Paperclip, Radio, RefreshCw, Search, Send, Square, Trash2, Wrench, X } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { api, ApiError, uid } from '../../api'
@@ -177,6 +177,26 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false }
     dispatch({ type: 'add_turn', turn }); setInput(''); setAttachments([])
   }
   const stop = () => controller.current?.abort()
+  const exportConversation = () => {
+    if (!state.turns.length) return toast('当前对话还没有内容')
+    const lines = [`# 对话记录 · ${new Date().toLocaleString('zh-CN')}`, '']
+    for (const turn of state.turns) {
+      lines.push('## 你', '', turn.user.display || turn.user.content, '')
+      const attNames = (turn.attachments || []).map(item => item.name).filter(Boolean)
+      if (attNames.length) lines.push(`> 附件: ${attNames.join('、')}`, '')
+      const candidate = turn.candidates.find(item => item.id === turn.activeCandidateId) || turn.candidates[0]
+      if (candidate) {
+        lines.push('## 助手', '')
+        if (candidate.reasoning) lines.push('<details><summary>思考过程</summary>', '', candidate.reasoning, '</details>', '')
+        lines.push(candidate.content, '')
+      }
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `对话-${new Date().toISOString().slice(0, 10)}.md`
+    link.click(); URL.revokeObjectURL(link.href)
+  }
   const clear = async () => { const deleting = conversationId.current; discardedConversations.current.add(deleting); controller.current?.abort(); await Promise.all([api(`/api/chat/conversations/${encodeURIComponent(deleting)}`, { method: 'DELETE' }).catch(() => {}), api(`/api/conversations/${encodeURIComponent(deleting)}`, { method: 'DELETE' }).catch(() => {})]); conversationId.current = uid('conversation'); dispatch({ type: 'clear' }); setAttachments([]); void queryClient.invalidateQueries({ queryKey: ['conversations'] }) }
   const newConversation = () => { controller.current?.abort(); conversationId.current = uid('conversation'); dispatch({ type: 'clear' }); setAttachments([]) }
   const loadConversation = async (id: string) => {
@@ -234,6 +254,7 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false }
         <Select value={providerId} onChange={event => setProviderId(event.target.value)}>{providers.map(item => <option key={item.id} value={item.id}>{item.name}{item.api_key_set === false ? ' · 未配置' : ''}</option>)}</Select>
         <Select value={model} onChange={event => setModel(event.target.value)}>{(models.length ? models : [model || 'default']).map(item => <option key={item}>{item}</option>)}</Select>
         <Select value={effort} disabled={!canThink} onChange={event => setEffort(event.target.value)}>{effortOptions.map(value => <option key={value} value={value}>{value === 'none' ? 'Off' : value[0].toUpperCase() + value.slice(1)}</option>)}</Select>
+        <Button iconOnly title="导出当前对话为 Markdown" disabled={!state.turns.length} onClick={exportConversation}><Download size={16}/></Button>
       </div>
       <div className={styles.toolGroup}>
         <Switch checked={thinking} disabled={!canThink} onChange={setThinking} label={<><BrainCircuit size={14}/>思考</>}/>

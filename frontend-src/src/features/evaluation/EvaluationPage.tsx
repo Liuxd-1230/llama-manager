@@ -33,6 +33,7 @@ export function EvaluationPage({ toast }: { toast: (text: string) => void }) {
   const experiments = useQuery({ queryKey: ['experiments'], queryFn: () => api<{ experiments: Experiment[]; pareto: Experiment[] }>('/api/experiments'), refetchInterval: 4000 })
   const providers = useQuery({ queryKey: ['providers'], queryFn: () => api<{ providers: Provider[] }>('/api/chat/providers') })
   const [openExperiment, setOpenExperiment] = useState('')
+  const [compareIds, setCompareIds] = useState<string[]>([])
   const expResults = useQuery({
     queryKey: ['exp-results', openExperiment],
     queryFn: () => api<ExperimentResults>(`/api/experiments/${openExperiment}`),
@@ -63,7 +64,9 @@ export function EvaluationPage({ toast }: { toast: (text: string) => void }) {
       </Panel>
       <Panel title="实验与 Pareto">
         <div className={styles.pareto}>{(experiments.data?.pareto || []).map(item => <div key={item.id}><strong>{item.model}</strong><span>质量 {format(item.metrics.quality)} · 延迟 {format(item.metrics.avg_latency_ms)}ms · 吞吐 {format(item.metrics.throughput_chars_s)}</span></div>)}</div>
-        <table className={page.table}><thead><tr><th>实验</th><th>模型</th><th>状态</th><th>质量</th><th>延迟</th></tr></thead><tbody>{(experiments.data?.experiments || []).map(item => <tr key={item.id} style={{ cursor: 'pointer' }} title="点击查看逐用例结果" onClick={() => setOpenExperiment(current => current === item.id ? '' : item.id)}><td>{item.name}{openExperiment === item.id ? ' ▾' : ' ▸'}</td><td>{item.model}</td><td>{item.status}</td><td>{format(item.metrics.quality)}</td><td>{item.metrics.avg_latency_ms == null ? '—' : `${format(item.metrics.avg_latency_ms)}ms`}</td></tr>)}</tbody></table>
+        {compareIds.length >= 2 && <ComparisonPanel experiments={(experiments.data?.experiments || []).filter(item => compareIds.includes(item.id))}/>}
+        <p className={page.hint} style={{ margin: '6px 0' }}>勾选 2 个以上实验进行对比；点击行查看逐用例结果。</p>
+        <table className={page.table}><thead><tr><th>对比</th><th>实验</th><th>模型</th><th>状态</th><th>质量</th><th>延迟</th></tr></thead><tbody>{(experiments.data?.experiments || []).map(item => <tr key={item.id} style={{ cursor: 'pointer' }} title="点击查看逐用例结果" onClick={() => setOpenExperiment(current => current === item.id ? '' : item.id)}><td onClick={event => event.stopPropagation()}><input type="checkbox" checked={compareIds.includes(item.id)} onChange={event => setCompareIds(current => event.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))}/></td><td>{item.name}{openExperiment === item.id ? ' ▾' : ' ▸'}</td><td>{item.model}</td><td>{item.status}</td><td>{format(item.metrics.quality)}</td><td>{item.metrics.avg_latency_ms == null ? '—' : `${format(item.metrics.avg_latency_ms)}ms`}</td></tr>)}</tbody></table>
         {openExperiment && <div className={styles.drill}>
           <p className={page.hint} style={{ margin: '0 0 6px' }}>逐用例结果（点行收起）</p>
           {expResults.isFetching && <p className={page.hint}>加载中…</p>}
@@ -80,3 +83,33 @@ export function EvaluationPage({ toast }: { toast: (text: string) => void }) {
 
 function evaluatorBody(type: string, expected: string) { if (type === 'keywords') return { type, keywords: expected.split(/[,，\n]/).filter(Boolean), mode: 'all' }; if (type === 'regex') return { type, pattern: expected }; if (type === 'json_schema') { try { return { type, schema: JSON.parse(expected || '{}') } } catch { return { type, schema: {} } } } if (type === 'command') return { type, command: expected }; return { type } }
 function format(value?: number) { return typeof value === 'number' ? Math.round(value * 100) / 100 : '—' }
+
+const CMP_COLORS = ['#3578e5', '#168c5b', '#a66f00', '#8a5cf6', '#d9474f']
+
+function ComparisonPanel({ experiments }: { experiments: Experiment[] }) {
+  const metrics: Array<{ key: 'quality' | 'avg_latency_ms' | 'throughput_chars_s'; label: string; unit: string; best: 'high' | 'low' }> = [
+    { key: 'quality', label: '质量', unit: '', best: 'high' },
+    { key: 'avg_latency_ms', label: '平均延迟', unit: 'ms', best: 'low' },
+    { key: 'throughput_chars_s', label: '吞吐', unit: ' 字/s', best: 'high' },
+  ]
+  const values = (item: Experiment, key: string) => Number(item.metrics[key] ?? 0)
+  return <div className={styles.compare}>
+    <p className={page.hint} style={{ margin: '0 0 4px' }}>对比 {experiments.length} 个实验（同数据集才有意义）</p>
+    {metrics.map(metric => {
+      const max = Math.max(...experiments.map(item => values(item, metric.key)), 1e-9)
+      const bestId = metric.best === 'high'
+        ? experiments.reduce((a, b) => (values(b, metric.key) >= values(a, metric.key) ? b : a)).id
+        : experiments.reduce((a, b) => (values(b, metric.key) <= values(a, metric.key) ? b : a)).id
+      return <div key={metric.key} className={styles.cmpGroup}>
+        <strong>{metric.label}</strong>
+        {experiments.map(item => <div key={item.id} className={styles.cmpRow}>
+          <span className={styles.cmpName} title={item.name}>{item.name}</span>
+          <span className={styles.cmpTrack}>
+            <span className={styles.cmpBar} style={{ width: `${Math.max(2, (values(item, metric.key) / max) * 100)}%`, background: CMP_COLORS[experiments.indexOf(item) % CMP_COLORS.length] }}/>
+          </span>
+          <span className={styles.cmpValue}>{format(values(item, metric.key))}{metric.unit}{item.id === bestId && <em>最优</em>}</span>
+        </div>)}
+      </div>
+    })}
+  </div>
+}

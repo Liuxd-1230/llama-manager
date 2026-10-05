@@ -77,3 +77,11 @@
   --flow-3: rgba(40, 174, 137, .11);
   --flow-4: rgba(143, 90, 219, .1);
 }
+
+/* Accent color options (SettingsDrawer → 外观); default = coral, no override */
+:root[data-accent='violet'] { --accent: #8a5cf6; --accent-hover: #7b4be0; --accent-soft: rgba(138, 92, 246, .13); }
+:root[data-accent='ocean'] { --accent: #3578e5; --accent-hover: #2b66c4; --accent-soft: rgba(53, 120, 229, .13); }
+:root[data-accent='amber'] { --accent: #e08a3c; --accent-hover: #c97a2e; --accent-soft: rgba(224, 138, 60, .14); }
+:root[data-theme='dark'][data-accent='violet'] { --accent: #a98bff; --accent-hover: #b9a0ff; --accent-soft: rgba(169, 139, 255, .14); }
+:root[data-theme='dark'][data-accent='ocean'] { --accent: #73a9ff; --accent-hover: #8bbaff; --accent-soft: rgba(115, 169, 255, .13); }
+:root[data-theme='dark'][data-accent='amber'] { --accent: #f0a35c; --accent-hover: #f4b476; --accent-soft: rgba(240, 163, 92, .14); }

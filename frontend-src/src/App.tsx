@@ -7,7 +7,7 @@ import { api } from './api'
 import { SettingsDrawer } from './components/SettingsDrawer'
 import { TaskCenter } from './components/TaskCenter'
 import { Badge, Button, uiStyles } from './components/ui'
-import type { AppConfig, Theme } from './types'
+import type { Accent, AppConfig, Theme } from './types'
 import { defaultConfig } from './types'
 import styles from './App.module.css'
 
@@ -35,6 +35,7 @@ export default function App() {
 
 function Shell() {
   const [theme, setThemeState] = useState<Theme>(resolveInitialTheme)
+  const [accent, setAccentState] = useState<Accent>(resolveInitialAccent)
   const [config, setConfig] = useState<AppConfig>(defaultConfig)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [tasksOpen, setTasksOpen] = useState(false)
@@ -49,7 +50,9 @@ function Shell() {
   const location = useLocation()
   const toast = useCallback((text: string) => { setToastText(text); window.setTimeout(() => setToastText(current => current === text ? '' : current), 2600) }, [])
   const setTheme = (next: Theme) => { setThemeState(next); localStorage.setItem('theme', next) }
+  const setAccent = (next: Accent) => { setAccentState(next); localStorage.setItem('accent', next) }
   useEffect(() => { document.documentElement.dataset.theme = theme }, [theme])
+  useEffect(() => { document.documentElement.dataset.accent = accent }, [accent])
   const serverQuery = useQuery({ queryKey: ['server-status'], queryFn: () => api<{ state: string; pid?: number; profile?: string }>('/api/server/status'), refetchInterval: 4000 })
   const server = serverQuery.data ?? { state: 'stopped' }
   const configQuery = useQuery({ queryKey: ['config'], queryFn: () => api<AppConfig>('/api/config') })
@@ -81,7 +84,7 @@ function Shell() {
     <div className={styles.layout}>
       <header className={`${styles.topbar} ${scrolled ? styles.topbarScrolled : ''}`}>
         <div className={styles.brand}><span className={styles.brandMark}><Zap size={18}/></span><div><div className={styles.brandText}>llama.cpp Manager</div><div className={styles.brandSub}>本地推理控制台</div></div></div>
-        <div className={styles.topMeta}><span className={styles.serverAddress}>{config.server.host}:{config.server.port}</span>{dirty && <button type="button" className={styles.dirtyButton} title="有未保存的配置修改，点击前往配置页" onClick={() => navigate('/config')}><Badge tone="warn">未保存</Badge></button>}<Badge tone={server.state === 'running' ? 'good' : 'neutral'}><Gauge size={12}/>{server.state === 'running' ? `运行中 · ${server.pid || ''}` : '已停止'}</Badge><Button iconOnly title="任务中心" onClick={() => setTasksOpen(true)}><ListTodo size={16}/></Button><Button iconOnly title="切换主题" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>{theme === 'light' ? <Moon size={16}/> : <Sun size={16}/>}</Button></div>
+        <div className={styles.topMeta}><span className={styles.serverAddress}>{ENGINE_LABELS[config.engine] || config.engine} · {config.server.host}:{config.server.port}</span>{dirty && <button type="button" className={styles.dirtyButton} title="有未保存的配置修改，点击前往配置页" onClick={() => navigate('/config')}><Badge tone="warn">未保存</Badge></button>}<Badge tone={server.state === 'running' ? 'good' : 'neutral'}><Gauge size={12}/>{server.state === 'running' ? `运行中 · ${server.pid || ''}` : '已停止'}</Badge><Button iconOnly title="任务中心" onClick={() => setTasksOpen(true)}><ListTodo size={16}/></Button><Button iconOnly title="切换主题" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>{theme === 'light' ? <Moon size={16}/> : <Sun size={16}/>}</Button></div>
       </header>
       <aside className={styles.sidebar}><nav className={styles.nav}>{nav.map(item => <NavLink key={item.id} to={`/${item.id}`} className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`}><item.icon size={16}/><span>{item.label}</span></NavLink>)}</nav><div className={styles.sidebarBottom}><Button className={styles.settingsButton} onClick={() => setSettingsOpen(true)}><Settings size={16}/>设置</Button></div></aside>
       <main className={styles.main} ref={main} onScroll={event => setScrolled(event.currentTarget.scrollTop > 16)}>
@@ -106,7 +109,7 @@ function Shell() {
         </div>
       </main>
     </div>
-    <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} setTheme={setTheme} onProvidersChanged={() => setProviderRefresh(value => value + 1)} toast={toast}/>
+    <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} onProvidersChanged={() => setProviderRefresh(value => value + 1)} toast={toast}/>
     {tasksOpen && <TaskCenter open onClose={() => setTasksOpen(false)}/>}
     {toastText && <motion.div className={uiStyles.toast} initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>{toastText}</motion.div>}
   </div>
@@ -116,6 +119,13 @@ export function resolveInitialTheme(): Theme {
   const saved = localStorage.getItem('theme') as Theme | null
   return saved === 'dark' || saved === 'light' ? saved : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
 }
+
+export function resolveInitialAccent(): Accent {
+  const saved = localStorage.getItem('accent') as Accent | null
+  return saved === 'violet' || saved === 'ocean' || saved === 'amber' ? saved : 'coral'
+}
+
+const ENGINE_LABELS: Record<string, string> = { 'llama.cpp': 'llama.cpp', kvmem: 'KVMem', ninfer: 'NInfer' }
 
 function Page({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return <motion.section className={styles.page} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .18 }}><header className={styles.pageHeader}><div><h1>{title}</h1><p>{description}</p></div></header>{children}</motion.section>

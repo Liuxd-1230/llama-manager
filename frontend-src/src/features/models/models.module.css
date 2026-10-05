@@ -76,3 +76,30 @@
   gap: 8px;
   align-items: center;
 }
+
+.skeletonCard {
+  min-height: 150px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--glass-soft);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeletonCard span {
+  height: 13px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--line) 25%, var(--line-strong) 50%, var(--line) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s infinite;
+}
+
+.skeletonCard span:nth-child(2) { width: 70%; }
+.skeletonCard span:nth-child(3) { width: 45%; }
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
