@@ -48,7 +48,7 @@ export interface AppConfig {
     p_min: number
     p_split: number
   }
-  engine: 'llama.cpp' | 'kvmem'
+  engine: 'llama.cpp' | 'kvmem' | 'ninfer'
   kvmem: {
     workspace: number
     budget: number
@@ -61,6 +61,24 @@ export interface AppConfig {
     mtp_state: string
     enable_thinking: boolean
     reasoning_budget: number
+  }
+  ninfer: {
+    max_context: number
+    kv_capacity: number
+    host_kv_mib: number
+    kv_dtype: string
+    prefill_chunk: number
+    spec: string
+    draft_tokens: number
+    adaptive_mtp: boolean
+    max_concurrency: number
+    default_max_tokens: number
+    cuda_graph: boolean
+    kv_window: number
+    kv_retrieve: number
+    ptq1_fast: boolean
+    reasoning_effort: string
+    model_id: string
   }
   system_prompt: string
   extra_params: string
@@ -144,6 +162,13 @@ export const defaultConfig: AppConfig = {
   chat_template_file: '',
   mmproj_gpu: false,
   kvmem: { workspace: 131072, budget: 24576, gen_reserve: 10240, block_tokens: 128, batch: 512, ubatch: 128, kv_dtype: 'q8_0', query_policy: 'user', mtp_state: 'snapshots', enable_thinking: false, reasoning_budget: 4096 },
+  ninfer: {
+    max_context: 262144, kv_capacity: 4032, host_kv_mib: 16384, kv_dtype: 'k8v4',
+    prefill_chunk: 256, spec: 'mtp', draft_tokens: 4, adaptive_mtp: false,
+    max_concurrency: 1, default_max_tokens: 32768, cuda_graph: false,
+    kv_window: 16384, kv_retrieve: 8192, ptq1_fast: true,
+    reasoning_effort: 'medium', model_id: '',
+  },
   system_prompt: '', extra_params: '',
   server: { host: '127.0.0.1', port: 8080, mode: 'local' },
   compile: { command: 'cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release -j12' },

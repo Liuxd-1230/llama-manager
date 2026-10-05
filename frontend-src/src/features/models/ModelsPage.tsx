@@ -33,6 +33,7 @@ type Profile = {
   host: string
   port: number
   kvmem?: { workspace: number; budget: number; gen_reserve: number; kv_dtype: string; enable_thinking?: boolean }
+  ninfer?: { max_context: number; kv_capacity: number; host_kv_mib: number; kv_dtype: string; spec: string; draft_tokens: number; kv_window: number }
 }
 
 function errorMessage(reason: unknown) { return reason instanceof Error ? reason.message : String(reason) }
@@ -163,13 +164,22 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
 }) {
   const meta = profile.model_meta || {}
   const isKvmem = profile.engine === 'kvmem'
+  const isNinfer = profile.engine === 'ninfer'
   const fmtK = (n: number) => (n >= 1024 ? `${Math.round(n / 1024)}K` : String(n))
   const sizeLabel = profile.model_size_mb >= 1024 ? `${(profile.model_size_mb / 1024).toFixed(1)} GB` : profile.model_size_mb ? `${profile.model_size_mb.toFixed(0)} MB` : ''
   const chips: { label: string; active?: boolean }[] = [
     ...(isKvmem ? [{ label: 'KVMem', active: true }] : []),
-    { label: `ctx ${isKvmem ? fmtK(profile.kvmem?.workspace ?? profile.ctx_size) : fmtK(profile.ctx_size)}`, active: true },
+    ...(isNinfer ? [{ label: 'NInfer', active: true }] : []),
+    { label: `ctx ${isKvmem ? fmtK(profile.kvmem?.workspace ?? profile.ctx_size) : isNinfer ? fmtK(profile.ninfer?.max_context ?? 0) : fmtK(profile.ctx_size)}`, active: true },
     ...(isKvmem ? [{ label: `预算 ${fmtK(profile.kvmem?.budget ?? 0)}` }, { label: `预留 ${fmtK(profile.kvmem?.gen_reserve ?? 0)}` }, ...(profile.kvmem?.kv_dtype ? [{ label: `KV ${profile.kvmem.kv_dtype}` }] : [])] : []),
-    profile.fit_enabled ? { label: 'GPU 自动适配' } : { label: `ngl ${profile.ngl}` },
+    ...(isNinfer && profile.ninfer ? [
+      { label: `池 ${fmtK(profile.ninfer.kv_capacity)}` },
+      { label: `主机 ${Math.round(profile.ninfer.host_kv_mib / 1024)}G` },
+      ...(profile.ninfer.kv_dtype ? [{ label: `KV ${profile.ninfer.kv_dtype}` }] : []),
+      ...(profile.ninfer.kv_window > 0 ? [{ label: '检索', active: true }] : []),
+      ...(profile.ninfer.spec !== 'none' ? [{ label: `${profile.ninfer.spec}×${profile.ninfer.draft_tokens}`, active: true }] : []),
+    ] : []),
+    ...(!isNinfer ? [profile.fit_enabled ? { label: 'GPU 自动适配' } : { label: `ngl ${profile.ngl}` }] : []),
     ...(profile.n_cpu_moe > 0 ? [{ label: `MoE→CPU ${profile.n_cpu_moe}` }] : []),
     ...(!isKvmem && (profile.kv_cache_quant_k || profile.kv_cache_quant_v) ? [{ label: `KV ${profile.kv_cache_quant_k || profile.kv_cache_quant_v}` }] : []),
     ...(profile.flash_attn ? [{ label: 'FlashAttn', active: true }] : []),
@@ -204,7 +214,7 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
       </div>
       <div className={styles.actions}>
         {profile.is_running
-          ? <div className={page.row}><Button tone="danger" size="small" disabled={stopping} onClick={onStop}><Square size={14}/>{stopping ? '停止中…' : '停止'}</Button><Button size="small" onClick={() => window.open(`http://${profile.host === '0.0.0.0' ? location.hostname : profile.host}:${profile.port}/`, '_blank')}><ExternalLink size={14}/>WebUI</Button></div>
+          ? <div className={page.row}><Button tone="danger" size="small" disabled={stopping} onClick={onStop}><Square size={14}/>{stopping ? '停止中…' : '停止'}</Button><Button size="small" onClick={() => window.open(profile.engine === 'ninfer' ? `/static/engine-webui.html?base=${encodeURIComponent(`http://${profile.host === '0.0.0.0' ? location.hostname : profile.host}:${profile.port}`)}` : `http://${profile.host === '0.0.0.0' ? location.hostname : profile.host}:${profile.port}/`, '_blank')}><ExternalLink size={14}/>WebUI</Button></div>
           : <ConfirmButton tone="primary" size="small" confirm={needsSwitch || dirty} confirmLabel={dirty ? '未保存修改将丢弃，再点确认' : '会停止当前服务，再点确认'} disabled={busy || fileMissing} title={fileMissing ? '模型文件不存在' : undefined} onConfirm={onLaunch}>{busy ? <><Play size={14}/>启动中…</> : needsSwitch ? <><Play size={14}/>切换到此档案</> : <><Play size={14}/>启动</>}</ConfirmButton>}
       </div>
     </Panel>

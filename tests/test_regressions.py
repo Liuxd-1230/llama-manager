@@ -28,7 +28,7 @@ from backend.main import (
     _strip_dsml_tool_blocks,
     app,
 )
-from backend.models import AppConfig, BasicSettings, KvmemSettings
+from backend.models import AppConfig, BasicSettings, KvmemSettings, NinferSettings, SamplingSettings
 from backend.process_manager import process_manager
 
 
@@ -337,6 +337,159 @@ class KvmemCommandTests(unittest.TestCase):
         config = AppConfig(engine="kvmem", llama_cpp_dir="C:\\definitely-not-here")
         with self.assertRaises(FileNotFoundError):
             process_manager.build_command(config)
+
+
+class NinferCommandTests(unittest.TestCase):
+    def _pack(self, tmp: str, exe_name: str = "ninfer-serve-89.exe", with_webui: bool = False) -> Path:
+        root = Path(tmp)
+        engine_dir = root / "engine"
+        engine_dir.mkdir()
+        (engine_dir / exe_name).write_text("", encoding="utf-8")
+        if with_webui:
+            (root / "webui").mkdir()
+        return root
+
+    def test_ninfer_engine_builds_ninfer_serve_command(self):
+        with TemporaryDirectory() as tmp:
+            root = self._pack(tmp)
+            config = AppConfig(
+                llama_cpp_dir=str(root), model_path="E:\\models\\bonsai.ninfer", engine="ninfer",
+                sampling=SamplingSettings(top_k=40),
+            )
+            command = process_manager.build_command(config)
+        self.assertIn("ninfer-serve-89.exe", command[0])
+        # The .ninfer model is a bare positional, not -m.
+        self.assertEqual(command[1], "E:\\models\\bonsai.ninfer")
+        self.assertNotIn("-m", command)
+        self.assertEqual(command[command.index("--max-context") + 1], "262144")
+        self.assertEqual(command[command.index("--kv-capacity") + 1], "4032")
+        self.assertEqual(command[command.index("--host-kv-mib") + 1], "16384")
+        self.assertEqual(command[command.index("--kv-dtype") + 1], "k8v4")
+        self.assertEqual(command[command.index("--prefill-chunk") + 1], "256")
+        self.assertIn("--no-cuda-graph", command)
+        self.assertEqual(command[command.index("--spec") + 1], "mtp")
+        self.assertEqual(command[command.index("--draft-tokens") + 1], "4")
+        # The engine only accepts top-k 0..20; the 40 default must clamp.
+        self.assertEqual(command[command.index("--top-k") + 1], "20")
+        # llama.cpp/kvmem-only flags must not leak into the ninfer command line.
+        self.assertNotIn("-c", command)
+        self.assertNotIn("-ngl", command)
+        self.assertNotIn("--kvmem-budget", command)
+        self.assertNotIn("--flash-attn", command)
+
+    def test_ninfer_thinking_maps_to_reasoning_effort(self):
+        with TemporaryDirectory() as tmp:
+            root = self._pack(tmp)
+            config = AppConfig(llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer")
+            command = process_manager.build_command(config)
+            self.assertEqual(command[command.index("--default-reasoning-effort") + 1], "none")
+            config.basic.enable_thinking = True
+            command = process_manager.build_command(config)
+            self.assertEqual(command[command.index("--default-reasoning-effort") + 1], "medium")
+
+    def test_ninfer_spec_none_and_draft_clamp(self):
+        with TemporaryDirectory() as tmp:
+            root = self._pack(tmp)
+            config = AppConfig(llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer",
+                               ninfer=NinferSettings(spec="none"))
+            command = process_manager.build_command(config)
+            self.assertNotIn("--spec", command)
+            config.ninfer.spec = "dflash2"
+            config.ninfer.draft_tokens = 30
+            command = process_manager.build_command(config)
+            self.assertEqual(command[command.index("--spec") + 1], "dflash2")
+            self.assertEqual(command[command.index("--draft-tokens") + 1], "15")
+
+    def test_ninfer_env_configures_ring_and_webui(self):
+        with TemporaryDirectory() as tmp:
+            root = self._pack(tmp, with_webui=True)
+            config = AppConfig(llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer")
+            env = process_manager.build_env(config)
+            self.assertEqual(env["NINFER_KV_WINDOW"], "16384")
+            self.assertEqual(env["NINFER_KV_RETRIEVE"], "8192")
+            self.assertEqual(env["NINFER_KV_RING"], "1")
+            self.assertEqual(env["NINFER_HOST_PAGEABLE"], "1")
+            self.assertEqual(env["NINFER_KV_REUSE_HOSTBACKED"], "1")
+            self.assertEqual(env["NINFER_TERNARY_PTQ1_FAST"], "1")
+            self.assertEqual(env["NINFER_WEBUI_DIR"], str(root / "webui"))
+            # kv_window 0 = don't configure the ring at all.
+            config.ninfer.kv_window = 0
+            env = process_manager.build_env(config)
+            self.assertNotIn("NINFER_KV_WINDOW", env)
+
+    def test_ninfer_other_engines_inherit_environment(self):
+        config = AppConfig(model_path="E:\\m.gguf", engine="llama.cpp")
+        self.assertIsNone(process_manager.build_env(config))
+
+    def test_ninfer_binary_detection_prefers_89_and_skips_old_backups(self):
+        with TemporaryDirectory() as tmp:
+            root = self._pack(tmp)
+            (Path(tmp) / "engine" / "ninfer-serve-89.exe.old-20261002").write_text("", encoding="utf-8")
+            detected = cfg.detect_ninfer_binary(str(root))
+            self.assertTrue(detected.endswith("ninfer-serve-89.exe"))
+        with TemporaryDirectory() as tmp:
+            root = self._pack(tmp, exe_name="ninfer-serve-86.exe")
+            detected = cfg.detect_ninfer_binary(str(root))
+            self.assertTrue(detected.endswith("ninfer-serve-86.exe"))
+        self.assertEqual(cfg.detect_ninfer_binary("C:\\definitely-not-here"), "")
+
+    def test_ninfer_binary_missing_fails_cleanly(self):
+        config = AppConfig(engine="ninfer", llama_cpp_dir="C:\\definitely-not-here")
+        with self.assertRaises(FileNotFoundError):
+            process_manager.build_command(config)
+
+    def test_scan_models_includes_ninfer_files(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "a.gguf").write_bytes(b"x")
+            (root / "b.ninfer").write_bytes(b"x")
+            (root / "c.txt").write_bytes(b"x")
+            names = {m.name for m in cfg.scan_models(str(root))}
+            self.assertEqual(names, {"a.gguf", "b.ninfer"})
+
+    def test_ninfer_local_payload_uses_standard_fields(self):
+        config = AppConfig(model_path="E:\\m.ninfer", engine="ninfer")
+        payload = _local_chat_payload({"thinking_enabled": False}, config, [{"role": "user", "content": "hi"}])
+        self.assertNotIn("top_k", payload)
+        self.assertNotIn("chat_template_kwargs", payload)
+        self.assertEqual(payload["reasoning_effort"], "none")
+        # NInfer validates the model id: omit the field unless the caller
+        # picked one, because "default" would 404.
+        self.assertNotIn("model", payload)
+        payload = _local_chat_payload({"thinking_enabled": True, "model": "qwen3.8-27b"}, config, [])
+        self.assertEqual(payload["model"], "qwen3.8-27b")
+        self.assertEqual(payload["reasoning_effort"], "medium")
+        # The chat page's effort selector passes through when thinking is on.
+        payload = _local_chat_payload({"thinking_enabled": True, "reasoning_effort": "high"}, config, [])
+        self.assertEqual(payload["reasoning_effort"], "high")
+        payload = _local_chat_payload({"thinking_enabled": True, "reasoning_effort": "bogus"}, config, [])
+        self.assertEqual(payload["reasoning_effort"], "medium")
+        # llama.cpp keeps the extended fields.
+        native = _local_chat_payload({"thinking_enabled": True}, AppConfig(model_path="E:\\m.gguf"), [])
+        self.assertIn("top_k", native)
+        self.assertEqual(native["chat_template_kwargs"], {"enable_thinking": True})
+
+    def test_detect_server_endpoint_supports_ninfer(self):
+        with TemporaryDirectory() as tmp:
+            root = self._pack(tmp)
+            response = TestClient(app).get("/api/detect-server", params={"llama_cpp_dir": str(root), "engine": "ninfer"})
+            self.assertTrue(response.json()["found"])
+
+    def test_profile_summary_exposes_ninfer_block(self):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "CONFIG_DIR", Path(tmp)):
+            client = TestClient(app)
+            model_file = Path(tmp) / "m.ninfer"
+            model_file.write_bytes(b"x" * (2 * 1024 * 1024))
+            cfg.save_config(
+                AppConfig(llama_cpp_dir="C:\\pack", model_path=str(model_file), engine="ninfer"),
+                name="ninfer-bonsai",
+            )
+            profiles = client.get("/api/profiles").json()["profiles"]
+            summary = next(p for p in profiles if p["name"] == "ninfer-bonsai")
+            self.assertEqual(summary["engine"], "ninfer")
+            self.assertEqual(summary["ninfer"]["kv_capacity"], 4032)
+            self.assertEqual(summary["ninfer"]["spec"], "mtp")
+            self.assertEqual(summary["ninfer"]["kv_dtype"], "k8v4")
 
 
 class LocalPayloadThinkingTests(unittest.TestCase):

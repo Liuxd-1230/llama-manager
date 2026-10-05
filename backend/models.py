@@ -77,7 +77,32 @@ class KvmemSettings(BaseModel):
     reasoning_budget: int = 4096  # --reasoning-budget
 
 
-ENGINES = ("llama.cpp", "kvmem")
+class NinferSettings(BaseModel):
+    """NInfer engine (ninfer-serve-<arch>.exe) — .ninfer artifacts with the
+    KVMem-style ring retrieval and MTP/dflash speculation.
+
+    Defaults mirror the 8 GB launcher (start-ptq1-mtp-8gb.bat): device pool
+    4032 tokens (63 pages), chunk 256, CUDA Graphs off.
+    """
+    max_context: int = 262144  # logical context ceiling per request (--max-context)
+    kv_capacity: int = 4032  # device KV pool tokens (--kv-capacity, 64 = 1 page); 0 = auto
+    host_kv_mib: int = 16384  # pinned host KV pool (--host-kv-mib)
+    kv_dtype: str = "k8v4"  # --kv-dtype (delivery dtype; small-pool verdicts are k8v4-only)
+    prefill_chunk: int = 256  # tokens per prefill chunk, multiple of 128 (0 = engine default)
+    spec: str = "mtp"  # --spec: none | mtp | dflash | dflash2
+    draft_tokens: int = 4  # --draft-tokens 1..15 (dflash2 wants 12)
+    adaptive_mtp: bool = False  # --adaptive-mtp
+    max_concurrency: int = 1  # requests decoded together, 1..8
+    default_max_tokens: int = 32768  # output limit when a request sets none
+    cuda_graph: bool = False  # False emits --no-cuda-graph (needed on 8 GB)
+    kv_window: int = 16384  # ring window env NINFER_KV_WINDOW; 0 = don't configure the ring
+    kv_retrieve: int = 8192  # NINFER_KV_RETRIEVE
+    ptq1_fast: bool = True  # NINFER_TERNARY_PTQ1_FAST
+    reasoning_effort: str = "medium"  # --default-reasoning-effort when thinking is on
+    model_id: str = ""  # --model-id override; empty = artifact metadata name
+
+
+ENGINES = ("llama.cpp", "kvmem", "ninfer")
 
 
 class AppConfig(BaseModel):
@@ -86,11 +111,12 @@ class AppConfig(BaseModel):
     mmproj_path: str = ""
     chat_template_file: str = ""  # optional --chat-template-file for both engines
     mmproj_gpu: bool = False  # offload the vision projector to VRAM (default: keep in RAM)
-    engine: str = "llama.cpp"  # "llama.cpp" (llama-server) or "kvmem" (llama-kvmem-server)
+    engine: str = "llama.cpp"  # "llama.cpp" | "kvmem" | "ninfer"
     basic: BasicSettings = Field(default_factory=BasicSettings)
     sampling: SamplingSettings = Field(default_factory=SamplingSettings)
     mtp: MTPSettings = Field(default_factory=MTPSettings)
     kvmem: KvmemSettings = Field(default_factory=KvmemSettings)
+    ninfer: NinferSettings = Field(default_factory=NinferSettings)
     system_prompt: str = ""
     extra_params: str = ""
     server: ServerSettings = Field(default_factory=ServerSettings)

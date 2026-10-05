@@ -32,7 +32,15 @@ export function RunPage({ config, toast }: { config: AppConfig; toast: (text: st
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [fullscreen])
-  const serverUrl = useMemo(() => `http://${config.server.host === '0.0.0.0' ? location.hostname : config.server.host}:${config.server.port}`, [config.server])
+  const serverUrl = useMemo(() => `http://${config.server.host === '0.0.0.0' ? location.hostname : config.server.host}:${config.server.port}`, [config])
+  // The ninfer pack binary serves no WebUI on its port; the manager hosts a
+  // chat page that calls the engine API cross-origin (--cors is on).
+  const webuiUrl = useMemo(
+    () => config.engine === 'ninfer'
+      ? `/static/engine-webui.html?base=${encodeURIComponent(serverUrl)}`
+      : serverUrl,
+    [config.engine, serverUrl],
+  )
   const running = status.state === 'running'
   const start = async () => {
     await api('/api/config', { method: 'POST', body: JSON.stringify(config) })
@@ -54,13 +62,13 @@ export function RunPage({ config, toast }: { config: AppConfig; toast: (text: st
       {status.error && <span className={page.hint}>{status.error}</span>}
       <div className={page.row} style={{ marginLeft: 'auto' }}>
         <Button size="small" onClick={() => setFrameKey(value => value + 1)}><RefreshCw size={14}/>刷新</Button>
-        <Button size="small" onClick={() => window.open(serverUrl, '_blank')}><ExternalLink size={14}/>新窗口</Button>
+        <Button size="small" onClick={() => window.open(webuiUrl, '_blank')}><ExternalLink size={14}/>新窗口</Button>
         <Button size="small" onClick={() => setFullscreen(true)}><Maximize2 size={14}/>全屏</Button>
       </div>
     </div>
     <div className={`${styles.webuiBox} ${fullscreen ? styles.fullscreen : ''}`}>
-      {running && <iframe key={frameKey} src={serverUrl} title="llama-server WebUI" />}
-      {!running && <div className={styles.overlay}><div><p style={{ margin: 0 }}>服务未启动。</p><p className={page.hint}>在「模型」页或上方启动后，此处按当前引擎显示自带 WebUI（llama.cpp 或 KVMem）。</p></div></div>}
+      {running && <iframe key={frameKey} src={webuiUrl} title="引擎 WebUI" />}
+      {!running && <div className={styles.overlay}><div><p style={{ margin: 0 }}>服务未启动。</p><p className={page.hint}>在「模型」页或上方启动后，此处按当前引擎显示 WebUI（NInfer 由管理器托管聊天页）。</p></div></div>}
       {fullscreen && <Button className={styles.exitButton} iconOnly title="退出全屏 (Esc)" onClick={() => setFullscreen(false)}><Minimize2 size={16}/></Button>}
     </div>
     <details>

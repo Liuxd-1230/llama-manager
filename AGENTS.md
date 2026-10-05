@@ -26,9 +26,9 @@ There is no build step, no test suite, and no linter configured.
 ### Backend (Python / FastAPI)
 
 - **`backend/main.py`** — Single entry point. All REST routes and WebSocket endpoints live here. Serves the `frontend/` directory as static files. Mounts at `/`.
-- **`backend/models.py`** — Pydantic models: `AppConfig` (root config with nested `BasicSettings`, `SamplingSettings`, `MTPSettings`, `ServerSettings`), `CompileSettings`, `ModelInfo`, `DirEntry`, `ServerStatus`, `UpdateStatus`.
-- **`backend/config_manager.py`** — Model profile CRUD (JSON files stored at `~/llama-manager/config/`). Tracks the current profile name (`_current_name`) and reads GGUF header metadata (`read_gguf_metadata`) for profile cards. Scans for GGUF models, provides drive listing and directory browsing for the file picker.
-- **`backend/process_manager.py`** — Spawns `llama-server` via `asyncio.create_subprocess_exec`. Remembers which profile it launched (`profile_name` on `start()`, surfaced in `ServerStatus.profile`). Windows-specific process tree termination (`taskkill /F /T`). Exposes `subscribe()`/`unsubscribe()` for WebSocket log streaming via `asyncio.Queue`.
+- **`backend/models.py`** — Pydantic models: `AppConfig` (root config with nested `BasicSettings`, `SamplingSettings`, `MTPSettings`, `KvmemSettings`, `NinferSettings`, `ServerSettings`), `CompileSettings`, `ModelInfo`, `DirEntry`, `ServerStatus`, `UpdateStatus`. Three engines: `"llama.cpp"` (llama-server), `"kvmem"` (llama-kvmem-server), `"ninfer"` (ninfer-serve, .ninfer artifacts).
+- **`backend/config_manager.py`** — Model profile CRUD (JSON files stored at `~/llama-manager/config/`). Tracks the current profile name (`_current_name`) and reads GGUF header metadata (`read_gguf_metadata`) for profile cards. Scans for GGUF and .ninfer models, provides drive listing and directory browsing for the file picker.
+- **`backend/process_manager.py`** — Spawns the engine process via `asyncio.create_subprocess_exec` (engine-specific command builders; `build_env` injects the NINFER_* ring variables for ninfer). Remembers which profile it launched (`profile_name` on `start()`, surfaced in `ServerStatus.profile`). Windows-specific process tree termination (`taskkill /F /T`). Exposes `subscribe()`/`unsubscribe()` for WebSocket log streaming via `asyncio.Queue`.
 - **`backend/update_manager.py`** — `git pull` + `cmake` compile management for updating the llama.cpp installation.
 - **`backend/download_manager.py`** — Clones the llama.cpp repository.
 
@@ -68,4 +68,4 @@ known traps (backend restarts for version skew, orphan processes).
 - UI text and README are in Chinese; code identifiers and comments are in English.
 - Config names are sanitized to prevent path traversal (strips special characters).
 - Process management targets Windows (`taskkill`, drive letter enumeration). Not cross-platform.
-- The chat proxy at `/api/chat` forwards to llama-server's OpenAI-compatible `/v1/chat/completions` endpoint, supporting both streaming and non-streaming.
+- The chat proxy at `/api/chat` forwards to the local engine's OpenAI-compatible `/v1/chat/completions` endpoint, supporting both streaming and non-streaming. Per-engine payloads differ: llama.cpp/KVMem get top_k and `chat_template_kwargs`; NInfer gets only standard fields plus `reasoning_effort` (it rejects top_k>20 and 404s on unknown model ids).

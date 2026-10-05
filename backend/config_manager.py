@@ -107,12 +107,13 @@ def import_config(file_content: str) -> AppConfig:
 
 
 def scan_models(directory: str) -> List[ModelInfo]:
-    """Recursively scan a directory for .gguf model files."""
+    """Recursively scan a directory for .gguf and .ninfer model files."""
     models = []
     d = Path(directory)
     if not d.is_dir():
         return models
-    for f in sorted(d.rglob("*.gguf")):
+    files = sorted([*d.rglob("*.gguf"), *d.rglob("*.ninfer")], key=lambda f: str(f).lower())
+    for f in files:
         size_mb = f.stat().st_size / (1024 * 1024)
         models.append(ModelInfo(name=f.name, path=str(f), size_mb=round(size_mb, 1)))
     return models
@@ -290,5 +291,31 @@ def detect_kvmem_binary(llama_cpp_dir: str) -> str:
         if c.exists():
             return str(c)
     for f in d.rglob(exe):
+        return str(f)
+    return ""
+
+
+def detect_ninfer_binary(llama_cpp_dir: str) -> str:
+    """Find ninfer-serve-<arch>.exe in a NInfer pack dir.
+
+    Packs ship engine\\ninfer-serve-<arch>.exe (one binary per GPU arch);
+    prefer the sm_89 build, fall back to any arch that is present. The
+    glob cannot match the .old-<date> backups because they don't end in .exe.
+    """
+    d = Path(llama_cpp_dir)
+    if not d.is_dir():
+        return ""
+
+    import sys
+    suffix = ".exe" if sys.platform == "win32" else ""
+    for base in (d, d / "engine", d / "bin"):
+        exact = base / f"ninfer-serve-89{suffix}"
+        if exact.exists():
+            return str(exact)
+    for pattern in ("ninfer-serve-89*", "ninfer-serve-*"):
+        for base in (d, d / "engine", d / "bin"):
+            for f in sorted(base.glob(pattern + suffix)):
+                return str(f)
+    for f in sorted(d.rglob("ninfer-serve-*" + suffix)):
         return str(f)
     return ""

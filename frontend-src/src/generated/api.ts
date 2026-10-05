@@ -612,6 +612,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mirrors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Probe Mirrors
+         * @description Probe each candidate's git smart-HTTP handshake endpoint; rank by latency.
+         */
+        get: operations["probe_mirrors_api_mirrors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/update/check": {
         parameters: {
             query?: never;
@@ -959,6 +979,11 @@ export interface components {
              */
             chat_template_file: string;
             /**
+             * Mmproj Gpu
+             * @default false
+             */
+            mmproj_gpu: boolean;
+            /**
              * Engine
              * @default llama.cpp
              */
@@ -967,6 +992,7 @@ export interface components {
             sampling?: components["schemas"]["SamplingSettings"];
             mtp?: components["schemas"]["MTPSettings"];
             kvmem?: components["schemas"]["KvmemSettings"];
+            ninfer?: components["schemas"]["NinferSettings"];
             /**
              * System Prompt
              * @default
@@ -1121,7 +1147,7 @@ export interface components {
         CompileSettings: {
             /**
              * Command
-             * @default cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="89" && cmake --build build --config Release -j12
+             * @default cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="89" && cmake --build build --config Release --target llama-server -j12
              */
             command: string;
         };
@@ -1280,12 +1306,17 @@ export interface components {
             block_tokens: number;
             /**
              * Batch
-             * @default 128
+             * @default 512
              */
             batch: number;
             /**
+             * Ubatch
+             * @default 128
+             */
+            ubatch: number;
+            /**
              * Kv Dtype
-             * @default q8_0
+             * @default q4_0
              */
             kv_dtype: string;
             /**
@@ -1293,6 +1324,11 @@ export interface components {
              * @default user
              */
             query_policy: string;
+            /**
+             * Mtp State
+             * @default snapshots
+             */
+            mtp_state: string;
             /**
              * Enable Thinking
              * @default false
@@ -1336,6 +1372,96 @@ export interface components {
              * @default 0.1
              */
             p_split: number;
+        };
+        /**
+         * NinferSettings
+         * @description NInfer engine (ninfer-serve-<arch>.exe) — .ninfer artifacts with the
+         *     KVMem-style ring retrieval and MTP/dflash speculation.
+         *
+         *     Defaults mirror the 8 GB launcher (start-ptq1-mtp-8gb.bat): device pool
+         *     4032 tokens (63 pages), chunk 256, CUDA Graphs off.
+         */
+        NinferSettings: {
+            /**
+             * Max Context
+             * @default 262144
+             */
+            max_context: number;
+            /**
+             * Kv Capacity
+             * @default 4032
+             */
+            kv_capacity: number;
+            /**
+             * Host Kv Mib
+             * @default 16384
+             */
+            host_kv_mib: number;
+            /**
+             * Kv Dtype
+             * @default k8v4
+             */
+            kv_dtype: string;
+            /**
+             * Prefill Chunk
+             * @default 256
+             */
+            prefill_chunk: number;
+            /**
+             * Spec
+             * @default mtp
+             */
+            spec: string;
+            /**
+             * Draft Tokens
+             * @default 4
+             */
+            draft_tokens: number;
+            /**
+             * Adaptive Mtp
+             * @default false
+             */
+            adaptive_mtp: boolean;
+            /**
+             * Max Concurrency
+             * @default 1
+             */
+            max_concurrency: number;
+            /**
+             * Default Max Tokens
+             * @default 32768
+             */
+            default_max_tokens: number;
+            /**
+             * Cuda Graph
+             * @default false
+             */
+            cuda_graph: boolean;
+            /**
+             * Kv Window
+             * @default 16384
+             */
+            kv_window: number;
+            /**
+             * Kv Retrieve
+             * @default 8192
+             */
+            kv_retrieve: number;
+            /**
+             * Ptq1 Fast
+             * @default true
+             */
+            ptq1_fast: boolean;
+            /**
+             * Reasoning Effort
+             * @default medium
+             */
+            reasoning_effort: string;
+            /**
+             * Model Id
+             * @default
+             */
+            model_id: string;
         };
         /** SamplingSettings */
         SamplingSettings: {
@@ -2642,7 +2768,7 @@ export interface operations {
             };
         };
     };
-    update_check_api_update_check_get: {
+    probe_mirrors_api_mirrors_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2658,6 +2784,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    update_check_api_update_check_get: {
+        parameters: {
+            query?: {
+                mirror?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

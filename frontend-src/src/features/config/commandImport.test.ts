@@ -142,4 +142,82 @@ describe('applyLaunchCommand', () => {
     expect(llamacpp.unknown).toEqual(['-n 512'])
     expect(llamacpp.config.extra_params).toContain('-n 512')
   })
+
+  it('detects a ninfer command and fills the positional model plus flags', () => {
+    const text = [
+      '"E:\\infer-engine-sm89-20261002\\engine\\ninfer-serve-89.exe"',
+      '"E:\\infer-engine-sm89-20261002\\models\\bonsai2_27b_ternary_ptq1_native_mtp.ninfer"',
+      '--host 127.0.0.1 --port 8095 --model-id qwen3.8-27b',
+      '--max-context 262144 --kv-capacity 4032 --kv-dtype k8v4 --host-kv-mib 16384',
+      '--prefill-chunk 256 --spec mtp --draft-tokens 4',
+      '--default-max-tokens 32768 --default-reasoning-effort none --max-concurrency 1',
+      '--max-shared-prefixes 0',
+      '--presence-penalty 0 --temperature 0.7 --top-p 0.9 --top-k 20',
+      '--no-cuda-graph --cors',
+    ].join(' ')
+    const { config, applied, unknown } = applyLaunchCommand(defaultConfig, text)
+    expect(config.engine).toBe('ninfer')
+    expect(config.model_path).toBe('E:\\infer-engine-sm89-20261002\\models\\bonsai2_27b_ternary_ptq1_native_mtp.ninfer')
+    expect(config.ninfer.max_context).toBe(262144)
+    expect(config.ninfer.kv_capacity).toBe(4032)
+    expect(config.ninfer.host_kv_mib).toBe(16384)
+    expect(config.ninfer.kv_dtype).toBe('k8v4')
+    expect(config.ninfer.prefill_chunk).toBe(256)
+    expect(config.ninfer.spec).toBe('mtp')
+    expect(config.ninfer.draft_tokens).toBe(4)
+    expect(config.ninfer.max_concurrency).toBe(1)
+    expect(config.ninfer.default_max_tokens).toBe(32768)
+    expect(config.ninfer.cuda_graph).toBe(false)
+    expect(config.ninfer.model_id).toBe('qwen3.8-27b')
+    expect(config.server.port).toBe(8095)
+    expect(config.sampling.temperature).toBe(0.7)
+    expect(config.sampling.top_p).toBe(0.9)
+    expect(config.basic.enable_thinking).toBe(false)
+    // Unmapped-but-valid ninfer flags stay in extra_params so the built
+    // command keeps them verbatim.
+    expect(unknown).toEqual(['--max-shared-prefixes 0', '--cors'])
+    expect(applied).toBeGreaterThan(10)
+  })
+
+  it('parses a ninfer launcher bat with NINFER_* env lines and continuations', () => {
+    const bat = [
+      '@echo off',
+      'set "NINFER_KV_WINDOW=16384"',
+      'set "NINFER_KV_RETRIEVE=8192"',
+      'set "NINFER_TERNARY_PTQ1_FAST=1"',
+      'set "NINFER_WEBUI_DIR=%ROOT%webui"',
+      '"E:\\pack\\engine\\ninfer-serve-89.exe" "E:\\pack\\models\\m.ninfer" ^',
+      '  --host 127.0.0.1 --port 8095 ^',
+      '  --max-context 262144 --kv-capacity 4032 --spec mtp --draft-tokens 4 ^',
+      '  --no-cuda-graph --default-reasoning-effort none',
+    ].join('\r\n')
+    const { config, applied } = applyLaunchCommand(defaultConfig, bat)
+    expect(config.engine).toBe('ninfer')
+    expect(config.model_path).toBe('E:\\pack\\models\\m.ninfer')
+    expect(config.ninfer.kv_window).toBe(16384)
+    expect(config.ninfer.kv_retrieve).toBe(8192)
+    expect(config.ninfer.ptq1_fast).toBe(true)
+    expect(config.ninfer.spec).toBe('mtp')
+    expect(config.ninfer.cuda_graph).toBe(false)
+    expect(applied).toBeGreaterThan(8)
+  })
+
+  it('maps dflash draft windows and spec none for ninfer', () => {
+    const { config } = applyLaunchCommand(defaultConfig, 'ninfer-serve-89.exe m.ninfer --spec dflash2 --draft-tokens 12 --adaptive-mtp')
+    expect(config.engine).toBe('ninfer')
+    expect(config.ninfer.spec).toBe('dflash2')
+    expect(config.ninfer.draft_tokens).toBe(12)
+    expect(config.ninfer.adaptive_mtp).toBe(true)
+
+    const off = applyLaunchCommand(defaultConfig, 'ninfer-serve-89.exe m.ninfer --spec none')
+    expect(off.config.ninfer.spec).toBe('none')
+  })
+
+  it('routes kv-dtype to the ninfer block for ninfer commands and to kvmem otherwise', () => {
+    const ninfer = applyLaunchCommand(defaultConfig, 'ninfer-serve-89.exe m.ninfer --kv-dtype rk8v4')
+    expect(ninfer.config.ninfer.kv_dtype).toBe('rk8v4')
+    expect(ninfer.config.kvmem.kv_dtype).toBe('q8_0')
+    const kvm = applyLaunchCommand(defaultConfig, 'llama-kvmem-server -m m.gguf --kv-dtype q4_0')
+    expect(kvm.config.kvmem.kv_dtype).toBe('q4_0')
+  })
 })

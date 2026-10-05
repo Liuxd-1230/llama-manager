@@ -11,12 +11,12 @@ import styles from './chat.module.css'
 
 interface Attachment { name: string; content?: string; size: number; kind?: 'text' | 'image'; dataUrl?: string }
 
-export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string) => void; providerRefresh?: number }) {
+export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false }: { toast: (text: string) => void; providerRefresh?: number; defaultThinking?: boolean }) {
   const [state, dispatch] = useReducer(chatReducer, initialChatState)
   const [providers, setProviders] = useState<Provider[]>([])
   const [providerId, setProviderId] = useState('deepseek')
   const [model, setModel] = useState('')
-  const [thinking, setThinking] = useState(false)
+  const [thinking, setThinking] = useState(defaultThinking)
   const [effort, setEffort] = useState<'high' | 'max'>('high')
   const [webSearch, setWebSearch] = useState(false)
   const [stream, setStream] = useState(true)
@@ -39,6 +39,8 @@ export function ChatPage({ toast, providerRefresh = 0 }: { toast: (text: string)
     setSearchSettings(await api<SearchSettings>('/api/search/settings'))
   }
   useEffect(() => { void loadProviders() }, [providerRefresh])
+  // Follow the profile's 思考(默认) switch until the user flips the toggle here.
+  useEffect(() => { setThinking(defaultThinking) }, [defaultThinking])
   const provider = providers.find(item => item.id === providerId)
   const models = useMemo(() => providerId === 'local' ? [] : [...new Set([provider?.default_model, ...(provider?.models || [])].filter(Boolean) as string[])], [provider, providerId])
   useEffect(() => {

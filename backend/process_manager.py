@@ -9,11 +9,11 @@ import os
 from pathlib import Path
 from typing import Optional, List, Any
 from .models import AppConfig, ServerStatus
-from .config_manager import detect_server_binary, detect_kvmem_binary
+from .config_manager import detect_server_binary, detect_kvmem_binary, detect_ninfer_binary
 
 IS_WINDOWS = sys.platform == "win32"
 
-ENGINE_IMAGE_NAMES = ("llama-server", "llama-kvmem-server")
+ENGINE_IMAGE_NAMES = ("llama-server", "llama-kvmem-server", "ninfer-serve")
 
 
 def engine_pid_file() -> Path:
@@ -93,9 +93,11 @@ class ProcessManager:
         return ServerStatus(state="stopped")
 
     def build_command(self, config: AppConfig) -> list[str]:
-        """Build the llama-server / llama-kvmem-server command line from config."""
+        """Build the llama-server / llama-kvmem-server / ninfer-serve command line from config."""
         if config.engine == "kvmem":
             return self._build_kvmem_command(config)
+        if config.engine == "ninfer":
+            return self._build_ninfer_command(config)
 
         server_bin = detect_server_binary(config.llama_cpp_dir)
         if not server_bin:
@@ -275,20 +277,104 @@ class ProcessManager:
                 raise ValueError(f"extra_params 语法错误: {e}") from e
         return cmd
 
+    def _build_ninfer_command(self, config: AppConfig) -> list[str]:
+        """Build the ninfer-serve command line (.ninfer artifact engine)."""
+        n = config.ninfer
+        server_bin = detect_ninfer_binary(config.llama_cpp_dir)
+        if not server_bin:
+            raise FileNotFoundError(
+                f"ninfer-serve not found in {config.llama_cpp_dir}/ (root or engine/)"
+            )
+
+        cmd = [server_bin, config.model_path]
+        cmd += ["--host", config.server.host, "--port", str(config.server.port)]
+        cmd += ["--max-context", str(n.max_context)]
+        if n.kv_capacity > 0:
+            cmd += ["--kv-capacity", str(n.kv_capacity)]
+        cmd += ["--kv-dtype", n.kv_dtype, "--host-kv-mib", str(n.host_kv_mib)]
+        if n.prefill_chunk > 0:
+            # Must be a multiple of 128 or the engine refuses to start.
+            chunk = max(128, (n.prefill_chunk // 128) * 128)
+            cmd += ["--prefill-chunk", str(chunk)]
+        cmd += ["--max-concurrency", str(n.max_concurrency)]
+        cmd += ["--default-max-tokens", str(n.default_max_tokens)]
+        if not n.cuda_graph:
+            cmd.append("--no-cuda-graph")
+        # Browsers reach the engine cross-origin via the manager-hosted chat
+        # page (the pack binary serves no WebUI of its own).
+        cmd.append("--cors")
+        if n.spec != "none":
+            cmd += ["--spec", n.spec, "--draft-tokens", str(max(1, min(n.draft_tokens, 15)))]
+            if n.adaptive_mtp:
+                cmd.append("--adaptive-mtp")
+
+        # Server-side sampling defaults; per-request fields override them.
+        s = config.sampling
+        cmd += ["--temperature", str(s.temperature), "--top-p", str(s.top_p)]
+        # The engine only accepts top-k 0..20.
+        cmd += ["--top-k", str(max(0, min(s.top_k, 20)))]
+        if s.min_p_enabled:
+            cmd += ["--min-p", str(s.min_p)]
+        if s.presence_penalty_enabled:
+            cmd += ["--presence-penalty", str(s.presence_penalty)]
+
+        # Thinking: the shared switch maps onto the reasoning-effort knob.
+        cmd += ["--default-reasoning-effort", n.reasoning_effort if config.basic.enable_thinking else "none"]
+        if n.model_id.strip():
+            cmd += ["--model-id", n.model_id.strip()]
+
+        if config.extra_params.strip():
+            try:
+                cmd += shlex.split(config.extra_params, posix=(not IS_WINDOWS))
+            except ValueError as e:
+                raise ValueError(f"extra_params 语法错误: {e}") from e
+        return cmd
+
+    def build_env(self, config: AppConfig) -> dict[str, str] | None:
+        """Child-process environment. Only the NInfer engine needs extra vars
+        (the KVMem ring configuration); None inherits the parent environment."""
+        if config.engine != "ninfer":
+            return None
+        n = config.ninfer
+        env = dict(os.environ)
+        if n.kv_window > 0:
+            # Ring retrieval config, verbatim from the pack launchers. The
+            # content scorer turns itself on whenever NINFER_KV_WINDOW is set.
+            env["NINFER_KV_WINDOW"] = str(n.kv_window)
+            env["NINFER_KV_RETRIEVE"] = str(n.kv_retrieve)
+            env["NINFER_KV_RING"] = "1"
+            env["NINFER_HOST_PAGEABLE"] = "1"
+            env["NINFER_KV_REUSE_HOSTBACKED"] = "1"
+            if n.ptq1_fast:
+                env["NINFER_TERNARY_PTQ1_FAST"] = "1"
+            else:
+                env.pop("NINFER_TERNARY_PTQ1_FAST", None)
+        # Serve the pack's own WebUI when present (engine sits in <pack>/engine).
+        pack_ui = Path(detect_ninfer_binary(config.llama_cpp_dir) or "").parent.parent / "webui"
+        if pack_ui.is_dir():
+            env["NINFER_WEBUI_DIR"] = str(pack_ui)
+        return env
+
     async def start(self, config: AppConfig, profile_name: str = ""):
         if self._process and self._process.returncode is None:
             raise RuntimeError("Server is already running. Stop it first.")
 
         cmd = self.build_command(config)
+        env = self.build_env(config)
         self._profile_name = profile_name
         self._log_buffer.clear()
         self._append_log(f"[manager] Starting: {' '.join(cmd)}")
+        if env is not None:
+            ring = {k: v for k, v in env.items() if k.startswith("NINFER_")}
+            if ring:
+                self._append_log(f"[manager] Engine env: {' '.join(f'{k}={v}' for k, v in sorted(ring.items()))}")
 
         self._process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             cwd=config.llama_cpp_dir or None,
+            env=env,
         )
         self._start_time = time.time()
         record_engine_pid(self._process.pid)

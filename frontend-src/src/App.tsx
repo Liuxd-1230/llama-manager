@@ -58,7 +58,11 @@ function Shell() {
     if (!configQuery.data) return
     // Normalize against version skew: an older backend omits newer fields and
     // a crashed render on undefined is worse than a stale empty string.
-    const data = { ...configQuery.data, chat_template_file: configQuery.data.chat_template_file ?? '' }
+    const data = {
+      ...configQuery.data,
+      chat_template_file: configQuery.data.chat_template_file ?? '',
+      ninfer: { ...defaultConfig.ninfer, ...configQuery.data.ninfer },
+    }
     savedConfig.current = JSON.stringify(data)
     setConfig(data)
   }, [configQuery.data])
@@ -88,9 +92,18 @@ function Shell() {
           <Route path="/run" element={<Page title="运行" description="控制 llama-server 并观察实时状态"><RunPage config={config} toast={toast}/></Page>}/>
           <Route path="/evaluation" element={<Page title="评测" description="用真实任务比较模型质量与响应表现"><EvaluationPage toast={toast}/></Page>}/>
           <Route path="/maintenance" element={<Page title="维护" description="下载、更新和编译 llama.cpp"><MaintenancePage config={config} setConfig={setConfig} toast={toast}/></Page>}/>
-          <Route path="/chat" element={<Page title="对话" description="本地模型与外部 API 的统一流式对话"><ChatPage toast={toast} providerRefresh={providerRefresh}/></Page>}/>
+          {/* Chat renders outside the routes and stays mounted: switching
+              pages must not drop the conversation or a running generation. */}
+          <Route path="/chat" element={<span hidden/>}/>
           <Route path="*" element={<Navigate to="/models" replace/>}/>
         </Routes></Suspense>
+        <div style={{ display: location.pathname === '/chat' ? undefined : 'none' }}>
+          <Suspense fallback={<div className={styles.page}>正在加载工作区…</div>}>
+            <Page title="对话" description="本地模型与外部 API 的统一流式对话">
+              <ChatPage toast={toast} providerRefresh={providerRefresh} defaultThinking={config.basic.enable_thinking}/>
+            </Page>
+          </Suspense>
+        </div>
       </main>
     </div>
     <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} setTheme={setTheme} onProvidersChanged={() => setProviderRefresh(value => value + 1)} toast={toast}/>

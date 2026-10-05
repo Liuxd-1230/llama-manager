@@ -1372,16 +1372,55 @@
         }
       }
     },
-    "/api/update/check": {
+    "/api/mirrors": {
       "get": {
-        "summary": "Update Check",
-        "operationId": "update_check_api_update_check_get",
+        "summary": "Probe Mirrors",
+        "description": "Probe each candidate's git smart-HTTP handshake endpoint; rank by latency.",
+        "operationId": "probe_mirrors_api_mirrors_get",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/update/check": {
+      "get": {
+        "summary": "Update Check",
+        "operationId": "update_check_api_update_check_get",
+        "parameters": [
+          {
+            "name": "mirror",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Mirror"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -1889,6 +1928,11 @@
             "title": "Chat Template File",
             "default": ""
           },
+          "mmproj_gpu": {
+            "type": "boolean",
+            "title": "Mmproj Gpu",
+            "default": false
+          },
           "engine": {
             "type": "string",
             "title": "Engine",
@@ -1905,6 +1949,9 @@
           },
           "kvmem": {
             "$ref": "#/components/schemas/KvmemSettings"
+          },
+          "ninfer": {
+            "$ref": "#/components/schemas/NinferSettings"
           },
           "system_prompt": {
             "type": "string",
@@ -2116,7 +2163,7 @@
           "command": {
             "type": "string",
             "title": "Command",
-            "default": "cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=\"89\" && cmake --build build --config Release -j12"
+            "default": "cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=\"89\" && cmake --build build --config Release --target llama-server -j12"
           }
         },
         "type": "object",
@@ -2420,17 +2467,27 @@
           "batch": {
             "type": "integer",
             "title": "Batch",
+            "default": 512
+          },
+          "ubatch": {
+            "type": "integer",
+            "title": "Ubatch",
             "default": 128
           },
           "kv_dtype": {
             "type": "string",
             "title": "Kv Dtype",
-            "default": "q8_0"
+            "default": "q4_0"
           },
           "query_policy": {
             "type": "string",
             "title": "Query Policy",
             "default": "user"
+          },
+          "mtp_state": {
+            "type": "string",
+            "title": "Mtp State",
+            "default": "snapshots"
           },
           "enable_thinking": {
             "type": "boolean",
@@ -2482,6 +2539,93 @@
         },
         "type": "object",
         "title": "MTPSettings"
+      },
+      "NinferSettings": {
+        "properties": {
+          "max_context": {
+            "type": "integer",
+            "title": "Max Context",
+            "default": 262144
+          },
+          "kv_capacity": {
+            "type": "integer",
+            "title": "Kv Capacity",
+            "default": 4032
+          },
+          "host_kv_mib": {
+            "type": "integer",
+            "title": "Host Kv Mib",
+            "default": 16384
+          },
+          "kv_dtype": {
+            "type": "string",
+            "title": "Kv Dtype",
+            "default": "k8v4"
+          },
+          "prefill_chunk": {
+            "type": "integer",
+            "title": "Prefill Chunk",
+            "default": 256
+          },
+          "spec": {
+            "type": "string",
+            "title": "Spec",
+            "default": "mtp"
+          },
+          "draft_tokens": {
+            "type": "integer",
+            "title": "Draft Tokens",
+            "default": 4
+          },
+          "adaptive_mtp": {
+            "type": "boolean",
+            "title": "Adaptive Mtp",
+            "default": false
+          },
+          "max_concurrency": {
+            "type": "integer",
+            "title": "Max Concurrency",
+            "default": 1
+          },
+          "default_max_tokens": {
+            "type": "integer",
+            "title": "Default Max Tokens",
+            "default": 32768
+          },
+          "cuda_graph": {
+            "type": "boolean",
+            "title": "Cuda Graph",
+            "default": false
+          },
+          "kv_window": {
+            "type": "integer",
+            "title": "Kv Window",
+            "default": 16384
+          },
+          "kv_retrieve": {
+            "type": "integer",
+            "title": "Kv Retrieve",
+            "default": 8192
+          },
+          "ptq1_fast": {
+            "type": "boolean",
+            "title": "Ptq1 Fast",
+            "default": true
+          },
+          "reasoning_effort": {
+            "type": "string",
+            "title": "Reasoning Effort",
+            "default": "medium"
+          },
+          "model_id": {
+            "type": "string",
+            "title": "Model Id",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "NinferSettings",
+        "description": "NInfer engine (ninfer-serve-<arch>.exe) — .ninfer artifacts with the\nKVMem-style ring retrieval and MTP/dflash speculation.\n\nDefaults mirror the 8 GB launcher (start-ptq1-mtp-8gb.bat): device pool\n4032 tokens (63 pages), chunk 256, CUDA Graphs off."
       },
       "SamplingSettings": {
         "properties": {

@@ -4,7 +4,7 @@
 
 ## 档案 = 什么
 
-一条档案是一个完整推理配置：引擎 + 引擎目录 + 模型文件 + mmproj + 启动参数（基础/KVMem/MTP）+ 采样 + 聊天模板 + 系统提示词 + 监听地址。
+一条档案是一个完整推理配置：引擎 + 引擎目录 + 模型文件 + mmproj + 启动参数（基础/KVMem/NInfer/MTP）+ 采样 + 聊天模板 + 系统提示词 + 监听地址。三种引擎：`llama.cpp`（llama-server，GGUF）、`kvmem`（llama-kvmem-server，GGUF+KV 虚拟化）、`ninfer`（ninfer-serve-<arch>.exe，**.ninfer 工件**，专有引擎包）。
 
 ## 标准创建流程（API 序列）
 
@@ -22,19 +22,32 @@ c.post(f'{BASE}/api/profiles/launch', json={'name': '<档案名>'})             
 
 只想切换编辑目标不启动：用 `POST /api/profiles/set-current`。
 
-## 字段语义（两引擎对照）
+## 字段语义（三引擎对照）
 
-| 字段 | llama.cpp | KVMem |
-|---|---|---|
-| `engine` | `"llama.cpp"`，目录里找 `llama-server.exe` | `"kvmem"`，找 `llama-kvmem-server.exe`（根目录或 bin/） |
-| `llama_cpp_dir` | git 检出或解压根 | KVMem 解压根或其 `bin/` |
-| 上下文 | `basic.ctx_size`（`-c`，占显存） | `kvmem.workspace`（`-c`，**逻辑工作区，不占显存**） |
-| KV 量化 | `basic.kv_cache_quant_k/v`（`-ctk/-ctv`，K/V 分开） | `kvmem.kv_dtype`（`--kv-dtype`，K/V 共用） |
-| 思考默认 | `basic.enable_thinking` → `--reasoning on` | `kvmem.enable_thinking` → `--enable-thinking --reasoning-budget` |
-| GPU 常驻 | 由 `-c` 决定 | 由 `budget + gen_reserve` 决定，`workspace` 不算 |
-| 批次 | `basic.batch_size/ubatch_size` | `kvmem.batch`（**必须 128**，实测 512 减速一半） |
+| 字段 | llama.cpp | KVMem | NInfer |
+|---|---|---|---|
+| `engine` | `"llama.cpp"`，找 `llama-server.exe` | `"kvmem"`，找 `llama-kvmem-server.exe`（根或 bin/） | `"ninfer"`，找 `ninfer-serve-*.exe`（根或 engine/，优先 89，自动跳过 `.old-` 备份） |
+| `llama_cpp_dir` | git 检出或解压根 | KVMem 解压根或其 `bin/` | NInfer 包根（含 `engine\`、`models\`、`webui\`） |
+| 模型 | `.gguf`（`-m`） | `.gguf`（`-m`） | `.ninfer`（**裸位置参数**，无 `-m`） |
+| 上下文 | `basic.ctx_size`（`-c`，占显存） | `kvmem.workspace`（`-c`，逻辑工作区不占显存） | `ninfer.max_context`（`--max-context`，逻辑上限；显存由池决定） |
+| KV 量化 | `basic.kv_cache_quant_k/v` | `kvmem.kv_dtype` | `ninfer.kv_dtype`（交付档 `k8v4`；小池验收只在 k8v4 做过） |
+| 思考默认 | `basic.enable_thinking` → `--reasoning on` | `kvmem.enable_thinking` → `--enable-thinking --reasoning-budget` | `basic.enable_thinking` → `--default-reasoning-effort <effort|none>`，档位 `ninfer.reasoning_effort` |
+| GPU 常驻 | 由 `-c` 决定 | 由 `budget + gen_reserve` 决定 | 由 `ninfer.kv_capacity`（设备池 token，64=1 页）决定；`host_kv_mib` 是内存侧 |
+| 批次 | `basic.batch_size/ubatch_size` | `kvmem.batch`（**必须 128**，实测 512 减速一半） | `ninfer.prefill_chunk`（128 的倍数） |
+| 投机解码 | `mtp.*`（`--spec-type`） | `mtp.*`（需合并 MTP 头的模型） | `ninfer.spec`（`mtp/dflash/dflash2`）+ `draft_tokens`（上限 15；ngram 草稿随 spec 自动开） |
 
-显存账（KVMem，RTX 4060 Laptop 8GB 实测）：**桌面常驻 ~1GB + 权重 5.5GB + CUDA 缓冲 ~0.4GB + (预算+预留) × 25MB/千token（q8_0）或 ~12.5MB/千token（q4_0）**。安全线：总计 ≤ 7.4GB。`basic.ctx_size/threads/parallel/fit/MoE/KV K/V/mmap/...` 在 KVMem 引擎下不进命令，不要设置。
+显存账（KVMem，RTX 4060 Laptop 8GB 实测）：**桌面常驻 ~1GB + 权重 5.5GB + CUDA 缓冲 ~0.4GB + (预算+预留) × 25MB/千token（q8_0）或 ~12.5MB/千token（q4_0）**。安全线：总计 ≤ 7.4GB。`basic.ctx_size/threads/parallel/fit/MoE/KV K/V/mmap/...` 在 KVMem/NInfer 引擎下不进命令，不要设置。
+
+## NInfer 引擎专节（.ninfer 包）
+
+包结构：`E:\infer-engine-sm89-20261002`（sm_89 = RTX 40；另有 sm86/sm120a 包，互不通用、无 PTX 回退）。模型走独立模型包（`bonsai2_27b_ternary_ptq1_native_mtp.ninfer` = Bonsai-2 27B PTQ1 三值，6,394,697,216 字节，sha256 `5c4486c8a52687e3f62072c7dd2a320546d0e00d1c019bf137eb02cc944e21b8`，引擎 exe sha256 `19222a2a…2771e` = 2026-10-03 08:09 构建）。技术方案与源码补丁存档：魔搭 `shensanshu/ninfer-master-shensanshu-kvmem`（上游 NInfer 0.11.0 + 34 个补丁文件 + 复现白皮书，不含二进制/权重，仅作参考）。
+
+- **Ring/KVMem 环境变量**由 `build_env` 注入（kv_window>0 时）：`NINFER_KV_WINDOW/KV_RETRIEVE/RING/HOST_PAGEABLE/KV_REUSE_HOSTBACKED`，`ptq1_fast` → `NINFER_TERNARY_PTQ1_FAST`。检索打分随 KV_WINDOW 自动开（日志判据：`kvmem_score: SELECT` 行 ≥1）。包内自带 webui（`NINFER_WEBUI_DIR` 自动指向 `<包根>\webui`）
+- **8GB 卡参考配置**（= 包内 `start-ptq1-mtp-8gb.bat`，已设为 `NinferSettings` 默认值）：池 4032（63 页）+ 预填块 256 + CUDA Graphs 关；启动日志 `capacity` 行 free 仅 ~159MB，贴线属预期，被拒（"runtime reservation requires…"）= 桌面占用过多，不是配置错
+- **容量规则**：主机池页数 + 设备池页数 ≥ 逻辑上下文页数，约 25 KiB 主机池/token（k8v4）
+- **实测**（8GB 卡，2026-10-03）：数数字 1000/1000 prefill 544 t/s、解码 60.6 t/s、TTFT 2.1s、MTP 接受 88.1%；5.2K 长题面针测试答对；对话页思考开关经请求级 `reasoning_effort` 切换实测生效（开=有 reasoning 流，关=直接答）
+- **请求级约束**（chat 代理已处理，勿在别处发）：`top_k` 只收 0..20（40 直接 400）；model 字段省略=当前工件，填错 404——**对话页缓存模型名，档案务必用 `ninfer.model_id` 固定 id（对齐启动器 `qwen3.8-27b`），否则换工件/换启动方式会让已打开的对话页 404**；`chat_template_kwargs` 也被引擎识别但产品统一走 `reasoning_effort`（对话页档位选择器会透传）
+- 层 0 分块不进检索索引（`cannot expose the pre-RoPE key` 警告）是引擎已知性质，不影响召回
 
 ## 实测调优知识（别再重新踩坑）
 
@@ -51,6 +64,7 @@ c.post(f'{BASE}/api/profiles/launch', json={'name': '<档案名>'})             
 
 | 档案 | 引擎 | 模型 | 定位 |
 |---|---|---|---|
+| `ninfer-bonsai` | NInfer | bonsai2_27b PTQ1 native MTP (.ninfer) | 数数 60.6 t/s、TTFT 2.1s，端口 8095，8GB 默认参数 |
 | `bonsai-fast` | KVMem | Heretic PTQ1+MTP Q4头 | 日常主力：workspace 32K / 预算 2K / 预留 4K / KV q4_0 / MTP2，数数 55 t/s、文风 32 t/s |
 | `bonsai-mtp` | KVMem | 同上 | 长输出日常：workspace 64K / 预算 8K / 预留 4K / KV q8_0，36-57 t/s 视内容 |
 | `kvmem-bonsai` | KVMem | Heretic PTQ1（无 MTP） | 长上下文无 MTP 对照 |

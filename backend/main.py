@@ -229,6 +229,34 @@ def _force_web_search_tool_choice(payload: dict) -> dict:
 def _local_chat_payload(data: dict, config: AppConfig, messages: list[dict]) -> dict:
     sampling = config.sampling
     web_tool = bool(data.get("web_search_tool") or data.get("web_search") is True)
+    if config.engine == "ninfer":
+        # NInfer accepts the standard OpenAI fields; anything beyond
+        # temperature/top_p is governed server-side (--top-k, --min-p...),
+        # and the thinking toggle maps onto the per-request reasoning effort.
+        # It validates the model id against the loaded artifact, so the field
+        # is only sent when the caller actually picked one — omitting it means
+        # "the loaded model", while "default" would 404.
+        payload = {
+            "messages": messages,
+            "stream": data.get("stream", True),
+            "temperature": sampling.temperature,
+            "top_p": sampling.top_p,
+        }
+        model = data.get("model")
+        if model and model != "default":
+            payload["model"] = model
+        if data.get("thinking_enabled") is not None:
+            # The chat page sends its own effort selector value; honor it when
+            # valid, otherwise fall back to the profile's configured effort.
+            effort = str(data.get("reasoning_effort") or "")
+            if data.get("thinking_enabled"):
+                payload["reasoning_effort"] = effort if effort in {"minimal", "low", "medium", "high", "xhigh", "max"} else config.ninfer.reasoning_effort
+            else:
+                payload["reasoning_effort"] = "none"
+        if web_tool:
+            payload["tools"] = [_web_search_tool_schema()]
+            payload["tool_choice"] = "auto"
+        return payload
     payload = {
         "model": data.get("model") or "default",
         "messages": messages,
@@ -1145,6 +1173,7 @@ def _profile_summary(name: str, profile: AppConfig) -> dict:
         model_size_mb = round(model_path.stat().st_size / (1024 * 1024), 1)
     basic = profile.basic
     kvmem = profile.kvmem
+    ninfer = profile.ninfer
     thinking = kvmem.enable_thinking if profile.engine == "kvmem" else basic.enable_thinking
     return {
         "name": name,
@@ -1164,6 +1193,15 @@ def _profile_summary(name: str, profile: AppConfig) -> dict:
             "gen_reserve": kvmem.gen_reserve,
             "kv_dtype": kvmem.kv_dtype,
             "enable_thinking": kvmem.enable_thinking,
+        },
+        "ninfer": {
+            "max_context": ninfer.max_context,
+            "kv_capacity": ninfer.kv_capacity,
+            "host_kv_mib": ninfer.host_kv_mib,
+            "kv_dtype": ninfer.kv_dtype,
+            "spec": ninfer.spec,
+            "draft_tokens": ninfer.draft_tokens,
+            "kv_window": ninfer.kv_window,
         },
         "ngl": basic.ngl if basic.ngl_enabled else 0,
         "fit_enabled": basic.fit_enabled,
@@ -1284,6 +1322,8 @@ def scan_models(dir: str):
 def detect_server(llama_cpp_dir: str, engine: str = "llama.cpp"):
     if engine == "kvmem":
         path = cfg.detect_kvmem_binary(llama_cpp_dir)
+    elif engine == "ninfer":
+        path = cfg.detect_ninfer_binary(llama_cpp_dir)
     else:
         path = cfg.detect_server_binary(llama_cpp_dir)
     return {"path": path, "found": bool(path)}
@@ -1636,7 +1676,7 @@ async def list_models(provider: str = "local"):
 
 @app.get("/api/chat/providers")
 async def chat_providers():
-    return {"providers": [{"id": "local", "name": "本地 llama-server", "kind": "local", "configured": True}, *providers.list_providers()]}
+    return {"providers": [{"id": "local", "name": "本地引擎", "kind": "local", "configured": True}, *providers.list_providers()]}
 
 
 @app.get("/api/search/settings")
