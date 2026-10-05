@@ -1676,7 +1676,7 @@ async def list_models(provider: str = "local"):
 
 @app.get("/api/chat/providers")
 async def chat_providers():
-    return {"providers": [{"id": "local", "name": "本地引擎", "kind": "local", "configured": True}, *providers.list_providers()]}
+    return {"providers": [{"id": "local", "name": "本地引擎", "kind": "local", "configured": True, "engine": cfg.get_config().engine}, *providers.list_providers()]}
 
 
 @app.get("/api/search/settings")

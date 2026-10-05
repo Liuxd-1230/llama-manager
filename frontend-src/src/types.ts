@@ -90,6 +90,7 @@ export interface Provider {
   id: string
   name: string
   kind: 'local' | 'deepseek' | 'openai_chat' | 'openai_responses' | 'anthropic' | 'openai_compatible'
+  engine?: string
   base_url?: string
   default_model?: string
   models?: string[]

@@ -551,8 +551,14 @@ async function hydrate(conv) {
     const turns = [];
     for (const t of d.turns || []) {
       turns.push({ role: "user", content: t.user?.content || "", attachments: t.attachments || [], ts: Math.round((t.created_at || 0) * 1000), dbId: t.id });
-      const cand = (t.candidates || []).find(x => x.id === t.active_candidate_id) || (t.candidates || []).slice(-1)[0];
-      if (cand) turns.push({ role: "assistant", content: cand.content || "", reasoning: cand.reasoning || "", model: cand.model || "", ts: Math.round((cand.created_at || 0) * 1000) });
+      const cands = t.candidates || [];
+      const cand = cands.find(x => x.id === t.active_candidate_id) || cands.slice(-1)[0];
+      if (cand) {
+        const alts = cands.filter(x => x !== cand)
+          .map(x => ({ content: x.content || "", reasoning: x.reasoning || "", model: x.model || "" }));
+        turns.push({ role: "assistant", content: cand.content || "", reasoning: cand.reasoning || "", model: cand.model || "",
+          ts: Math.round((cand.created_at || 0) * 1000), ...(alts.length ? { alts } : {}) });
+      }
     }
     conv.turns = turns; conv.savedPairs = (d.turns || []).length;
     save();
@@ -569,13 +575,14 @@ async function persistNewPairs(conv) {
   for (let idx = conv.savedPairs || 0; idx < pairs.length; idx++) {
     const [u, a] = pairs[idx];
     if (!u.dbId) u.dbId = "wt-" + conv.id.slice(1) + "-" + idx;
-    const candId = "wc-" + u.dbId.slice(3);
+    const base = "wc-" + u.dbId.slice(3);
+    const versions = [{ content: a.content, reasoning: a.reasoning || "", model: a.model || modelId }, ...(a.alts || [])];
     try {
       await fetch("/api/conversations/" + conv.id + "/turns/" + u.dbId, { method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: u.dbId, position: idx, user_content: u.content, user_display: u.content,
           attachments: (u.attachments || []).map(x => ({ name: x.name, size: x.size, kind: x.kind, content: x.content, dataUrl: x.dataUrl })),
-          active_candidate_id: candId,
-          candidates: [{ id: candId, provider: "ninfer-webui", model: a.model || modelId, content: a.content || "", reasoning: a.reasoning || "", status: "done", tools: [] }] }) });
+          active_candidate_id: base + "-v0",
+          candidates: versions.map((v, vi) => ({ id: base + "-v" + vi, provider: "ninfer-webui", model: v.model || modelId, content: v.content || "", reasoning: v.reasoning || "", status: "done", tools: [] })) }) });
     } catch {}
   }
   conv.savedPairs = pairs.length; save();
@@ -688,8 +695,19 @@ function messageEl(turn, opts = {}) {
       const cp = document.createElement("button"); cp.className = "iconbtn"; cp.title = "复制"; cp.innerHTML = ICON_COPY;
       cp.onclick = () => { navigator.clipboard.writeText(turn.content || ""); cp.innerHTML = ICON_OK; setTimeout(() => cp.innerHTML = ICON_COPY, 1200); };
       ops.appendChild(cp);
+      if (turn.alts?.length) {
+        const all = turn.alts.length + 1;
+        const mk = (label, dir) => {
+          const b = document.createElement("button"); b.className = "iconbtn"; b.textContent = label;
+          b.title = dir < 0 ? "上一版本" : "下一版本";
+          b.onclick = () => switchCandidate(turn, dir);
+          return b;
+        };
+        const label = document.createElement("span"); label.className = "stats"; label.textContent = (turn.alts.length + 1) + "/" + all;
+        ops.append(mk("‹", -1), mk("›", 1), label);
+      }
       if (opts.actions) {
-        const rg = document.createElement("button"); rg.className = "iconbtn"; rg.title = "重新生成"; rg.innerHTML = ICON_REGEN;
+        const rg = document.createElement("button"); rg.className = "iconbtn"; rg.title = "重新生成(保留旧版)"; rg.innerHTML = ICON_REGEN;
         rg.onclick = () => regenerate(); ops.appendChild(rg);
       }
       body.appendChild(ops);
@@ -865,16 +883,47 @@ async function send(text) {
 function regenerate() {
   if (generating) return;
   const conv = active(); if (!conv) return;
-  while (conv.turns.length && conv.turns[conv.turns.length - 1].role === "assistant") conv.turns.pop();
-  save(); renderThread();
-  const last = conv.turns[conv.turns.length - 1];
-  if (last) sendFromHistory(conv, last);
+  const idx = conv.turns.length - 1;
+  if (conv.turns[idx]?.role !== "assistant") return;
+  const turn = conv.turns[idx];
+  turn.alts = turn.alts || [];
+  if (turn.content || turn.reasoning) {
+    turn.alts.push({ content: turn.content, reasoning: turn.reasoning, stats: turn.stats, thinkMs: turn.thinkMs, model: turn.model });
+  }
+  turn.content = ""; turn.reasoning = ""; turn.stats = undefined; turn.thinkMs = undefined;
+  // The pair was already saved to the DB: force a re-PUT so the new version
+  // (and the snapshotted one) both land as candidates.
+  conv.savedPairs = Math.min(conv.savedPairs || 0, (idx - 1) / 2);
+  save();
+  const botEls = threadEl.querySelectorAll(".msg.bot");
+  botEls[botEls.length - 1]?.remove();
+  sendFromHistory(conv, conv.turns[idx - 1], turn);
 }
-async function sendFromHistory(conv, userTurn) {
+
+// Rotate the active answer among [active, ...alts].
+function switchCandidate(turn, dir) {
+  if (!turn.alts?.length) return;
+  const conv = active(); if (!conv) return;
+  const all = [...turn.alts, { content: turn.content, reasoning: turn.reasoning, stats: turn.stats, thinkMs: turn.thinkMs, model: turn.model }];
+  const cur = ((turn.altIdx ?? all.length - 1) % all.length + all.length) % all.length;
+  const next = (cur + dir + all.length) % all.length;
+  const picked = all.splice(next, 1)[0];
+  turn.alts = all;
+  turn.content = picked.content; turn.reasoning = picked.reasoning || "";
+  turn.stats = picked.stats; turn.thinkMs = picked.thinkMs; turn.model = picked.model || turn.model;
+  turn.altIdx = next;
+  const pairIdx = conv.turns.indexOf(turn) > 0 ? Math.floor(conv.turns.indexOf(turn) / 2) : 0;
+  conv.savedPairs = Math.min(conv.savedPairs || 0, pairIdx);
+  save(); renderThread();
+  void persistNewPairs(conv);
+}
+async function sendFromHistory(conv, userTurn, existingTurn) {
   const effort = $("effort").value;
   // Keep the turn objects (attachments ride along; requestContent merges them).
-  const history = conv.turns;
-  const botTurn = { role: "assistant", content: "", reasoning: "", model: modelId, ts: Date.now() };
+  // When regenerating, history stops before the assistant turn being re-run.
+  const end = existingTurn ? conv.turns.indexOf(existingTurn) : conv.turns.length;
+  const history = conv.turns.slice(0, end);
+  const botTurn = existingTurn || { role: "assistant", content: "", reasoning: "", model: modelId, ts: Date.now() };
   const el = messageEl(botTurn, { streaming: true, thinkingOpen: true });
   threadEl.appendChild(el);
   const mdEl = el.querySelector(".md"), thinkEl = el.querySelector(".think"), thinkBody = el.querySelector(".think-body");
@@ -952,7 +1001,8 @@ async function sendFromHistory(conv, userTurn) {
       tps: Math.round(stats.predicted_n / (stats.predicted_ms / 1000)), outN: stats.predicted_n,
       ttft: firstAt != null ? Math.round(firstAt - t0) : null,
     };
-    if (botTurn.content || botTurn.reasoning) { conv.turns.push(botTurn); threadEl.appendChild(messageEl(botTurn, { actions: true })); }
+    if (!existingTurn && (botTurn.content || botTurn.reasoning)) conv.turns.push(botTurn);
+    if (botTurn.content || botTurn.reasoning) threadEl.appendChild(messageEl(botTurn, { actions: true }));
     conv.updatedAt = Date.now(); save(); renderSidebar(); setGenerating(false); controller = null;
     void persistNewPairs(conv);
     toBottom();

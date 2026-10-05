@@ -17,7 +17,14 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false }
   const [providerId, setProviderId] = useState('deepseek')
   const [model, setModel] = useState('')
   const [thinking, setThinking] = useState(defaultThinking)
-  const [effort, setEffort] = useState<'high' | 'max'>('high')
+  const [effort, setEffort] = useState('high')
+  // NInfer exposes a six-step effort ladder; other providers only know high/max.
+  const effortOptions = useMemo(
+    () => (providers.find(item => item.id === 'local')?.engine === 'ninfer'
+      ? ['medium', 'low', 'high', 'xhigh', 'max']
+      : ['high', 'max']),
+    [providers],
+  )
   const [webSearch, setWebSearch] = useState(false)
   const [stream, setStream] = useState(true)
   const [searchSettings, setSearchSettings] = useState<SearchSettings | null>(null)
@@ -226,7 +233,7 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false }
       <div className={styles.toolGroup}>
         <Select value={providerId} onChange={event => setProviderId(event.target.value)}>{providers.map(item => <option key={item.id} value={item.id}>{item.name}{item.api_key_set === false ? ' · 未配置' : ''}</option>)}</Select>
         <Select value={model} onChange={event => setModel(event.target.value)}>{(models.length ? models : [model || 'default']).map(item => <option key={item}>{item}</option>)}</Select>
-        <Select value={effort} disabled={!canThink} onChange={event => setEffort(event.target.value as 'high' | 'max')}><option value="high">High</option><option value="max">Max</option></Select>
+        <Select value={effort} disabled={!canThink} onChange={event => setEffort(event.target.value)}>{effortOptions.map(value => <option key={value} value={value}>{value === 'none' ? 'Off' : value[0].toUpperCase() + value.slice(1)}</option>)}</Select>
       </div>
       <div className={styles.toolGroup}>
         <Switch checked={thinking} disabled={!canThink} onChange={setThinking} label={<><BrainCircuit size={14}/>思考</>}/>
