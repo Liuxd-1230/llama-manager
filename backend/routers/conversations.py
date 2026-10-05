@@ -59,6 +59,18 @@ async def save_turn(conversation_id: str, turn_id: str, body: TurnWrite, request
     return {"ok": True}
 
 
+@router.delete("/{conversation_id}/turns/{turn_id}")
+async def delete_turn(conversation_id: str, turn_id: str, request: Request):
+    # Used by chat editors that truncate history: candidates and tool events
+    # go with the turn via ON DELETE CASCADE.
+    changed = await request.app.state.db.execute(
+        "DELETE FROM turns WHERE id=? AND conversation_id=?", (turn_id, conversation_id)
+    )
+    if not changed:
+        raise KeyError("Turn not found")
+    return {"ok": True}
+
+
 @router.patch("/{conversation_id}")
 async def rename_conversation(conversation_id: str, body: ConversationCreate, request: Request):
     changed = await request.app.state.db.execute("UPDATE conversations SET title=?, updated_at=? WHERE id=?", (body.title.strip() or "新对话", time.time(), conversation_id))

@@ -8,7 +8,7 @@ import type { AppConfig } from '../../types'
 import page from '../pages.module.css'
 import styles from './models.module.css'
 
-type ProfileMeta = { name?: string; architecture?: string; layers?: number; experts?: number; active_experts?: number; context_length?: number }
+type ProfileMeta = { name?: string; architecture?: string; layers?: number; experts?: number; active_experts?: number; context_length?: number; native_mtp?: boolean }
 
 type Profile = {
   name: string
@@ -189,8 +189,9 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
     { label: `${profile.host}:${profile.port}` },
   ]
   const parts = [
-    meta.architecture || '',
+    meta.name && meta.architecture ? `${meta.name} · ${meta.architecture}` : meta.architecture || '',
     meta.layers ? `${meta.layers} 层${meta.experts ? ` · MoE ${meta.experts}${meta.active_experts ? `/${meta.active_experts}` : ''}` : ''}` : '',
+    meta.native_mtp ? '原生 MTP 头' : '',
     meta.context_length ? `原生 ${meta.context_length >= 1024 ? `${Math.round(meta.context_length / 1024)}K` : meta.context_length}` : '',
   ].filter(Boolean)
   const needsSwitch = serverRunning && !profile.is_running

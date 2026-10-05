@@ -72,6 +72,23 @@ body { margin: 0; background: var(--bg); color: var(--text); font: var(--font); 
   border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 13px; max-width: 200px; }
 #topbar .spacer { flex: 1; }
 #topbar .model-info { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#settings-pop { position: fixed; top: 54px; right: 16px; z-index: 60; width: 320px; max-width: calc(100vw - 32px);
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px;
+  box-shadow: var(--shadow); display: none; flex-direction: column; gap: 10px; }
+#settings-pop label { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--muted); }
+#settings-pop textarea, #settings-pop input { background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 13px; resize: vertical; }
+#settings-pop textarea:focus, #settings-pop input:focus { outline: none; border-color: var(--accent); }
+#settings-pop .row2 { display: flex; gap: 10px; }
+#settings-pop .row2 label { flex: 1; }
+#settings-pop .hint2 { margin: 0; font-size: 11.5px; color: var(--muted); }
+.editbox { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--accent);
+  border-radius: 10px; padding: 9px 12px; font: inherit; font-size: 14px; resize: vertical; }
+.editbar { display: flex; gap: 8px; justify-content: flex-end; margin-top: 7px; }
+.editbar button { border: 1px solid var(--border); background: var(--panel2); color: var(--text);
+  border-radius: 8px; padding: 5px 13px; font: inherit; font-size: 12.5px; cursor: pointer; }
+.editbar button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+#composer-wrap.dropping #composer { border-color: var(--accent); background: var(--accent-soft); }
 
 #scroll { flex: 1; overflow-y: auto; scroll-behavior: auto; }
 #thread { max-width: 820px; margin: 0 auto; padding: 26px 22px 10px; display: flex; flex-direction: column; gap: 22px; }
@@ -224,6 +241,15 @@ body { margin: 0; background: var(--bg); color: var(--text); font: var(--font); 
     </select>
     <div class="spacer"></div>
     <span class="model-info" id="modelinfo"></span>
+    <button class="iconbtn" id="gear" title="会话设置"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+  </div>
+  <div id="settings-pop">
+    <label>系统提示词<textarea id="set-sys" rows="3" placeholder="留空使用模型默认行为"></textarea></label>
+    <div class="row2">
+      <label>温度<input type="number" id="set-temp" step="0.05" min="0" max="2"></label>
+      <label>输出上限<input type="number" id="set-max" min="0" step="256" placeholder="0=引擎默认"></label>
+    </div>
+    <p class="hint2">保存在当前会话;新对话沿用最近一次的设置。</p>
   </div>
 
   <div id="scroll">
@@ -264,9 +290,11 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /* ───────── state ───────── */
-let store = { conversations: [], activeId: null };
+let store = { conversations: [], activeId: null, defaults: { system: "", temperature: 0.7, maxTokens: 0 } };
+let hosted = false;
 let generating = false, controller = null;
 let attachments = [], visionOK = false;
+const currentSettings = () => (active() && active().settings) || store.defaults;
 let modelId = "", modelCtx = "";
 const threadEl = $("thread"), scrollEl = $("scroll"), inputEl = $("input"), sendEl = $("send");
 
@@ -302,7 +330,7 @@ function groupOf(ts) {
 function renderSidebar() {
   const q = $("searchbox").value.trim().toLowerCase();
   const list = store.conversations
-    .filter(c => !q || c.title.toLowerCase().includes(q) || c.turns.some(t => t.content.toLowerCase().includes(q)))
+    .filter(c => !q || c.title.toLowerCase().includes(q) || (Array.isArray(c.turns) && c.turns.some(t => t.content.toLowerCase().includes(q))))
     .sort((a, b) => b.updatedAt - a.updatedAt);
   const host = $("convlist"); host.innerHTML = "";
   let lastGroup = "";
@@ -317,9 +345,17 @@ function renderSidebar() {
     rename.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>';
     const del = document.createElement("button"); del.className = "iconbtn"; del.title = "删除";
     del.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>';
-    ops.append(rename, del);
+    const ex = document.createElement("button"); ex.className = "iconbtn"; ex.title = "导出 Markdown";
+    ex.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>';
+    ex.onclick = e => { e.stopPropagation(); exportConv(c); };
+    ops.append(rename, ex, del);
     row.append(title, ops);
-    row.onclick = e => { if (e.target.closest("button")) return; store.activeId = c.id; renderSidebar(); renderThread(); };
+    row.onclick = async e => {
+      if (e.target.closest("button")) return;
+      store.activeId = c.id;
+      if (!Array.isArray(c.turns)) await hydrate(c);
+      renderSidebar(); renderThread();
+    };
     rename.onclick = e => { e.stopPropagation();
       title.style.display = "none";
       const inp = document.createElement("input"); inp.className = "rename"; inp.value = c.title;
@@ -331,6 +367,7 @@ function renderSidebar() {
     del.onclick = e => { e.stopPropagation();
       store.conversations = store.conversations.filter(x => x.id !== c.id);
       if (store.activeId === c.id) store.activeId = store.conversations[0]?.id || null;
+      if (hosted && c.id?.startsWith("w")) fetch("/api/conversations/" + c.id, { method: "DELETE" }).catch(() => {});
       save(); renderSidebar(); renderThread();
     };
     host.appendChild(row);
@@ -352,7 +389,13 @@ function renderMarkdown(src) {
   const maths = [];
   text = text.replace(/\$\$([\s\S]+?)\$\$/g, (_, tex) => { maths.push({ tex, display: true }); return "\u0001MATH" + (maths.length - 1) + "\u0001"; })
     .replace(/\\\[([\s\S]+?)\\\]/g, (_, tex) => { maths.push({ tex, display: true }); return "\u0001MATH" + (maths.length - 1) + "\u0001"; })
-    .replace(/\\\(([^\n]+?)\\\)/g, (_, tex) => { maths.push({ tex, display: false }); return "\u0001MATH" + (maths.length - 1) + "\u0001"; });
+    .replace(/\\\(([^\n]+?)\\\)/g, (_, tex) => { maths.push({ tex, display: false }); return "\u0001MATH" + (maths.length - 1) + "\u0001"; })
+    // single $...$ only when the span actually looks like LaTeX (avoids prices)
+    .replace(/\$([^$\n]{1,200})\$/g, (m, tex) => {
+      if (!/\\[a-zA-Z]+|[{}]|\^|_|\d\s*[\\{}]/.test(tex)) return m;
+      maths.push({ tex, display: false });
+      return "\u0001MATH" + (maths.length - 1) + "\u0001";
+    });
   text = esc(text);
   const lines = text.split("\n");
   let html = "", para = [], list = null, table = null;
@@ -418,7 +461,155 @@ const ICON_COPY = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" s
 const ICON_REGEN = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>';
 const ICON_OK = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>';
 
+function startEditMessage(el, turn) {
+  if (generating) return toast("正在生成中,先停止");
+  if (!turn || turn.role !== "user") return;
+  const conv = active(); if (!conv) return;
+  const idx = conv.turns.indexOf(turn);
+  if (idx < 0) return;
+  const contentEl = el.querySelector(".content");
+  contentEl.innerHTML = "";
+  const ta = document.createElement("textarea"); ta.className = "editbox";
+  ta.value = turn.content; ta.rows = Math.min(12, turn.content.split("\n").length + 2);
+  const bar = document.createElement("div"); bar.className = "editbar";
+  const cancel = document.createElement("button"); cancel.textContent = "取消";
+  const saveBtn = document.createElement("button"); saveBtn.className = "primary"; saveBtn.textContent = "保存并重发";
+  cancel.onclick = () => renderThread();
+  saveBtn.onclick = () => {
+    const text = ta.value.trim(); if (!text) return;
+    turn.content = text;
+    conv.turns = conv.turns.slice(0, idx + 1);
+    dbPruneFrom(conv, Math.ceil((idx + 1) / 2));
+    save(); renderThread();
+    void persistNewPairs(conv);
+    sendFromHistory(conv, turn);
+  };
+  bar.append(cancel, saveBtn);
+  contentEl.append(ta, bar);
+  ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+
 const fmtSize = n => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : n >= 1024 ? (n / 1024).toFixed(1) + " KB" : n + " B";
+function splitStable(text) {
+  // Streaming paint: everything before the last safe boundary renders once;
+  // only the live tail re-renders each tick. Unsafe inside an unclosed code
+  // fence or an unclosed $$ pair.
+  if ((text.match(/```/g) || []).length % 2) {
+    const idx = text.lastIndexOf("```");
+    return [text.slice(0, idx), text.slice(idx)];
+  }
+  const cut = text.lastIndexOf("\n\n");
+  if (cut < 0) return ["", text];
+  const head = text.slice(0, cut);
+  if ((head.match(/\$\$/g) || []).length % 2) {
+    const idx = head.lastIndexOf("$$");
+    return [head.slice(0, idx), text.slice(idx)];
+  }
+  return [head, text.slice(cut)];
+}
+
+function apiBody(msgs, effort) {
+  const st = currentSettings();
+  const messages = st.system.trim() ? [{ role: "system", content: st.system.trim() }, ...msgs] : msgs;
+  const body = { messages, stream: true, temperature: st.temperature, reasoning_effort: effort === "none" ? "none" : effort };
+  if (st.maxTokens > 0) body.max_tokens = st.maxTokens;
+  return body;
+}
+
+function exportConv(c) {
+  if (!Array.isArray(c.turns) || !c.turns.length) return toast("会话还没加载或为空");
+  const lines = ["# " + c.title, ""];
+  for (const t of c.turns) {
+    if (t.role === "user") {
+      lines.push("## 你", "", t.content, "");
+      const names = (t.attachments || []).map(a => a.name).filter(Boolean);
+      if (names.length) lines.push("> 附件: " + names.join("、"), "");
+    } else {
+      lines.push("## NInfer" + (t.model ? " (" + t.model + ")" : ""), "");
+      if (t.reasoning) lines.push("<details><summary>思考过程</summary>\n\n" + t.reasoning + "\n</details>", "");
+      lines.push(t.content, "");
+    }
+  }
+  const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+  const link = document.createElement("a"); link.href = URL.createObjectURL(blob);
+  link.download = c.title.replace(/[\\/:*?"<>|]/g, "_") + ".md"; link.click(); URL.revokeObjectURL(link.href);
+}
+
+// ── manager DB persistence (hosted mode; localStorage stays the fallback) ──
+async function probeHosted() {
+  try { hosted = (await fetch("/api/config")).ok; } catch { hosted = false; }
+}
+async function dbList() {
+  const d = await (await fetch("/api/conversations")).json();
+  return (d.conversations || [])
+    .filter(c => typeof c.id === "string" && c.id.startsWith("w"))
+    .map(c => ({ id: c.id, title: c.title, updatedAt: Math.round((c.updated_at || 0) * 1000), turns: null, savedPairs: c.turn_count || 0 }));
+}
+async function hydrate(conv) {
+  try {
+    const d = await (await fetch("/api/conversations/" + conv.id)).json();
+    const turns = [];
+    for (const t of d.turns || []) {
+      turns.push({ role: "user", content: t.user?.content || "", attachments: t.attachments || [], ts: Math.round((t.created_at || 0) * 1000), dbId: t.id });
+      const cand = (t.candidates || []).find(x => x.id === t.active_candidate_id) || (t.candidates || []).slice(-1)[0];
+      if (cand) turns.push({ role: "assistant", content: cand.content || "", reasoning: cand.reasoning || "", model: cand.model || "", ts: Math.round((cand.created_at || 0) * 1000) });
+    }
+    conv.turns = turns; conv.savedPairs = (d.turns || []).length;
+    save();
+  } catch { conv.turns = []; }
+}
+async function persistNewPairs(conv) {
+  if (!hosted || !conv || !conv.id?.startsWith("w")) return;
+  const pairs = [];
+  for (let i = 0; i + 1 < conv.turns.length; i += 2) {
+    const u = conv.turns[i], a = conv.turns[i + 1];
+    if (u.role !== "user" || a.role !== "assistant") break;
+    pairs.push([u, a]);
+  }
+  for (let idx = conv.savedPairs || 0; idx < pairs.length; idx++) {
+    const [u, a] = pairs[idx];
+    if (!u.dbId) u.dbId = "wt-" + conv.id.slice(1) + "-" + idx;
+    const candId = "wc-" + u.dbId.slice(3);
+    try {
+      await fetch("/api/conversations/" + conv.id + "/turns/" + u.dbId, { method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: u.dbId, position: idx, user_content: u.content, user_display: u.content,
+          attachments: (u.attachments || []).map(x => ({ name: x.name, size: x.size, kind: x.kind, content: x.content, dataUrl: x.dataUrl })),
+          active_candidate_id: candId,
+          candidates: [{ id: candId, provider: "ninfer-webui", model: a.model || modelId, content: a.content || "", reasoning: a.reasoning || "", status: "done", tools: [] }] }) });
+    } catch {}
+  }
+  conv.savedPairs = pairs.length; save();
+}
+function dbPruneFrom(conv, pairCut) {
+  if (!hosted || !conv?.id?.startsWith("w")) return;
+  conv.turns.forEach((t, i) => {
+    if (t.role === "user" && t.dbId && i / 2 >= pairCut) {
+      fetch("/api/conversations/" + conv.id + "/turns/" + t.dbId, { method: "DELETE" }).catch(() => {});
+      delete t.dbId;
+    }
+  });
+  conv.savedPairs = Math.min(conv.savedPairs || 0, pairCut);
+}
+async function autoTitle(conv) {
+  try {
+    const u = (conv.turns.find(t => t.role === "user") || {}).content || "";
+    const a = (conv.turns.find(t => t.role === "assistant") || {}).content || "";
+    if (!u.trim() || !a.trim()) return;
+    const resp = await fetch(API("/v1/chat/completions"), { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [
+        { role: "system", content: "为对话起一个不超过12个字的中文标题。只输出标题本身,不要引号、句号或任何前缀。" },
+        { role: "user", content: "用户: " + u.slice(0, 300) + "\n\n助手: " + a.slice(0, 400) },
+      ], stream: false, temperature: 0, max_tokens: 32, reasoning_effort: "none" }) });
+    const d = await resp.json();
+    const title = (((d.choices || [{}])[0].message || {}).content || "").trim().split("\n")[0]
+      .replace(/^["'\u300c#0-9.\s]+/, "").replace(/["'\u300d\s]+$/, "").slice(0, 24);
+    if (title.length >= 2) {
+      conv.title = title; save(); renderSidebar();
+      if (hosted && conv.id?.startsWith("w")) fetch("/api/conversations/" + conv.id, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }) }).catch(() => {});
+    }
+  } catch {}
+}
+
 // Merge a turn's typed text with its file attachments for the API request.
 function requestContent(t) {
   const files = (t.attachments || []).filter(a => a.content);
@@ -448,6 +639,13 @@ function messageEl(turn, opts = {}) {
     const who = document.createElement("div"); who.className = "who"; who.textContent = "你";
     const content = document.createElement("div"); content.className = "content"; content.textContent = turn.content;
     body.append(who, content);
+    const ops = document.createElement("div"); ops.className = "ops-row";
+    const cp = document.createElement("button"); cp.className = "iconbtn"; cp.title = "复制"; cp.innerHTML = ICON_COPY;
+    cp.onclick = () => { navigator.clipboard.writeText(turn.content || ""); cp.innerHTML = ICON_OK; setTimeout(() => cp.innerHTML = ICON_COPY, 1200); };
+    const ed = document.createElement("button"); ed.className = "iconbtn"; ed.title = "编辑并重发";
+    ed.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>';
+    ed.onclick = () => startEditMessage(el, turn);
+    ops.append(cp, ed); body.appendChild(ops);
     if (turn.attachments?.length) {
       const att = document.createElement("div"); att.className = "att";
       for (const a of turn.attachments) {
@@ -474,7 +672,8 @@ function messageEl(turn, opts = {}) {
       + '<div class="think-body"></div>';
     think.querySelector(".think-body").textContent = turn.reasoning || "";
     const md = document.createElement("div"); md.className = "md";
-    md.innerHTML = renderMarkdown(turn.content || "") + (opts.streaming ? '<span class="cursor"></span>' : "");
+    if (opts.streaming) md.innerHTML = '<div class="md-s"></div><div class="md-t"></div>';
+    else md.innerHTML = renderMarkdown(turn.content || "");
     body.append(who, think, md);
     if (turn.reasoning) think.style.display = "";
     if (!opts.streaming && (turn.stats || opts.actions)) {
@@ -503,7 +702,7 @@ function messageEl(turn, opts = {}) {
 function renderThread() {
   threadEl.innerHTML = "";
   const conv = active();
-  const has = conv && conv.turns.length;
+  const has = conv && Array.isArray(conv.turns) && conv.turns.length;
   $("empty").style.display = has ? "none" : "";
   $("thread").style.display = has ? "" : "none";
   if (!has) return;
@@ -525,7 +724,9 @@ function toBottom(force) { if (force || stick) scrollEl.scrollTop = scrollEl.scr
 function ensureConv() {
   let conv = active();
   if (!conv) {
-    conv = { id: "c" + Date.now().toString(36), title: "新对话", model: modelId, createdAt: Date.now(), updatedAt: Date.now(), turns: [] };
+    conv = { id: "w" + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36),
+      title: "新对话", model: modelId, createdAt: Date.now(), updatedAt: Date.now(),
+      turns: [], settings: { ...store.defaults } };
     store.conversations.unshift(conv); store.activeId = conv.id;
   }
   return conv;
@@ -547,6 +748,9 @@ async function send(text) {
   renderAttachbar();
   const images = files.filter(a => a.kind === "image");
   const conv = ensureConv();
+  // A DB-backed conversation may not be hydrated yet when the user sends
+  // straight after a reload without clicking it in the sidebar first.
+  if (!Array.isArray(conv.turns)) await hydrate(conv);
   if (conv.title === "新对话") { conv.title = text.trim().slice(0, 32) || "新对话"; renderSidebar(); }
   // The bubble shows only the typed text; attachment text joins the message
   // at request time (see requestContent) so later turns still reference it.
@@ -582,18 +786,23 @@ async function send(text) {
     });
     const resp = await fetch(API("/v1/chat/completions"), {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: msgs, stream: true, temperature: 0.7, reasoning_effort: effort === "none" ? "none" : effort }),
+      body: JSON.stringify(apiBody(msgs, effort)),
       signal: controller.signal,
     });
     if (!resp.ok) throw new Error("HTTP " + resp.status + " " + (await resp.text()).slice(0, 200));
     const reader = resp.body.getReader(), dec = new TextDecoder();
-    let buf = "", renderAt = 0;
+    let buf = "", renderAt = 0, paintedStable = null;
     const paint = force => {
       const now = performance.now();
       if (botTurn.content || botTurn.reasoning) waiter.settle();
       if (force || now - renderAt > 90) {
         renderAt = now;
-        mdEl.innerHTML = renderMarkdown(botTurn.content) + '<span class="cursor"></span>';
+        const [stablePart, livePart] = splitStable(botTurn.content);
+        if (stablePart !== paintedStable) {
+          paintedStable = stablePart;
+          mdEl.querySelector(".md-s").innerHTML = renderMarkdown(stablePart);
+        }
+        mdEl.querySelector(".md-t").innerHTML = renderMarkdown(livePart) + '<span class="cursor"></span>';
         if (botTurn.reasoning) { thinkEl.style.display = ""; thinkBody.textContent = botTurn.reasoning; thinkBody.scrollTop = thinkBody.scrollHeight; }
         toBottom();
       }
@@ -647,6 +856,8 @@ async function send(text) {
     }
     conv.updatedAt = Date.now();
     save(); renderSidebar(); setGenerating(false); controller = null;
+    void persistNewPairs(conv);
+    if (!conv.titled && conv.turns.some(t => t.role === "assistant")) { conv.titled = true; autoTitle(conv); }
     toBottom();
   }
 }
@@ -667,6 +878,7 @@ async function sendFromHistory(conv, userTurn) {
   const el = messageEl(botTurn, { streaming: true, thinkingOpen: true });
   threadEl.appendChild(el);
   const mdEl = el.querySelector(".md"), thinkEl = el.querySelector(".think"), thinkBody = el.querySelector(".think-body");
+  const waiter = attachWaiter(el);
   const images = [];
   setGenerating(true); controller = new AbortController();
   const t0 = performance.now(); let firstAt = null, thinkDoneAt = null, stats = {};
@@ -683,18 +895,23 @@ async function sendFromHistory(conv, userTurn) {
     });
     const resp = await fetch(API("/v1/chat/completions"), {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: msgs, stream: true, temperature: 0.7, reasoning_effort: effort === "none" ? "none" : effort }),
+      body: JSON.stringify(apiBody(msgs, effort)),
       signal: controller.signal,
     });
     if (!resp.ok) throw new Error("HTTP " + resp.status);
     const reader = resp.body.getReader(), dec = new TextDecoder();
-    let buf = "", renderAt = 0;
+    let buf = "", renderAt = 0, paintedStable = null;
     const paint = force => {
       const now = performance.now();
       if (botTurn.content || botTurn.reasoning) waiter.settle();
       if (force || now - renderAt > 90) {
         renderAt = now;
-        mdEl.innerHTML = renderMarkdown(botTurn.content) + '<span class="cursor"></span>';
+        const [stablePart, livePart] = splitStable(botTurn.content);
+        if (stablePart !== paintedStable) {
+          paintedStable = stablePart;
+          mdEl.querySelector(".md-s").innerHTML = renderMarkdown(stablePart);
+        }
+        mdEl.querySelector(".md-t").innerHTML = renderMarkdown(livePart) + '<span class="cursor"></span>';
         if (botTurn.reasoning) { thinkEl.style.display = ""; thinkBody.textContent = botTurn.reasoning; thinkBody.scrollTop = thinkBody.scrollHeight; }
         toBottom();
       }
@@ -736,7 +953,9 @@ async function sendFromHistory(conv, userTurn) {
       ttft: firstAt != null ? Math.round(firstAt - t0) : null,
     };
     if (botTurn.content || botTurn.reasoning) { conv.turns.push(botTurn); threadEl.appendChild(messageEl(botTurn, { actions: true })); }
-    conv.updatedAt = Date.now(); save(); renderSidebar(); setGenerating(false); controller = null; toBottom();
+    conv.updatedAt = Date.now(); save(); renderSidebar(); setGenerating(false); controller = null;
+    void persistNewPairs(conv);
+    toBottom();
   }
 }
 
@@ -746,6 +965,7 @@ inputEl.addEventListener("input", autosize);
 inputEl.addEventListener("keydown", e => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); dispatch(); }
 });
+window.addEventListener("unhandledrejection", e => toast("出错了: " + (e.reason?.message || e.reason)));
 function dispatch() {
   if (generating) { controller?.abort(); return; }
   const text = inputEl.value;
@@ -755,7 +975,18 @@ function dispatch() {
 }
 sendEl.onclick = dispatch;
 $("newchat").onclick = () => { if (generating) return toast("正在生成中,先停止再新建"); store.activeId = null; renderSidebar(); renderThread(); inputEl.focus(); };
-function toast(msg) { $("disclaimer").textContent = msg; setTimeout(() => $("disclaimer").textContent = "NInfer 引擎 · 本页面由 llama-manager 托管", 2400); }
+function toast(msg) { $("disclaimer").textContent = msg; setTimeout(() => { $("disclaimer").textContent = hosted ? "NInfer 引擎 · 历史已同步管理器数据库" : "NInfer 引擎 · 本页面由 llama-manager 托管"; }, 2400); }
+$("gear").onclick = e => {
+  e.stopPropagation();
+  const pop = $("settings-pop");
+  const show = pop.style.display !== "flex";
+  if (show) { const st = currentSettings(); $("set-sys").value = st.system; $("set-temp").value = st.temperature; $("set-max").value = st.maxTokens; }
+  pop.style.display = show ? "flex" : "none";
+};
+document.addEventListener("click", e => { if (!$("settings-pop").contains(e.target) && !e.target.closest("#gear")) $("settings-pop").style.display = "none"; });
+$("set-sys").addEventListener("input", () => { currentSettings().system = $("set-sys").value; save(); });
+$("set-temp").addEventListener("change", () => { currentSettings().temperature = Math.min(2, Math.max(0, Number($("set-temp").value) || 0.7)); save(); });
+$("set-max").addEventListener("change", () => { currentSettings().maxTokens = Math.max(0, Math.round(Number($("set-max").value) || 0)); save(); });
 
 /* copy code blocks + html/svg preview toggle (event delegation) */
 document.addEventListener("click", e => {
@@ -819,8 +1050,8 @@ function autoSizePreview(frame) {
 const TEXT_EXT = /\.(txt|md|markdown|py|js|ts|tsx|jsx|json|csv|log|xml|yaml|yml|html|css|sql|sh|toml|ini)$/i;
 const MAX_ATTACH_CHARS = 100000;
 $("attach").onclick = () => $("file").click();
-$("file").addEventListener("change", async e => {
-  for (const f of e.target.files) {
+async function handleFiles(fileList) {
+  for (const f of fileList) {
     if (f.type.startsWith("image/")) {
       if (!visionOK) { toast("当前模型不支持视觉输入,已跳过图片 " + f.name); continue; }
       const dataUrl = await new Promise((ok, err) => {
@@ -856,9 +1087,18 @@ $("file").addEventListener("change", async e => {
     }
     toast("不支持的文件类型: " + f.name);
   }
-  e.target.value = "";
   renderAttachbar();
+}
+$("file").addEventListener("change", e => { const list = e.target.files; handleFiles(list); e.target.value = ""; });
+["dragover", "dragenter"].forEach(ev => $("composer-wrap").addEventListener(ev, e => { e.preventDefault(); $("composer-wrap").classList.add("dropping"); }));
+["dragleave", "drop"].forEach(ev => $("composer-wrap").addEventListener(ev, e => { e.preventDefault(); $("composer-wrap").classList.remove("dropping"); }));
+$("composer-wrap").addEventListener("drop", e => { if (e.dataTransfer?.files?.length) handleFiles(e.dataTransfer.files); });
+inputEl.addEventListener("paste", e => {
+  const files = [...(e.clipboardData?.files || [])];
+  if (files.length) { e.preventDefault(); handleFiles(files); }
 });
+
+/* ───────── settings popover ───────── */
 function renderAttachbar() {
   const bar = $("attachbar");
   bar.innerHTML = "";
@@ -885,9 +1125,22 @@ $("sugg").addEventListener("click", e => {
 
 /* ───────── boot ───────── */
 load();
+if (!store.defaults) store.defaults = { system: "", temperature: 0.7, maxTokens: 0 };
 if (!store.activeId && store.conversations.length) store.activeId = store.conversations[0].id;
 renderSidebar(); renderThread(); autosize();
 if (innerWidth <= 900) $("sidebar").classList.add("collapsed");
+// Hosted by the manager: conversations live in its database and only this
+// page's "w" ids are listed. localStorage remains the offline fallback.
+void (async () => {
+  await probeHosted();
+  if (!hosted) return;
+  try {
+    store.conversations = await dbList();
+    store.activeId = store.conversations[0]?.id || null;
+    save(); renderSidebar(); renderThread();
+    $("disclaimer").textContent = "NInfer 引擎 · 历史已同步管理器数据库";
+  } catch { hosted = false; }
+})();
 
 fetch(API("/v1/models")).then(r => r.json()).then(d => {
   const m = (d.data || [])[0] || {};

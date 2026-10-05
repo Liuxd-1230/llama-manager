@@ -1185,7 +1185,7 @@ def _profile_summary(name: str, profile: AppConfig) -> dict:
         "model_name": model_path.name if model_path else "",
         "model_size_mb": model_size_mb,
         "model_exists": model_exists,
-        "model_meta": cfg.read_gguf_metadata(profile.model_path),
+        "model_meta": cfg.read_model_metadata(profile.model_path),
         "ctx_size": basic.ctx_size,
         "kvmem": {
             "workspace": kvmem.workspace,

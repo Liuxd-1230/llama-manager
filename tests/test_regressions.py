@@ -491,6 +491,46 @@ class NinferCommandTests(unittest.TestCase):
             self.assertEqual(summary["ninfer"]["spec"], "mtp")
             self.assertEqual(summary["ninfer"]["kv_dtype"], "k8v4")
 
+    def test_ninfer_metadata_parsed_for_profile_card(self):
+        import json as _json
+        import struct as _struct
+        with TemporaryDirectory() as tmp:
+            model = Path(tmp) / "bonsai.ninfer"
+            manifest = {
+                "metadata": {"name": "bonsai2-27b"},
+                "components": {
+                    "text": {"config": {"architectures": ["Qwen3_5ForCausalLM"], "num_hidden_layers": 64, "max_position_embeddings": 262144}},
+                    "mtp": {"config": {}},
+                },
+            }
+            blob = _json.dumps(manifest).encode()
+            model.write_bytes(b"NINFER\x00" + bytes([3]) + _struct.pack("<Q", len(blob)) + b"\x00" * 16 + blob)
+            meta = cfg.read_model_metadata(str(model))
+            self.assertEqual(meta["name"], "bonsai2-27b")
+            self.assertEqual(meta["architecture"], "Qwen3.5")
+            self.assertEqual(meta["layers"], 64)
+            self.assertEqual(meta["context_length"], 262144)
+            self.assertTrue(meta["native_mtp"])
+            # garbage file → {} not an error
+            junk = Path(tmp) / "junk.ninfer"
+            junk.write_bytes(b"not a container")
+            self.assertEqual(cfg.read_model_metadata(str(junk)), {})
+
+    def test_conversation_turn_delete_endpoint(self):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "CONFIG_DIR", Path(tmp)):
+            with TestClient(app) as client:
+                turn = {
+                    "id": "turn-1", "position": 0, "user_content": "hi", "user_display": "hi",
+                    "attachments": [], "active_candidate_id": "cand-1",
+                    "candidates": [{"id": "cand-1", "provider": "ninfer-webui", "model": "m", "content": "hello", "reasoning": "", "status": "done", "tools": []}],
+                }
+                client.put("/api/conversations/conv-x/turns/turn-1", json=turn)
+                loaded = client.get("/api/conversations/conv-x").json()
+                self.assertEqual(len(loaded["turns"]), 1)
+                self.assertEqual(client.delete("/api/conversations/conv-x/turns/turn-1").status_code, 200)
+                self.assertEqual(client.get("/api/conversations/conv-x").json()["turns"], [])
+                self.assertEqual(client.delete("/api/conversations/conv-x/turns/missing").status_code, 404)
+
 
 class LocalPayloadThinkingTests(unittest.TestCase):
     def test_thinking_toggle_maps_to_template_kwargs_symmetrically(self):

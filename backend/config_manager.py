@@ -210,6 +210,54 @@ def _parse_gguf_header(path: Path) -> dict:
     return meta
 
 
+# ── .ninfer container metadata ────────────────────────────────
+# Container: [0..6] magic "NINFER\0", [7] version, [8..15] manifest length
+# uint64 LE, [16..31] artifact id, then the JSON manifest (peek_container.py).
+_NINFER_MAGIC = b"NINFER\x00"
+
+
+def read_ninfer_metadata(model_path: str) -> dict:
+    """Read a .ninfer container's manifest header — display-only, no payload.
+
+    Any missing file or malformed header yields {} instead of an error."""
+    path = Path(model_path) if model_path else None
+    if not path or not path.is_file():
+        return {}
+    try:
+        with path.open("rb") as fh:
+            head = fh.read(32)
+            if len(head) < 32 or head[:7] != _NINFER_MAGIC:
+                return {}
+            (mlen,) = struct.unpack("<Q", head[8:16])
+            manifest = json.loads(fh.read(mlen).decode("utf-8"))
+        meta = manifest.get("metadata") or {}
+        config = (manifest.get("components") or {}).get("text") or {}
+        config = config.get("config") or {}
+        out: dict = {}
+        if meta.get("name"):
+            out["name"] = meta["name"]
+        architectures = config.get("architectures") or []
+        if architectures:
+            # "Qwen3_5ForCausalLM" → "Qwen3.5" for the card line
+            out["architecture"] = str(architectures[0]).replace("ForCausalLM", "").replace("_", ".")
+        if isinstance(config.get("num_hidden_layers"), int):
+            out["layers"] = config["num_hidden_layers"]
+        if isinstance(config.get("max_position_embeddings"), int):
+            out["context_length"] = config["max_position_embeddings"]
+        if "mtp" in (manifest.get("components") or {}):
+            out["native_mtp"] = True
+        return out
+    except Exception:
+        return {}
+
+
+def read_model_metadata(model_path: str) -> dict:
+    """Dispatch by artifact type: .ninfer containers vs GGUF headers."""
+    if model_path and str(model_path).lower().endswith(".ninfer"):
+        return read_ninfer_metadata(model_path)
+    return read_gguf_metadata(model_path)
+
+
 def list_drives() -> list[str]:
     """List available drive roots on Windows, or ['/'] on Linux.
 

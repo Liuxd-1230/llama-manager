@@ -41,6 +41,16 @@ export function RunPage({ config, toast }: { config: AppConfig; toast: (text: st
       : serverUrl,
     [config.engine, serverUrl],
   )
+  // NInfer prints "capacity | KV 4,032 tokens, ... | free 295.4 MiB" at
+  // startup — surface it so a tight pool is visible before requests stall.
+  const capacity = useMemo(() => {
+    if (config.engine !== 'ninfer') return null
+    for (let i = logs.length - 1; i >= 0; i--) {
+      const m = logs[i].match(/capacity \| KV ([\d,]+) tokens.*?free ([\d.]+) (MiB|GiB|B)/)
+      if (m) return { kv: m[1], free: `${m[2]} ${m[3]}` }
+    }
+    return null
+  }, [config.engine, logs])
   const running = status.state === 'running'
   const start = async () => {
     await api('/api/config', { method: 'POST', body: JSON.stringify(config) })
@@ -58,6 +68,7 @@ export function RunPage({ config, toast }: { config: AppConfig; toast: (text: st
       <Button tone="danger" disabled={!running} onClick={() => void stop()}><Square size={15}/>停止</Button>
       <Badge tone={healthy ? 'good' : running ? 'warn' : 'neutral'}>{healthy ? '服务可用' : running ? '启动中' : '未运行'}</Badge>
       <span className={styles.statusDot}>{running ? `PID ${status.pid || '—'} · ${formatTime(status.uptime_seconds || 0)}` : '已停止'}</span>
+      {capacity && running && <span className={styles.statusDot}>KV 池 {capacity.kv} · 显存余量 {capacity.free}</span>}
       <span className={page.muted}>{serverUrl}</span>
       {status.error && <span className={page.hint}>{status.error}</span>}
       <div className={page.row} style={{ marginLeft: 'auto' }}>
