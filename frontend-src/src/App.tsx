@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from 'motion/react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { HashRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { api } from './api'
+import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { SettingsDrawer } from './components/SettingsDrawer'
 import { TaskCenter } from './components/TaskCenter'
 import { Badge, Button, uiStyles } from './components/ui'
@@ -30,7 +31,7 @@ const ChatPage = lazy(() => import('./features/chat/ChatPage').then(module => ({
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 3000, retry: 1, refetchOnWindowFocus: false } } })
 
 export default function App() {
-  return <QueryClientProvider client={queryClient}><HashRouter><Shell /></HashRouter></QueryClientProvider>
+  return <QueryClientProvider client={queryClient}><AppErrorBoundary><HashRouter><Shell /></HashRouter></AppErrorBoundary></QueryClientProvider>
 }
 
 function Shell() {
