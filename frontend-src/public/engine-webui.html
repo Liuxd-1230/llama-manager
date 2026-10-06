@@ -72,6 +72,9 @@ body { margin: 0; background: var(--bg); color: var(--text); font: var(--font); 
   border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 13px; max-width: 200px; }
 #topbar .spacer { flex: 1; }
 #topbar .model-info { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctxmeter { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.ctxmeter .ctxbar { width: 84px; height: 6px; border-radius: 4px; background: var(--border); overflow: hidden; display: inline-block; }
+.ctxmeter .ctxfill { display: block; height: 100%; border-radius: 4px; background: var(--good); transition: width .3s ease, background .3s ease; }
 #settings-pop { position: fixed; top: 54px; right: 16px; z-index: 60; width: 320px; max-width: calc(100vw - 32px);
   background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px;
   box-shadow: var(--shadow); display: none; flex-direction: column; gap: 10px; }
@@ -240,6 +243,7 @@ body { margin: 0; background: var(--bg); color: var(--text); font: var(--font); 
       <option value="max">思考: max</option>
     </select>
     <div class="spacer"></div>
+    <span class="ctxmeter" id="ctxmeter" title="当前会话已占用上下文（引擎统计）"><span id="ctxtext">上下文 —</span><span class="ctxbar"><span class="ctxfill" id="ctxfill" style="width:0%"></span></span></span>
     <span class="model-info" id="modelinfo"></span>
     <button class="iconbtn" id="gear" title="会话设置"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
   </div>
@@ -294,6 +298,7 @@ let store = { conversations: [], activeId: null, defaults: { system: "", tempera
 let hosted = false;
 let generating = false, controller = null;
 let attachments = [], visionOK = false;
+let poolTokens = 0;
 const currentSettings = () => (active() && active().settings) || store.defaults;
 let modelId = "", modelCtx = "";
 const threadEl = $("thread"), scrollEl = $("scroll"), inputEl = $("input"), sendEl = $("send");
@@ -489,6 +494,22 @@ function startEditMessage(el, turn) {
   ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
 }
 
+function setCtx(tokens) {
+  const text = $("ctxtext"), fill = $("ctxfill");
+  if (!tokens) { text.textContent = "上下文 —"; fill.style.width = "0%"; $("ctxmeter").title = "当前会话已占用上下文（引擎统计）"; return; }
+  text.textContent = "上下文 " + tokens.toLocaleString("en-US") + (poolTokens ? " / " + poolTokens.toLocaleString("en-US") : "");
+  if (poolTokens) {
+    const pct = Math.min(100, (tokens / poolTokens) * 100);
+    fill.style.width = pct + "%";
+    fill.style.background = pct > 90 ? "var(--bad)" : pct > 70 ? "#e0a63c" : "var(--good)";
+    $("ctxmeter").title = tokens >= poolTokens
+      ? "已超过设备池(" + poolTokens + "):检索换页会显著变慢,建议开新对话"
+      : "设备池 " + poolTokens.toLocaleString("en-US") + " token,超过后进入检索换页";
+  } else {
+    fill.style.width = "0%";
+  }
+}
+
 const fmtSize = n => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : n >= 1024 ? (n / 1024).toFixed(1) + " KB" : n + " B";
 function splitStable(text) {
   // Streaming paint: everything before the last safe boundary renders once;
@@ -561,6 +582,9 @@ async function hydrate(conv) {
       }
     }
     conv.turns = turns; conv.savedPairs = (d.turns || []).length;
+    const lastBot = [...turns].reverse().find(t => t.role === "assistant");
+    if (lastBot?.ctxTokens) conv.ctxTokens = lastBot.ctxTokens;
+    setCtx(conv.ctxTokens || 0);
     save();
   } catch { conv.turns = []; }
 }
@@ -723,8 +747,9 @@ function renderThread() {
   const has = conv && Array.isArray(conv.turns) && conv.turns.length;
   $("empty").style.display = has ? "none" : "";
   $("thread").style.display = has ? "" : "none";
-  if (!has) return;
+  if (!has) { setCtx(0); return; }
   conv.turns.forEach((t, i) => threadEl.appendChild(messageEl(t, { actions: t.role === "assistant" && i === conv.turns.length - 1 })));
+  setCtx(conv.ctxTokens || 0);
   toBottom(true);
 }
 
@@ -872,10 +897,13 @@ async function send(text) {
       conv.turns.push(botTurn);
       threadEl.appendChild(messageEl(botTurn, { actions: true }));
     }
+    const ctxUsed = (stats.prompt_n || 0) + (stats.predicted_n || 0);
+    if (ctxUsed) { botTurn.ctxTokens = ctxUsed; conv.ctxTokens = ctxUsed; }
     conv.updatedAt = Date.now();
     save(); renderSidebar(); setGenerating(false); controller = null;
     void persistNewPairs(conv);
     if (!conv.titled && conv.turns.some(t => t.role === "assistant")) { conv.titled = true; autoTitle(conv); }
+    setCtx(conv.ctxTokens || 0);
     toBottom();
   }
 }
@@ -1003,8 +1031,11 @@ async function sendFromHistory(conv, userTurn, existingTurn) {
     };
     if (!existingTurn && (botTurn.content || botTurn.reasoning)) conv.turns.push(botTurn);
     if (botTurn.content || botTurn.reasoning) threadEl.appendChild(messageEl(botTurn, { actions: true }));
+    const ctxUsed2 = (stats.prompt_n || 0) + (stats.predicted_n || 0);
+    if (ctxUsed2) { botTurn.ctxTokens = ctxUsed2; conv.ctxTokens = ctxUsed2; }
     conv.updatedAt = Date.now(); save(); renderSidebar(); setGenerating(false); controller = null;
     void persistNewPairs(conv);
+    setCtx(conv.ctxTokens || 0);
     toBottom();
   }
 }
@@ -1183,6 +1214,14 @@ if (innerWidth <= 900) $("sidebar").classList.add("collapsed");
 // page's "w" ids are listed. localStorage remains the offline fallback.
 void (async () => {
   await probeHosted();
+  if (hosted) {
+    // Device-pool size from the profile, so the meter can warn before the
+    // small GPU pool starts spilling into retrieval.
+    try {
+      const cfg = await (await fetch("/api/config")).json();
+      if (cfg.engine === "ninfer") poolTokens = cfg.ninfer?.kv_capacity || 0;
+    } catch {}
+  }
   if (!hosted) return;
   try {
     store.conversations = await dbList();
