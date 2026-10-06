@@ -5,11 +5,11 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../../api'
 import { Badge, Button, ConfirmButton, Input, Panel } from '../../components/ui'
 import type { AppConfig } from '../../types'
-import { estimateVram } from '../../utils/vram'
+import { estimateUsage } from '../../utils/vram'
 import page from '../pages.module.css'
 import styles from './models.module.css'
 
-type ProfileMeta = { name?: string; architecture?: string; layers?: number; experts?: number; active_experts?: number; context_length?: number; native_mtp?: boolean }
+type ProfileMeta = { name?: string; architecture?: string; layers?: number; experts?: number; active_experts?: number; context_length?: number; native_mtp?: boolean; hidden?: number; kv_layers?: number; kv_bytes_per_token?: number; kv_bytes_per_token_f16?: number }
 
 type Profile = {
   name: string
@@ -168,12 +168,17 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
   const isNinfer = profile.engine === 'ninfer'
   const fmtK = (n: number) => (n >= 1024 ? `${Math.round(n / 1024)}K` : String(n))
   const sizeLabel = profile.model_size_mb >= 1024 ? `${(profile.model_size_mb / 1024).toFixed(1)} GB` : profile.model_size_mb ? `${profile.model_size_mb.toFixed(0)} MB` : ''
-  const vram = estimateVram({
+  const usage = estimateUsage({
     engine: profile.engine || 'llama.cpp', modelSizeMb: profile.model_size_mb,
     ctxSize: profile.ctx_size, kvCacheQuant: profile.kv_cache_quant_k || profile.kv_cache_quant_v || 'q8_0',
-    flashAttn: profile.flash_attn,
     kvmem: { budget: profile.kvmem?.budget ?? 0, gen_reserve: profile.kvmem?.gen_reserve ?? 0, kv_dtype: profile.kvmem?.kv_dtype ?? 'q8_0' },
-    ninfer: { kv_capacity: profile.ninfer?.kv_capacity ?? 0, prefill_chunk: 256, cuda_graph: false },
+    ninfer: { kv_capacity: profile.ninfer?.kv_capacity ?? 0, prefill_chunk: 256, cuda_graph: false, host_kv_mib: 16384 },
+    geom: {
+      kv_bytes_per_token: typeof meta.kv_bytes_per_token === 'number' ? meta.kv_bytes_per_token : undefined,
+      kv_bytes_per_token_f16: typeof meta.kv_bytes_per_token_f16 === 'number' ? meta.kv_bytes_per_token_f16 : undefined,
+      hidden: typeof meta.hidden === 'number' ? meta.hidden : undefined,
+      kv_layers: typeof meta.kv_layers === 'number' ? meta.kv_layers : undefined,
+    },
   })
   const chips: { label: string; active?: boolean }[] = [
     ...(isKvmem ? [{ label: 'KVMem', active: true }] : []),
@@ -195,7 +200,7 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
     ...(profile.thinking ? [{ label: '思考', active: true }] : []),
     ...(profile.chat_template_file ? [{ label: '自定义模板', active: true }] : []),
     { label: `${profile.host}:${profile.port}` },
-    { label: `显存 ≈${vram.totalGb.toFixed(1)}G${vram.over ? ' ⚠' : ''}` },
+    { label: `显存 ≈${usage.vram.totalGb.toFixed(1)}G · 内存 ≈${usage.ram.totalGb.toFixed(1)}G${usage.vram.over ? ' ⚠' : ''}` },
   ]
   const parts = [
     meta.name && meta.architecture ? `${meta.name} · ${meta.architecture}` : meta.architecture || '',

@@ -128,13 +128,15 @@ _GGUF_SCALAR_FORMATS = {
     0: "<B", 1: "<b", 2: "<H", 3: "<h", 4: "<I", 5: "<i",
     6: "<f", 7: "<B", 10: "<Q", 11: "<q", 12: "<d",
 }
+_ARRAY_ELEMENT_LIMIT = 1024  # head-count / layer-type arrays are small; skip giant ones
 
 
 def read_gguf_metadata(model_path: str) -> dict:
     """Read a small whitelist of GGUF header fields (never tensor data).
 
-    Metadata is display-only for profile cards, so any missing file or
-    malformed header yields {} instead of an error.
+    Metadata is display-only for profile cards and feeds the VRAM estimator
+    (KV geometry), so any missing file or malformed header yields {} instead
+    of an error.
     """
     path = Path(model_path) if model_path else None
     if not path or not path.is_file():
@@ -167,13 +169,22 @@ def _parse_gguf_header(path: Path) -> dict:
                 elem_type, = struct.unpack("<I", fh.read(4))
                 count, = struct.unpack("<Q", fh.read(8))
                 if elem_type == _GGUF_STRING:
-                    for _ in range(count):
-                        read_string()
-                else:
-                    fmt = _GGUF_SCALAR_FORMATS.get(elem_type)
-                    if fmt:
-                        fh.seek(struct.calcsize(fmt) * count, os.SEEK_CUR)
-                return None
+                    values = []
+                    for index in range(count):
+                        item = read_string()
+                        if index < _ARRAY_ELEMENT_LIMIT:
+                            values.append(item)
+                    return values
+                fmt = _GGUF_SCALAR_FORMATS.get(elem_type)
+                if fmt is None:
+                    raise ValueError(f"unknown gguf array element type {elem_type}")
+                values = []
+                for index in range(count):
+                    if index < _ARRAY_ELEMENT_LIMIT:
+                        values.append(struct.unpack(fmt, fh.read(struct.calcsize(fmt)))[0])
+                    else:
+                        fh.seek(struct.calcsize(fmt), os.SEEK_CUR)
+                return values
             fmt = _GGUF_SCALAR_FORMATS.get(value_type)
             if fmt is None:
                 raise ValueError(f"unknown gguf value type {value_type}")
@@ -194,6 +205,16 @@ def _parse_gguf_header(path: Path) -> dict:
                 meta["active_experts"] = value
             elif key.endswith(".context_length"):
                 meta["context_length"] = value
+            elif key.endswith(".embedding_length"):
+                meta["hidden"] = value
+            elif key.endswith(".attention.head_count_kv"):
+                meta["kv_heads"] = value
+            elif key.endswith(".attention.head_count"):
+                meta["heads"] = value
+            elif key.endswith(".attention.key_length"):
+                meta["head_dim"] = value
+            elif key.endswith(".attention.layer_types"):
+                meta["layer_types"] = value
             else:
                 return False
             return True
@@ -203,10 +224,52 @@ def _parse_gguf_header(path: Path) -> dict:
             value_type, = struct.unpack("<I", fh.read(4))
             if record(key, read_value(value_type)):
                 # All wanted keys sit in the front matter; expert keys only exist
-                # for MoE models, so don't wait for them on dense ones.
+                # for MoE models and KV geometry may trail the basics, so keep
+                # scanning unless everything is in (the tokenizer arrays that
+                # follow are read-and-skipped either way).
                 if ("name" in meta and "architecture" in meta and "layers" in meta
-                        and "context_length" in meta and ("experts" in meta or index >= 64)):
+                        and "context_length" in meta and "kv_heads" in meta
+                        and ("experts" in meta or index >= 128)):
                     break
+    _finalize_gguf_meta(meta)
+    return meta
+
+
+def _finalize_gguf_meta(meta: dict) -> dict:
+    """Derive per-token KV bytes (f16) from the header geometry.
+
+    KV per token = 2 (K+V) × kv_heads × head_dim × 2 bytes, over the layers
+    that actually carry attention. Hybrid architectures (linear attention /
+    GDN layers) declare per-layer types or zero kv-head entries — count those;
+    when the GGUF flattens a hybrid model to a scalar kv-head count, fall back
+    to the known architecture stride (qwen3.5: full attention every 4th layer).
+    """
+    kv_heads = meta.get("kv_heads")
+    if kv_heads is None:
+        return meta
+    layers = meta.get("layers")
+    if isinstance(kv_heads, list):
+        kv_layers = sum(1 for heads in kv_heads if heads)
+        per_layer_heads = next((heads for heads in kv_heads if heads), 0)
+        layer_types = meta.get("layer_types")
+        if isinstance(layer_types, list) and layer_types:
+            kv_layers = sum(1 for kind in layer_types if str(kind) == "full_attention")
+    else:
+        kv_layers = layers or 0
+        per_layer_heads = kv_heads
+        arch = str(meta.get("architecture", "")).lower()
+        stride = next((v for key, v in {"qwen35": 4, "qwen3.5": 4}.items() if arch.startswith(key)), None)
+        if stride and layers:
+            kv_layers = -(-layers // stride)
+    head_dim = meta.get("head_dim")
+    if not head_dim:
+        heads = meta.get("heads")
+        hidden = meta.get("hidden")
+        head_dim = int(hidden / heads) if heads and hidden else 128
+    meta["head_dim"] = head_dim
+    meta["kv_layers"] = kv_layers
+    if kv_layers and per_layer_heads and head_dim:
+        meta["kv_bytes_per_token_f16"] = 2 * int(per_layer_heads) * int(head_dim) * int(kv_layers) * 2
     return meta
 
 
@@ -244,8 +307,19 @@ def read_ninfer_metadata(model_path: str) -> dict:
             out["layers"] = config["num_hidden_layers"]
         if isinstance(config.get("max_position_embeddings"), int):
             out["context_length"] = config["max_position_embeddings"]
+        if isinstance(config.get("hidden_size"), int):
+            out["hidden"] = config["hidden_size"]
         if "mtp" in (manifest.get("components") or {}):
             out["native_mtp"] = True
+        # Per-token KV estimate: the engine prints no per-token figure and the
+        # manifest lacks attention geometry, so scale the pack-measured
+        # 27.3 KB/token (bonsai2-27b, k8v4) by hidden size.
+        layer_types = config.get("layer_types") or []
+        if isinstance(layer_types, list) and layer_types:
+            out["kv_layers"] = sum(1 for kind in layer_types if str(kind) == "full_attention")
+        hidden = config.get("hidden_size")
+        if isinstance(hidden, int) and hidden > 0:
+            out["kv_bytes_per_token"] = int(27300 * hidden / 5120)
         return out
     except Exception:
         return {}

@@ -23,9 +23,9 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
     void load(selected)
   }
   const currentNameQuery = useQuery({ queryKey: ['current-profile'], queryFn: () => api<{ name: string }>('/api/profiles/current'), staleTime: 0 })
-  const profilesQuery = useQuery({ queryKey: ['profiles'], queryFn: () => api<{ profiles: Array<{ name: string; model_size_mb: number }> }>('/api/profiles'), staleTime: 30000 })
-  const modelSizeMb = profilesQuery.data?.profiles.find(p => p.name === (currentNameQuery.data?.name || ''))?.model_size_mb || 0
-  const vram = estimateFromConfig(config, modelSizeMb)
+  const profilesQuery = useQuery({ queryKey: ['profiles'], queryFn: () => api<{ profiles: Array<{ name: string; model_size_mb: number; model_meta: Record<string, unknown> }> }>('/api/profiles'), staleTime: 30000 })
+  const currentProfile = profilesQuery.data?.profiles.find(p => p.name === (currentNameQuery.data?.name || ''))
+  const usage = estimateFromConfig(config, currentProfile?.model_size_mb || 0, currentProfile?.model_meta)
   useEffect(() => { if (!nameTouched && currentNameQuery.data?.name) setName(currentNameQuery.data.name) }, [currentNameQuery.data, nameTouched])
   const [configs, setConfigs] = useState<string[]>([])
   const [browse, setBrowse] = useState<BrowseTarget>(null)
@@ -240,14 +240,19 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
           </div>
           {isNative && <div className={page.formGrid} style={{ marginTop: 12 }}><NumberField label="Batch" value={basic.batch_size} onChange={batch_size => patchBasic({ batch_size })}/><NumberField label="Micro Batch" value={basic.ubatch_size} onChange={ubatch_size => patchBasic({ ubatch_size })}/></div>}
           <div style={{ marginTop: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-3)', marginBottom: 5 }}>
-              <span>预计显存（估算系数基于 Bonsai 27B 实测）：{vram.parts.map(p => `${p.label} ${p.gb.toFixed(2)}`).join(' + ')} ≈ <b style={{ color: vram.over ? 'var(--red)' : 'var(--text)' }}>{vram.totalGb.toFixed(2)} GB</b></span>
-              <span>安全线 7.4 / 8.0 GB</span>
-            </div>
-            <div style={{ height: 8, borderRadius: 5, background: 'var(--line)', overflow: 'hidden' }}>
-              <div style={{ width: `${Math.min(100, (vram.totalGb / 8) * 100)}%`, height: '100%', borderRadius: 5, transition: 'width .25s ease, background .25s ease', background: vram.over ? 'var(--red)' : vram.totalGb > 6.5 ? 'var(--yellow)' : 'var(--green)' }}/>
-            </div>
-            {vram.over && <p className={page.hint} style={{ color: 'var(--red)', margin: '5px 0 0' }}>⚠ 超过 7.4GB 安全线：可能启动被拒或推理中 OOM。</p>}
+            {[
+              { title: '预计显存', est: usage.vram, budget: 8, warn: 6.5, line: '安全线 7.4 / 8.0 GB', warnText: '⚠ 超过 7.4GB 安全线：可能启动被拒或推理中 OOM。' },
+              { title: '预计内存', est: { ...usage.ram, over: false }, budget: 16, warn: 12, line: '', warnText: '' },
+            ].map(bar => <div key={bar.title} style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-3)', marginBottom: 5 }}>
+                <span>{bar.title}（估算系数基于 Bonsai 27B 实测{bar.title.includes('显存') ? '，KV 取自模型几何' : ''}）：{bar.est.parts.map(p => `${p.label} ${p.gb.toFixed(2)}`).join(' + ')} ≈ <b style={{ color: bar.est.over ? 'var(--red)' : 'var(--text)' }}>{bar.est.totalGb.toFixed(2)} GB</b></span>
+                {bar.line && <span>{bar.line}</span>}
+              </div>
+              <div style={{ height: 8, borderRadius: 5, background: 'var(--line)', overflow: 'hidden' }}>
+                <div style={{ width: `${Math.min(100, (bar.est.totalGb / bar.budget) * 100)}%`, height: '100%', borderRadius: 5, transition: 'width .25s ease, background .25s ease', background: bar.est.over ? 'var(--red)' : bar.est.totalGb > bar.warn ? 'var(--yellow)' : 'var(--green)' }}/>
+              </div>
+              {bar.warnText && bar.est.over && <p className={page.hint} style={{ color: 'var(--red)', margin: '5px 0 0' }}>{bar.warnText}</p>}
+            </div>)}
           </div>
         </Panel>
 
