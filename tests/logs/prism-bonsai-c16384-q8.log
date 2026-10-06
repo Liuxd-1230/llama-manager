@@ -1,0 +1,8 @@
+0.00.078.502 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.078.732 W srv  llama_server: -----------------
+0.00.078.735 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.078.735 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.078.735 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.078.736 W srv  llama_server: -----------------
+0.00.084.881 I srv    load_model: loading model 'E:\LmModels\OS-Software\Ternary-Bonsai-2-27B-Uncensored-Heretic\Ternary-Bonsai-2-27B-Uncensored-Heretic-PTQ1_0.gguf'
+0.00.586.084 W common_fit_params: failed to fit params to free device memory: n_gpu_layers already set by user to 99, abort

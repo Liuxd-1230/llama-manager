@@ -9,7 +9,7 @@ import { estimateUsage } from '../../utils/vram'
 import page from '../pages.module.css'
 import styles from './models.module.css'
 
-type ProfileMeta = { name?: string; architecture?: string; layers?: number; experts?: number; active_experts?: number; context_length?: number; native_mtp?: boolean; hidden?: number; kv_layers?: number; kv_bytes_per_token?: number; kv_bytes_per_token_f16?: number }
+type ProfileMeta = { name?: string; architecture?: string; layers?: number; active_experts?: number; context_length?: number; native_mtp?: boolean; hidden?: number; kv_layers?: number; kv_bytes_per_token?: number; kv_bytes_per_token_f16?: number; experts?: number; moe_layers?: number }
 
 type Profile = {
   name: string
@@ -173,11 +173,14 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
     ctxSize: profile.ctx_size, kvCacheQuant: profile.kv_cache_quant_k || profile.kv_cache_quant_v || 'q8_0',
     kvmem: { budget: profile.kvmem?.budget ?? 0, gen_reserve: profile.kvmem?.gen_reserve ?? 0, kv_dtype: profile.kvmem?.kv_dtype ?? 'q8_0' },
     ninfer: { kv_capacity: profile.ninfer?.kv_capacity ?? 0, prefill_chunk: 256, cuda_graph: false, host_kv_mib: 16384 },
+    nCpuMoe: (profile.engine || 'llama.cpp') === 'llama.cpp' ? (profile.n_cpu_moe ?? 0) : 0,
     geom: {
       kv_bytes_per_token: typeof meta.kv_bytes_per_token === 'number' ? meta.kv_bytes_per_token : undefined,
       kv_bytes_per_token_f16: typeof meta.kv_bytes_per_token_f16 === 'number' ? meta.kv_bytes_per_token_f16 : undefined,
       hidden: typeof meta.hidden === 'number' ? meta.hidden : undefined,
       kv_layers: typeof meta.kv_layers === 'number' ? meta.kv_layers : undefined,
+      experts: typeof meta.experts === 'number' ? meta.experts : undefined,
+      moe_layers: typeof meta.moe_layers === 'number' ? meta.moe_layers : undefined,
     },
   })
   const chips: { label: string; active?: boolean }[] = [

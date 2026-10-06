@@ -270,6 +270,10 @@ def _finalize_gguf_meta(meta: dict) -> dict:
     meta["kv_layers"] = kv_layers
     if kv_layers and per_layer_heads and head_dim:
         meta["kv_bytes_per_token_f16"] = 2 * int(per_layer_heads) * int(head_dim) * int(kv_layers) * 2
+    if meta.get("experts") and layers:
+        # MoE architectures put experts on every block; the estimator splits
+        # GPU/RAM at --n-cpu-moe using this count.
+        meta["moe_layers"] = layers
     return meta
 
 

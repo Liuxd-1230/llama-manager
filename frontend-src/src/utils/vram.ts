@@ -35,6 +35,8 @@ export interface ModelGeom {
   kv_bytes_per_token_f16?: number
   hidden?: number
   kv_layers?: number
+  experts?: number
+  moe_layers?: number
 }
 
 export interface VramPart { label: string; gb: number }
@@ -48,6 +50,7 @@ export interface VramInput {
   modelSizeMb: number
   ctxSize: number
   kvCacheQuant: string
+  nCpuMoe?: number
   kvmem: { budget: number; gen_reserve: number; kv_dtype: string; host_kv_mib?: number }
   ninfer: { kv_capacity: number; prefill_chunk: number; cuda_graph: boolean; host_kv_mib: number }
   geom?: ModelGeom
@@ -73,18 +76,28 @@ function resolveKvBytes(input: VramInput) {
 export function estimateUsage(input: VramInput): UsageEstimate {
   const parts: VramPart[] = [{ label: '桌面', gb: DESKTOP_GB }]
   const weights = input.modelSizeMb / 1024
-  if (weights > 0) parts.push({ label: '权重', gb: weights })
+
+  // MoE expert offload (--n-cpu-moe): calibrated on Hermes3.6-35B-A3B Q4
+  // (Prism build): non-expert anchor 1.46 GB, ~0.425 GB per GPU-resident
+  // expert layer; expert bytes ≈ 94% of this family's file size. Offloaded
+  // layers move to RAM, mirrored on both bars.
+  const moeLayers = input.geom?.experts ? input.geom.moe_layers ?? 0 : 0
+  const expertPerLayerGb = moeLayers ? (weights * 0.94) / moeLayers : 0
+  const offloaded = Math.min(input.nCpuMoe ?? 0, moeLayers)
+  const gpuWeights = Math.max(weights - offloaded * expertPerLayerGb, weights * 0.06)
+  const offloadedGb = weights - gpuWeights
+  if (weights > 0) parts.push({ label: offloadedGb > 0.01 ? `权重(GPU 侧)`: '权重', gb: gpuWeights })
 
   const kvBytes = resolveKvBytes(input)
   const kvTokens = (label: string, tokens: number, factor = 1) =>
     parts.push({ label, gb: Math.round(kb(kvBytes, tokens, factor) * 100) / 100 })
 
   let ramParts: VramPart[] = []
-  if (weights > 0) ramParts = [{ label: '权重(mmap/常驻)', gb: weights }]
+  if (weights > 0) ramParts = [{ label: offloadedGb > 0.01 ? `权重(CPU 专家×${offloaded})` : '权重(mmap/常驻)', gb: offloadedGb > 0.01 ? offloadedGb : weights }]
 
   if (input.engine === 'kvmem') {
     kvTokens('KV(预算+预留)', input.kvmem.budget + input.kvmem.gen_reserve)
-    parts.push({ label: '缓冲(实测)', gb: Math.max(0, KVMEM_BASE_GB - weights) })
+    parts.push({ label: '缓冲(实测)', gb: Math.max(0, KVMEM_BASE_GB - gpuWeights) })
     ramParts.push({ label: '运行时', gb: 0.6 })
   } else if (input.engine === 'ninfer') {
     if (input.ninfer.kv_capacity > 0) kvTokens('KV 池', input.ninfer.kv_capacity)
@@ -95,7 +108,7 @@ export function estimateUsage(input: VramInput): UsageEstimate {
   } else {
     kvTokens(`KV(全量 ${Math.round(input.ctxSize / 1024)}K)`, input.ctxSize)
     // Calibrated scratch: grows sub-linearly with weights (buffer reuse).
-    const scratch = Math.max(0, weights * LLAMA_SCRATCH_SCALE + LLAMA_SCRATCH_BASE_GB)
+    const scratch = Math.max(0, gpuWeights * LLAMA_SCRATCH_SCALE + LLAMA_SCRATCH_BASE_GB)
     parts.push({ label: '计算/分配缓冲', gb: scratch })
     ramParts.push({ label: '运行时', gb: 0.6 })
   }
@@ -114,6 +127,7 @@ export function estimateFromConfig(config: AppConfig, modelSizeMb = 0, geom?: Mo
     modelSizeMb,
     ctxSize: config.basic.ctx_size,
     kvCacheQuant: config.basic.kv_cache_quant_k || config.basic.kv_cache_quant_v || 'q8_0',
+    nCpuMoe: config.engine === 'llama.cpp' ? config.basic.n_cpu_moe : 0,
     kvmem: { budget: config.kvmem.budget, gen_reserve: config.kvmem.gen_reserve, kv_dtype: config.kvmem.kv_dtype },
     ninfer: { kv_capacity: config.ninfer.kv_capacity, prefill_chunk: config.ninfer.prefill_chunk, cuda_graph: config.ninfer.cuda_graph, host_kv_mib: config.ninfer.host_kv_mib },
     geom,
