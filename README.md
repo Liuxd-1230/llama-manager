@@ -12,9 +12,10 @@
 - 复制、删除、导入导出，落地页即模型列表；运行中卡片直达引擎自带 WebUI
 
 ### 推理引擎
-- **双引擎**: 本地 llama.cpp 或 KVMem（KV 缓存虚拟化，llama-kvmem-server，引擎目录指向解压根或 bin/）
-- **按引擎自适应**: 配置页只显示当前引擎适用的参数；启动命令面板实时探测引擎二进制是否存在
-- **思考分层**: 配置页「思考(默认)」按引擎映射 `--reasoning on`（llama.cpp）或 `--enable-thinking`（KVMem）；对话页思考开关对本地模型在显式关闭时发送 `chat_template_kwargs.enable_thinking=false`，开启时遵循服务端默认；DeepSeek 为对称的请求级开关
+- **三引擎**: llama.cpp（含 PrismML 分支）、KVMem（KV 缓存虚拟化，llama-kvmem-server）、**NInfer**（.ninfer 工件，ninfer-serve，自带 KVMem 环 + MTP/dflash 投机解码）
+- **按引擎自适应**: 配置页只显示当前引擎适用的参数（NInfer 为设备池/主机池/预填块/投机档位面板）；启动命令面板实时探测引擎二进制，档案卡片按引擎显示徽章
+- **模型感知资源预估**: 按 GGUF 头/.ninfer 清单的 KV 几何与 MoE 专家数实时估算显存与内存占用（系数经 Bonsai-27B/Hermes-35B 真机标定），8GB 卡红黄绿预警
+- **思考分层**: llama.cpp → `--reasoning on`，KVMem → `--enable-thinking`，NInfer → `--default-reasoning-effort`（对话页六档思考梯子）；DeepSeek 为对称的请求级开关
 
 ### 配置管理
 - **路径配置**: 引擎目录、模型文件、mmproj 文件（独立文件浏览器，支持盘符切换）
@@ -65,6 +66,14 @@
 - 精确、关键词、正则、JSON Schema 与显式授权命令评分器
 - 可选独立 Judge 模型，不会默认复用被测模型
 - 对比质量、吞吐、延迟和显存峰值，并展示 Pareto 前沿
+- **实验对比视图**: 勾选多个实验并排柱状对比，逐指标标注最优（同一数据集跨引擎横评）
+
+### NInfer 聊天页
+- 运行页内嵌的轻量聊天界面（引擎二进制不自带 WebUI 时由管理器托管，`--cors` 跨域直连引擎）
+- 侧栏会话（搜索/分组/重命名/导出 Markdown），历史持久化到管理器数据库
+- 流式输出 + 思考过程折叠（自动标注耗时）、KaTeX 公式、HTML/SVG 沙箱预览（自适应高度 + 全屏）
+- 附件（文本注入上下文 / PDF 服务端抽取 / 视觉模型图片门控）、等待动画、重新生成保留历史版本（多候选切换）
+- 顶栏实时显示当前会话上下文占用对照设备池（绿/黄/红预警超池降速）
 
 ### 对话附件
 - 文本、Markdown、代码文件直接读取，PDF 由服务端 pypdf 抽取文本

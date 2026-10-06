@@ -65,6 +65,11 @@ c.post(f'{BASE}/api/profiles/launch', json={'name': '<档案名>'})             
 | 档案 | 引擎 | 模型 | 定位 |
 |---|---|---|---|
 | `ninfer-bonsai` | NInfer | bonsai2_27b PTQ1 native MTP (.ninfer) | 数数 60.6 t/s、TTFT 2.1s，端口 8095，8GB 默认参数 |
+| `hermes-moe` | llama.cpp (Prism) | Qwen3.6-35B-A3B Q4 (16GB) | `--n-cpu-moe 40` 全专家进内存：显存仅 2.9G、内存 14.5G，decode 31 t/s；必须 `mtp.enabled=false`（Prism 对无 MTP 层模型会拒启） |
+| `ornith-9b` | llama.cpp | Ornith-1.5-9B Q4_K_M | 全 GPU 6.3G：decode 39 t/s、prefill 1575 t/s、TTFT 0.7s，速度最快档 |
+| `bonsai-prism` | llama.cpp (Prism) | Bonsai PTQ1+MTP-r3 GGUF | Prism 自动建 MTP 草稿上下文，无 MTP 头的 GGUF 会拒启 |
+
+三引擎同数据集实测（基础回归集，2026-10-06）：质量均 0.667；平均延迟 KVMem 3.1s < NInfer 4.9s < Prism 11.6s（Prism 的 MTP-r3 模板默认开思考，短回答被推理 token 拖慢，属真实体验）。
 | `bonsai-fast` | KVMem | Heretic PTQ1+MTP Q4头 | 日常主力：workspace 32K / 预算 2K / 预留 4K / KV q4_0 / MTP2，数数 55 t/s、文风 32 t/s |
 | `bonsai-mtp` | KVMem | 同上 | 长输出日常：workspace 64K / 预算 8K / 预留 4K / KV q8_0，36-57 t/s 视内容 |
 | `kvmem-bonsai` | KVMem | Heretic PTQ1（无 MTP） | 长上下文无 MTP 对照 |

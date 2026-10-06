@@ -1,4 +1,0 @@
-{"name": "llama-ornith-c4096-f16kv", "ready": true, "nvidia_delta_gb": 5.21, "buffers_mib": {}, "engine_reported_gb": 0.0, "tail": "0.03.789.883 I srv  llama_server: listening on http://127.0.0.1:8097"}
-{"name": "llama-bonsai-c16384-f16kv", "ready": false, "nvidia_delta_gb": -0.0, "buffers_mib": {}, "engine_reported_gb": 0.0, "tail": "0.00.151.649 E srv  llama_server: exiting due to model loading error"}
-{"name": "llama-bonsai-c16384-q8kv", "ready": false, "nvidia_delta_gb": 0.0, "buffers_mib": {}, "engine_reported_gb": 0.0, "tail": "0.00.129.664 E srv  llama_server: exiting due to model loading error"}
-{"name": "kvmem-bonsai-budget2048-q4kv", "ready": true, "nvidia_delta_gb": 6.16, "buffers_mib": {}, "engine_reported_gb": 0.0, "tail": "0.03.487.938 I srv    llama-kvmem-server listening on http://127.0.0.1:8097  model=Ternary-Bonsai-2-27B-Uncens"}

@@ -1,8 +1,0 @@
-0.00.078.982 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
-0.00.079.227 W srv  llama_server: -----------------
-0.00.079.229 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
-0.00.079.230 W srv  llama_server: this can be a security risk (cross-origin attacks)
-0.00.079.230 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
-0.00.079.230 W srv  llama_server: -----------------
-0.00.082.186 I srv    load_model: loading model 'E:\LmModels\LuffyTheFox\Qwen3.6-35B-A3B-Uncensored-Genesis-Hermes-Final-GGUF\Hermes3.6-35B-A3B-Uncensored-Genesis-Final-APEX-Compact.gguf'
-0.00.953.047 W llama_model_loader: tensor overrides to CPU are used with mmap enabled - consider using --load-mode none for better performance

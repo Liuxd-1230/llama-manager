@@ -123,9 +123,9 @@ class ProcessManager:
         cmd += ["-t", str(b.threads)]
         cmd += ["-np", str(b.parallel)]
 
-        if b.mmap:
-            cmd.append("--mmap")
-        else:
+        # mmap is the engine default; current llama.cpp builds reject a bare
+        # --mmap, so only the opt-out needs a flag.
+        if not b.mmap:
             cmd.append("--no-mmap")
         if b.mlock:
             cmd.append("--mlock")

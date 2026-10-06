@@ -153,9 +153,14 @@ class EvaluationService:
             config = cfg.get_config()
             # 0.0.0.0 is not a connectable address on Windows — loop back.
             host = config.server.host if config.server.host not in ("", "0.0.0.0") else "127.0.0.1"
+            # NInfer validates model ids against the loaded artifact and 404s
+            # on unknown names — omit the field there (chat proxy does the same).
+            body: dict[str, Any] = {"messages": [{"role": "user", "content": prompt}], "stream": False}
+            if not (config.engine == "ninfer" and model == "default"):
+                body["model"] = model
             response = await self.client.post(
                 f"http://{host}:{config.server.port}/v1/chat/completions",
-                json={"model": model, "messages": [{"role": "user", "content": prompt}], "stream": False},
+                json=body,
                 timeout=300,
             )
             response.raise_for_status()

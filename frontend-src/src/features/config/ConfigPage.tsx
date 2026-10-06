@@ -165,7 +165,7 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
     if (config.mmproj_path) { args.push('--mmproj', quote(config.mmproj_path)); args.push(config.mmproj_gpu ? '--mmproj-offload' : '--no-mmproj-offload') }
     if (basic.fit_enabled) { args.push('--fit', 'on'); if (basic.fit_target > 0) args.push('--fit-target', String(basic.fit_target)) }
     else args.push('-ngl', String(basic.ngl_enabled ? basic.ngl : 0))
-    args.push('-t', String(basic.threads), '-np', String(basic.parallel), basic.mmap ? '--mmap' : '--no-mmap')
+    args.push('-t', String(basic.threads), '-np', String(basic.parallel), ...(basic.mmap ? [] : ['--no-mmap']))
     if (basic.mlock) args.push('--mlock')
     if (basic.n_cpu_moe > 0) args.push('--n-cpu-moe', String(basic.n_cpu_moe))
     if (basic.kv_cache_quant_k) args.push('--cache-type-k', basic.kv_cache_quant_k)
