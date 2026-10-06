@@ -103,7 +103,7 @@ function Shell() {
         <div style={{ display: location.pathname === '/chat' ? 'contents' : 'none' }}>
           <Suspense fallback={<div className={styles.page}>正在加载工作区…</div>}>
             <Page title="对话" description="本地模型与外部 API 的统一流式对话">
-              <ChatPage toast={toast} providerRefresh={providerRefresh} defaultThinking={config.basic.enable_thinking}/>
+              <ChatPage toast={toast} providerRefresh={providerRefresh} defaultThinking={config.basic.enable_thinking} config={config}/>
             </Page>
           </Suspense>
         </div>

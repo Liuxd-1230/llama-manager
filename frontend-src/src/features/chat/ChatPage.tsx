@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { api, ApiError, uid } from '../../api'
 import { Button, Select, Switch, Textarea } from '../../components/ui'
-import type { Candidate, ChatTurn, Provider, SearchSettings, ToolEvent } from '../../types'
+import type { AppConfig, Candidate, ChatTurn, Provider, SearchSettings, ToolEvent } from '../../types'
 import { activeCandidate, chatReducer, initialChatState } from './chatReducer'
 import { canStartChatRequest, SseParser, stripDsml, supportsThinking } from './chatUtils'
 import { Markdown, StreamingMarkdown } from './Markdown'
@@ -11,13 +11,18 @@ import styles from './chat.module.css'
 
 interface Attachment { name: string; content?: string; size: number; kind?: 'text' | 'image'; dataUrl?: string }
 
-export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false }: { toast: (text: string) => void; providerRefresh?: number; defaultThinking?: boolean }) {
+export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false, config }: { toast: (text: string) => void; providerRefresh?: number; defaultThinking?: boolean; config: AppConfig }) {
   const [state, dispatch] = useReducer(chatReducer, initialChatState)
   const [providers, setProviders] = useState<Provider[]>([])
   const [providerId, setProviderId] = useState('deepseek')
   const [model, setModel] = useState('')
   const [thinking, setThinking] = useState(defaultThinking)
   const [effort, setEffort] = useState('high')
+  // Last engine-reported context occupancy for this conversation
+  // (timings.prompt_n + predicted_n, or usage tokens when the engine
+  // prefers the usage chunk). Session-local; resets on conversation switch.
+  const [ctxUsed, setCtxUsed] = useState(0)
+  const ctxPool = config.engine === 'kvmem' ? config.kvmem.workspace : config.engine === 'ninfer' ? config.ninfer.kv_capacity : config.basic.ctx_size
   // NInfer exposes a six-step effort ladder; other providers only know high/max.
   const effortOptions = useMemo(
     () => (providers.find(item => item.id === 'local')?.engine === 'ninfer'
@@ -92,6 +97,7 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false }
     dispatch({ type: 'add_candidate', turnId: turn.id, candidate })
     controller.current = new AbortController()
     let accumulatedContent = ''; let accumulatedReasoning = ''; let backendId = ''; const accumulatedTools: ToolEvent[] = []
+    let lastCtx = 0
     const body = {
       provider: providerId,
       model,
@@ -121,7 +127,10 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false }
         if (result.content) { received = true; accumulatedContent += result.content; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'content', delta: result.content }) }
         if (result.reasoning) { accumulatedReasoning += result.reasoning; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'reasoning', delta: result.reasoning }) }
         for (const tool of result.tool_events || []) { const normalized = normalizeTool(tool); accumulatedTools.push(normalized); dispatch({ type: 'tool', turnId: turn.id, candidateId, event: normalized }) }
-        const timings = result.timings as { predicted_n?: number; predicted_ms?: number } | undefined
+        const timings = result.timings as { predicted_n?: number; predicted_ms?: number; prompt_n?: number } | undefined
+        lastCtx = timings ? (timings.prompt_n || 0) + (timings.predicted_n || 0) || lastCtx : lastCtx
+        const usage = result.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined
+        lastCtx = usage ? (usage.prompt_tokens || 0) + (usage.completion_tokens || 0) || lastCtx : lastCtx
         noteStats({ tokPerSec: timings?.predicted_ms && timings.predicted_n ? timings.predicted_n / (timings.predicted_ms / 1000) : undefined, totalTokens: timings?.predicted_n, elapsedMs: Math.round(performance.now() - startedAt) })
       } else {
         const reader = response.body?.getReader(); if (!reader) throw new Error('浏览器不支持流式响应')
@@ -135,7 +144,8 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false }
             if (event.type === 'start') { backendId = event.candidate_id || ''; dispatch({ type: 'set_backend_id', turnId: turn.id, candidateId, backendId }) }
             else if (event.type === 'content_delta') { const delta = event.delta || ''; received = true; if (firstTokenAt === null) firstTokenAt = performance.now(); accumulatedContent += delta; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'content', delta }) }
             else if (event.type === 'reasoning_delta') { const delta = event.delta || ''; received = true; if (firstTokenAt === null) firstTokenAt = performance.now(); accumulatedReasoning += delta; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'reasoning', delta }) }
-            else if (event.type === 'timings') { const t = event as { predicted_n?: number; predicted_ms?: number }; noteStats({ tokPerSec: t.predicted_ms && t.predicted_n ? t.predicted_n / (t.predicted_ms / 1000) : undefined, totalTokens: t.predicted_n }) }
+            else if (event.type === 'timings') { const t = event as { predicted_n?: number; predicted_ms?: number; prompt_n?: number }; lastCtx = (t.prompt_n || 0) + (t.predicted_n || 0) || lastCtx; noteStats({ tokPerSec: t.predicted_ms && t.predicted_n ? t.predicted_n / (t.predicted_ms / 1000) : undefined, totalTokens: t.predicted_n }) }
+            else if (event.type === 'usage') { const u = event as { prompt_tokens?: number; completion_tokens?: number }; lastCtx = (u.prompt_tokens || 0) + (u.completion_tokens || 0) || lastCtx }
             else if (['tool_call', 'tool_result', 'tool_status', 'call', 'result', 'status', 'retry', 'limit'].includes(event.type)) { const normalized = normalizeTool(event); accumulatedTools.push(normalized); dispatch({ type: 'tool', turnId: turn.id, candidateId, event: normalized }) }
             else if (event.type === 'error') throw new Error(event.message || '生成失败')
           }
@@ -143,6 +153,7 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false }
       }
       if (!received) { accumulatedContent = '(空回复)'; dispatch({ type: 'append', turnId: turn.id, candidateId, field: 'content', delta: accumulatedContent }) }
       noteStats({ elapsedMs: Math.round(performance.now() - startedAt) })
+      if (lastCtx) setCtxUsed(current => Math.max(current, lastCtx))
       dispatch({ type: 'finish', turnId: turn.id, candidateId, status: 'done' })
       await persistTurn(turnIndex, { ...candidate, backendId, content: accumulatedContent, reasoning: accumulatedReasoning, tools: accumulatedTools, status: 'done' }, requestConversationId)
     } catch (reason) {
@@ -197,13 +208,14 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false }
     link.download = `对话-${new Date().toISOString().slice(0, 10)}.md`
     link.click(); URL.revokeObjectURL(link.href)
   }
-  const clear = async () => { const deleting = conversationId.current; discardedConversations.current.add(deleting); controller.current?.abort(); await Promise.all([api(`/api/chat/conversations/${encodeURIComponent(deleting)}`, { method: 'DELETE' }).catch(() => {}), api(`/api/conversations/${encodeURIComponent(deleting)}`, { method: 'DELETE' }).catch(() => {})]); conversationId.current = uid('conversation'); dispatch({ type: 'clear' }); setAttachments([]); void queryClient.invalidateQueries({ queryKey: ['conversations'] }) }
-  const newConversation = () => { controller.current?.abort(); conversationId.current = uid('conversation'); dispatch({ type: 'clear' }); setAttachments([]) }
+  const clear = async () => { const deleting = conversationId.current; discardedConversations.current.add(deleting); controller.current?.abort(); await Promise.all([api(`/api/chat/conversations/${encodeURIComponent(deleting)}`, { method: 'DELETE' }).catch(() => {}), api(`/api/conversations/${encodeURIComponent(deleting)}`, { method: 'DELETE' }).catch(() => {})]); conversationId.current = uid('conversation'); dispatch({ type: 'clear' }); setAttachments([]); setCtxUsed(0); void queryClient.invalidateQueries({ queryKey: ['conversations'] }) }
+  const newConversation = () => { controller.current?.abort(); conversationId.current = uid('conversation'); dispatch({ type: 'clear' }); setAttachments([]); setCtxUsed(0) }
   const loadConversation = async (id: string) => {
     if (!id) return newConversation()
     controller.current?.abort()
     const result = await api<{ turns: Array<Record<string, unknown>> }>(`/api/conversations/${id}`)
     conversationId.current = id
+    setCtxUsed(0)
     dispatch({ type: 'load', turns: result.turns.map(normalizeStoredTurn) })
   }
   const persistTurn = async (turnIndex: number, latest: Candidate, targetConversationId = conversationId.current) => {
@@ -255,6 +267,7 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false }
         <Select value={model} onChange={event => setModel(event.target.value)}>{(models.length ? models : [model || 'default']).map(item => <option key={item}>{item}</option>)}</Select>
         <Select value={effort} disabled={!canThink} onChange={event => setEffort(event.target.value)}>{effortOptions.map(value => <option key={value} value={value}>{value === 'none' ? 'Off' : value[0].toUpperCase() + value.slice(1)}</option>)}</Select>
         <Button iconOnly title="导出当前对话为 Markdown" disabled={!state.turns.length} onClick={exportConversation}><Download size={16}/></Button>
+        {providerId === 'local' && ctxUsed > 0 && <span className={styles.ctxMeter} title={ctxUsed >= ctxPool ? '已达到/超过引擎上下文,请开新对话' : `引擎上下文 ${ctxPool.toLocaleString()} token`}>上下文 {ctxUsed.toLocaleString()} / {ctxPool >= 1024 ? `${Math.round(ctxPool / 1024)}K` : ctxPool}<span className={styles.ctxBar}><span style={{ width: `${Math.min(100, (ctxUsed / ctxPool) * 100)}%`, background: ctxUsed / ctxPool > 0.9 ? 'var(--red)' : ctxUsed / ctxPool > 0.7 ? 'var(--yellow)' : 'var(--green)' }}/></span></span>}
       </div>
       <div className={styles.toolGroup}>
         <Switch checked={thinking} disabled={!canThink} onChange={setThinking} label={<><BrainCircuit size={14}/>思考</>}/>

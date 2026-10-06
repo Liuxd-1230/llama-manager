@@ -66,3 +66,7 @@
 .userFiles { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px }
 .userFile { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-2); background: rgba(255,255,255,.14); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .userFileThumb { width: 26px; height: 26px; object-fit: cover; border-radius: 4px }
+
+.ctxMeter { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-3); white-space: nowrap; padding-left: 10px; border-left: 1px solid var(--line) }
+.ctxMeter .ctxBar { width: 70px; height: 6px; border-radius: 4px; background: var(--line); overflow: hidden; display: inline-block }
+.ctxMeter .ctxBar > span { display: block; height: 100%; border-radius: 4px; transition: width .3s ease, background .3s ease }

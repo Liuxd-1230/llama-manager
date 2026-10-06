@@ -616,6 +616,7 @@ async def _stream_chat_with_tools(
             content_buffer = ""
             reasoning_streamed = False
             timings: dict | None = None
+            usage_stats: dict | None = None
             try:
                 async with client.stream("POST", target, json=request_payload, headers=headers) as resp:
                     if resp.status_code >= 400:
@@ -651,6 +652,8 @@ async def _stream_chat_with_tools(
                                 yield _openai_chunk(reasoning=reasoning_delta)
                             if chunk.get("timings"):
                                 timings = chunk["timings"]
+                            if chunk.get("usage"):
+                                usage_stats = chunk["usage"]
                             if delta.get("content"):
                                 content_buffer += delta.get("content")
                                 clean_chunk = dict(chunk)
@@ -664,6 +667,8 @@ async def _stream_chat_with_tools(
                 return
             if timings:
                 yield "data: " + json.dumps({"timings": timings}) + "\n\n"
+            if usage_stats:
+                yield "data: " + json.dumps({"usage": usage_stats}) + "\n\n"
             tool_calls = [tool_acc[idx] for idx in sorted(tool_acc)]
             if not tool_calls:
                 dsml_tool_calls = _parse_dsml_tool_calls(reasoning_buffer)
@@ -1068,6 +1073,8 @@ async def _normalize_v2_stream(source, candidate_id: str):
             delta = (event.get("choices") or [{}])[0].get("delta") or {}
             if event.get("timings"):
                 yield _v2_event("timings", **event["timings"])
+            if event.get("usage"):
+                yield _v2_event("usage", **event["usage"])
             if delta.get("reasoning_content") or delta.get("reasoning") or delta.get("thinking"):
                 yield _v2_event("reasoning_delta", delta=delta.get("reasoning_content") or delta.get("reasoning") or delta.get("thinking"))
             if delta.get("content"):
