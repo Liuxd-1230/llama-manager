@@ -42,8 +42,10 @@ export interface VramInput {
   geom?: ModelGeom
 }
 
+// bytesPerToken is in BYTES (geometry math / ninfer constant): bytes × tokens
+// → GB requires /1024³.
 const kb = (bytesPerToken: number, tokens: number, factor = 1) =>
-  (bytesPerToken * tokens * factor) / 1024 / 1024
+  (bytesPerToken * tokens * factor) / 1024 / 1024 / 1024
 
 // Per-token KV bytes: model geometry when the backend could read it, else
 // the Bonsai-measured fallback (25 KB q8-grade / 27.3 KB ninfer k8v4).
