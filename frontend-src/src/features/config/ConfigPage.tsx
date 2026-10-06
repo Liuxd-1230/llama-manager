@@ -23,9 +23,15 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
     void load(selected)
   }
   const currentNameQuery = useQuery({ queryKey: ['current-profile'], queryFn: () => api<{ name: string }>('/api/profiles/current'), staleTime: 0 })
-  const profilesQuery = useQuery({ queryKey: ['profiles'], queryFn: () => api<{ profiles: Array<{ name: string; model_size_mb: number; model_meta: Record<string, unknown> }> }>('/api/profiles'), staleTime: 30000 })
-  const currentProfile = profilesQuery.data?.profiles.find(p => p.name === (currentNameQuery.data?.name || ''))
-  const usage = estimateFromConfig(config, currentProfile?.model_size_mb || 0, currentProfile?.model_meta)
+  // Direct read of the model file the current config points at — no second
+  // query to correlate, so the estimator's weight term is always live.
+  const modelInfoQuery = useQuery({
+    queryKey: ['model-info', config.model_path, config.engine],
+    queryFn: () => api<{ size_mb: number; meta: Record<string, unknown> }>(`/api/model-info?path=${encodeURIComponent(config.model_path)}`),
+    enabled: !!config.model_path.trim(),
+    staleTime: 60000,
+  })
+  const usage = estimateFromConfig(config, modelInfoQuery.data?.size_mb || 0, modelInfoQuery.data?.meta)
   useEffect(() => { if (!nameTouched && currentNameQuery.data?.name) setName(currentNameQuery.data.name) }, [currentNameQuery.data, nameTouched])
   const [configs, setConfigs] = useState<string[]>([])
   const [browse, setBrowse] = useState<BrowseTarget>(null)

@@ -1,0 +1,9 @@
+0.00.019.787 I srv  llama_server: initializing ...
+0.00.019.798 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.020.164 W srv  llama_server: security: no API key is set and CORS allows all origins (see https://github.com/ggml-org/llama.cpp/pull/25655)
+0.00.035.483 I srv    load_model: loading model 'E:\LmModels\mradermacher\Ornith-1.5-9B-uncensored-GGUF\Ornith-1.5-9B-uncensored.Q4_K_M.gguf'
+0.02.791.915 I cmn          init: llama threadpool init, n_threads = 16
+0.02.886.306 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 4096, kv_unified = 'true'
+0.02.890.433 W srv          init: chat template supports preserving reasoning, it is enabled by default (may use more tokens, disable via --no-reasoning-preserve)
+0.02.890.463 I srv  llama_server: model loaded
+0.02.890.466 I srv  llama_server: listening on http://127.0.0.1:8097

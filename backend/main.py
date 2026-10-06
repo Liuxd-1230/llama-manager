@@ -1318,6 +1318,15 @@ def scan_models(dir: str):
     return {"models": [m.model_dump() for m in models]}
 
 
+@app.get("/api/model-info")
+def model_info(path: str):
+    """Size + metadata for one model file — feeds the live VRAM/RAM estimator."""
+    from pathlib import Path as _Path
+    model_path = _Path(path) if path else None
+    size_mb = round(model_path.stat().st_size / (1024 * 1024), 1) if model_path and model_path.is_file() else 0
+    return {"size_mb": size_mb, "meta": cfg.read_model_metadata(path)}
+
+
 @app.get("/api/detect-server")
 def detect_server(llama_cpp_dir: str, engine: str = "llama.cpp"):
     if engine == "kvmem":

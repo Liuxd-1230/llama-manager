@@ -9,10 +9,21 @@ const SAFE_BUDGET_GB = 7.4
 
 // Bytes per KV element relative to f16 (2 bytes), by cache dtype.
 function dtypeFactor(dtype: string) {
-  if (/q4|k4|nvfp4|rk2/i.test(dtype)) return 0.29
-  if (/q8|int8|k8/i.test(dtype)) return 0.55
+  if (/q4|k4|nvfp4|rk2/i.test(dtype)) return 0.47   // calibrated: 15.1 / 32 KB
+  if (/q8|int8|k8/i.test(dtype)) return 0.73
   return 1
 }
+
+// Measured on this machine (nvidia-smi deltas, 2026-10-06):
+//  - llama.cpp KV slope 31.7 KB/token(f16) = geometry formula within 1%
+//  - llama.cpp non-KV base 5.08 GB with a 5.76 GB model (compute/KV buffer
+//    overlap) → per-model scratch ≈ weights × −0.12 + 1.6 GB, floor 0
+//  - KVMem budget slope 15.1 KB/token(q4_0) vs the old 12.5 guess
+//  - KVMem non-KV base 5.36 GB incl. desktop
+//  - ninfer total 7.68 GB vs estimate 7.27 (+5%)
+const LLAMA_SCRATCH_SCALE = -0.12
+const LLAMA_SCRATCH_BASE_GB = 1.6
+const KVMEM_BASE_GB = 5.36 - DESKTOP_GB  // engine-side, desktop counted separately
 
 // Measured constant for .ninfer artifacts (k8v4 on bonsai2-27b): 27.3 KB/token.
 const NINFER_KV_BYTES_PER_TOKEN = 27300
@@ -73,7 +84,7 @@ export function estimateUsage(input: VramInput): UsageEstimate {
 
   if (input.engine === 'kvmem') {
     kvTokens('KV(预算+预留)', input.kvmem.budget + input.kvmem.gen_reserve)
-    parts.push({ label: '缓冲', gb: BUFFERS_GB })
+    parts.push({ label: '缓冲(实测)', gb: Math.max(0, KVMEM_BASE_GB - weights) })
     ramParts.push({ label: '运行时', gb: 0.6 })
   } else if (input.engine === 'ninfer') {
     if (input.ninfer.kv_capacity > 0) kvTokens('KV 池', input.ninfer.kv_capacity)
@@ -83,7 +94,9 @@ export function estimateUsage(input: VramInput): UsageEstimate {
     ramParts.push({ label: '运行时+状态', gb: 1.2 })
   } else {
     kvTokens(`KV(全量 ${Math.round(input.ctxSize / 1024)}K)`, input.ctxSize)
-    parts.push({ label: '缓冲', gb: BUFFERS_GB })
+    // Calibrated scratch: grows sub-linearly with weights (buffer reuse).
+    const scratch = Math.max(0, weights * LLAMA_SCRATCH_SCALE + LLAMA_SCRATCH_BASE_GB)
+    parts.push({ label: '计算/分配缓冲', gb: scratch })
     ramParts.push({ label: '运行时', gb: 0.6 })
   }
 
