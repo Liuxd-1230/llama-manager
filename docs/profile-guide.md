@@ -95,6 +95,7 @@ PrismML fork（`E:\PrismLlma`，短对话极致 651/27.8 t/s）通过系统直�
 结论：
 - **短对话选 ninfer**（MTP 加持快 ~60%）；kernel 分支比旧 PrismLlma 快 14.7%（llama-bench tg128 31.1→35.7），作为 GGUF 路线的免费提速
 - **长文档（>8K）必须走 KVMem**：32K 逻辑工作区针准确；ninfer 的 4032 池超池 4.6 倍时数字针**静默答错**——超池题面在 ninfer 上不可信，重要数据请开新对话压回池内或切 KVMem
+- **ninfer 上下文缓解实测（2026-10-11）**：池 4032→8192 + 检索取回 8192→16384 后，18.5K 密表三针从 0-1 对提升到 2 对；残留错误是引擎已知的**跨页缝截断**（针行恰压 64-token 页边界，邻页搬回但目标行被切半，如 EQ-333 读成相邻的 EQ-332）——引擎侧问题，只能上报作者或绕开（密表查询用 KVMem）。`ninfer-bonsai` 档案已固化 池 8192/取回 16384（free 446MB，余量健康）
 - 纯 llama.cpp（KVMem 关）在 8GB 卡上对这个 5.94GB 模型只撑得起 ~8-16K 上下文，20K 直接拒
 - kernel 分支位置：`E:onsai2-small-gpu-windows-x64-cuda12.4-sm86-sm89-ff41412`（sudoingx 构建，含 llama-bench）；MTP 完整收益需官方 lean 文件（8GB 配方 `-c 49152 --spec-draft-n-max 2`）
 
