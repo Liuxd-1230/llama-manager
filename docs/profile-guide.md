@@ -81,6 +81,23 @@ PrismML fork（`E:\PrismLlma`，短对话极致 651/27.8 t/s）通过系统直�
 
 `tools/kvmem/bonsai-mtp-graft-heretic.py`（SHA 白名单含官方与 Heretic PTQ1_0；换新底模先算 SHA256 加白名单）。依赖仅 numpy + 源码树自带 `llama.cpp/gguf-py`，无需 CUDA/PyTorch。产出 `-MTP-r3-Q4_0.gguf`（MTP 头 Q4_0，norm F32，866 张量，851 张逐字节校验）。
 
+## 四路线横评（Heretic v2 PTQ1_0，RTX 4060 Laptop 8GB，2026-10-11 实测）
+
+同一模型文件、同一探针（数数字 200 token + 18,480 token 长文埋针 EQ-333→员工33）：
+
+| 路线 | 档案 | 短解码 | 短 prefill | 20K 长文 | 机制 |
+|---|---|---|---|---|---|
+| NInfer（环+MTP） | `ninfer-bonsai` | **53.3 t/s** | 547 | 34.7s 完成但**针答错**（池 4032，超池 4.6×） | 检索换页 + MTP 投机 |
+| KVMem 开 | `bonsai-kvmem-v2` | 32.7 t/s | 248 | 63.6s **答对**（工作区 32K 全覆盖） | KV 虚拟化 |
+| KVMem 关=kernel 分支 | `bonsai-kernel` | 34.6 t/s | **619** | **400 拒绝**（c8192 装不下） | 全常驻显存 |
+| 旧 PrismLlma | （对照） | 31.1 t/s(bench) | — | 400 拒绝 | 全常驻显存 |
+
+结论：
+- **短对话选 ninfer**（MTP 加持快 ~60%）；kernel 分支比旧 PrismLlma 快 14.7%（llama-bench tg128 31.1→35.7），作为 GGUF 路线的免费提速
+- **长文档（>8K）必须走 KVMem**：32K 逻辑工作区针准确；ninfer 的 4032 池超池 4.6 倍时数字针**静默答错**——超池题面在 ninfer 上不可信，重要数据请开新对话压回池内或切 KVMem
+- 纯 llama.cpp（KVMem 关）在 8GB 卡上对这个 5.94GB 模型只撑得起 ~8-16K 上下文，20K 直接拒
+- kernel 分支位置：`E:onsai2-small-gpu-windows-x64-cuda12.4-sm86-sm89-ff41412`（sudoingx 构建，含 llama-bench）；MTP 完整收益需官方 lean 文件（8GB 配方 `-c 49152 --spec-draft-n-max 2`）
+
 ## 验证清单（创建后必做）
 
 1. `GET /api/profiles` — 新档案在列、`model_exists: true`
