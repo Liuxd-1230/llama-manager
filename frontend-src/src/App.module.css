@@ -1,35 +1,42 @@
 .root { position: relative; height: 100%; overflow: hidden; isolation: isolate; --pointer-x: 50%; --pointer-y: 50% }
 .flow { position: fixed; z-index: -2; inset: -20%; pointer-events: none; background: radial-gradient(ellipse at 15% 15%,var(--flow-1),transparent 48%),radial-gradient(ellipse at 85% 75%,var(--flow-2),transparent 45%),linear-gradient(120deg,var(--flow-3),transparent 50%,var(--flow-4)); filter: blur(50px) }
-.layout { height: 100%; display: grid; grid-template-columns: 100px minmax(0,1fr); grid-template-rows: 68px minmax(0,1fr); gap: 16px; padding: 18px }
-.topbar { grid-column: 1/-1; border: 1px solid var(--glass-edge); border-radius: 20px; background: color-mix(in srgb,var(--glass) 85%,transparent); box-shadow: var(--shadow-panel); backdrop-filter: var(--blur); display:flex; align-items:center; padding:0 22px; gap:16px; transition:background var(--transition),box-shadow var(--transition) }
-.topbarScrolled { background:var(--glass-strong); box-shadow:var(--shadow-shell) }
+.layout { height: 100%; display: grid; grid-template-columns: 210px minmax(0,1fr); grid-template-rows: 68px minmax(0,1fr); gap: 0; padding: 0 }
+.topbar { grid-column: 1/-1; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; display:flex; align-items:center; padding:0 26px; gap:16px; transition:background var(--transition),box-shadow var(--transition) }
+.topbarScrolled { background:transparent; box-shadow:none }
 .brand { display:flex; align-items:center; gap:12px; min-width:0 }
-.brandMark { flex:0 0 36px; width:36px; height:36px; border-radius:12px; display:grid; place-items:center; color:var(--accent-fg); background:var(--accent-fill) }
-.brandText { font-weight:750; font-size:16px; letter-spacing:-.02em; white-space:nowrap }
+.brandMark { flex:0 0 34px; width:34px; height:34px; border-radius:4px; display:grid; place-items:center; color:var(--accent-fg); background:var(--accent-fill) }
+.brandText { font-family: var(--font-display); font-weight:520; font-size:18px; letter-spacing:0; white-space:nowrap }
 .brandSub { color:var(--text-3); font-size:12px; margin-top:2px }
 .topMeta { margin-left:auto; display:flex; align-items:center; gap:10px }
 .serverAddress { color:var(--text-3); font-family:Consolas,monospace; font-size:12px; white-space:nowrap }
 .dirtyButton { background:none; border:none; padding:0; cursor:pointer; display:inline-flex }
-.sidebar { min-height:0; border:1px solid var(--glass-edge); border-radius:20px; background:var(--glass); backdrop-filter:var(--blur); padding:10px 8px; display:flex; flex-direction:column }
-.nav { display:grid; gap:6px }
-.navLink { min-height:66px; padding:8px; border-radius:12px; color:var(--text-3); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; font-size:12px; text-decoration:none; transition:color var(--transition),background var(--transition) }
-.navLink svg { width:20px; height:20px }
-.navLink:hover { text-decoration:none; color:var(--text); background:var(--glass-soft) }
-.navLinkActive { color:var(--accent); background:var(--accent-soft); box-shadow:inset 0 1px 0 color-mix(in srgb,var(--accent) 15%,transparent) }
-.sidebarBottom { margin-top:auto; display:grid; gap:6px }
-.settingsButton { width:100%; flex-direction:column; min-height:62px; height:auto !important; gap:6px; font-size:12px }
-.main { min-width:0; min-height:0; overflow:auto; border-radius:22px; background:color-mix(in srgb,var(--bg-elevated) 84%,transparent); scrollbar-gutter:stable }
-.page { min-height:100%; padding:30px; display:flex; flex-direction:column }
+.sidebar { min-height:0; border:0; border-right:1px solid var(--line); border-radius:0; background:transparent; backdrop-filter:none; padding:26px 22px 14px; display:flex; flex-direction:column }
+.nav { display:grid; gap:2px }
+.navLink { min-height:38px; padding:7px 10px; border-radius:3px; color:var(--text-3); display:flex; align-items:center; gap:13px; font-size:13px; text-decoration:none; transition:color var(--transition) }
+.navLink svg { display:none }
+.navLink::before { content:''; width:14px; height:1px; background:var(--text-3); opacity:.55; flex:none; transition:width var(--transition), background var(--transition), opacity var(--transition) }
+.navLink:hover { text-decoration:none; color:var(--text); background:transparent }
+.navLink:hover::before { width:22px; background:var(--text-2); opacity:1 }
+.navLinkActive { color:var(--text); background:transparent; font-weight:600 }
+.navLinkActive::before { width:26px; height:2px; background:var(--accent); opacity:1 }
+.sidebarBottom { margin-top:auto; display:grid; gap:2px; border-top:1px solid var(--line); padding-top:10px }
+.settingsButton { width:100%; min-height:38px; flex-direction:row; justify-content:flex-start; padding:7px 10px; gap:13px; font-size:13px; border:0; background:transparent; color:var(--text-3); border-radius:3px }
+.settingsButton svg { display:none }
+.settingsButton::before { content:''; width:14px; height:1px; background:var(--text-3); opacity:.55; flex:none; transition:width var(--transition), background var(--transition), opacity var(--transition) }
+.settingsButton:hover:not(:disabled) { border:0; background:transparent; color:var(--text) }
+.settingsButton:hover:not(:disabled)::before { width:22px; background:var(--text-2); opacity:1 }
+.main { min-width:0; min-height:0; overflow:auto; border-radius:0; background:transparent; scrollbar-gutter:stable }
+.page { min-height:100%; padding:38px 48px 56px; display:flex; flex-direction:column }
 .chatPage { height:100%; min-height:0 }
-.pageHeader { display:flex; align-items:center; gap:16px; margin-bottom:24px }
-.pageHeader h1 { margin:0; font-size:30px; line-height:1.3; letter-spacing:-.025em; font-weight:750 }
-.pageHeader p { margin:8px 0 0; color:var(--text-3); font-size:13px }
+.pageHeader { display:flex; align-items:baseline; gap:16px; margin-bottom:30px; border-bottom:1px solid var(--line); padding-bottom:22px }
+.pageHeader h1 { margin:0; font-family:var(--font-display); font-size:clamp(32px, 3.2vw, 46px); line-height:1.2; letter-spacing:-.02em; font-weight:420 }
+.pageHeader p { margin:0; color:var(--text-3); font-size:13px }
 .pageHeaderActions { margin-left:auto; display:flex; align-items:center; gap:8px }
-@media(max-width:1120px) { .layout { gap:12px; padding:14px; grid-template-columns:84px minmax(0,1fr) } .page { padding:24px } .serverAddress { display:none } }
+@media(max-width:1120px) { .layout { grid-template-columns:176px minmax(0,1fr) } .page { padding:30px 34px 48px } .serverAddress { display:none } }
 @media(max-width:680px) {
- .layout { grid-template-columns:minmax(0,1fr); grid-template-rows:60px minmax(0,1fr) 66px; padding:8px; gap:8px }
- .topbar { padding:0 12px; border-radius:16px }.brandText { font-size:13px }.brandSub { display:none }.brandMark { width:30px; height:30px; flex-basis:30px }.topMeta { gap:5px }
- .sidebar { grid-row:3; padding:3px 5px; border-radius:16px; flex-direction:row; gap:3px }.nav { flex:1; grid-template-columns:repeat(6,minmax(0,1fr)); gap:0 }.navLink { min-height:56px; padding:4px 0; gap:3px; font-size:11px }.navLink svg { width:17px; height:17px }.sidebarBottom { margin:0; width:40px }.settingsButton { min-height:56px; font-size:0 }.settingsButton svg { width:18px; height:18px }
- .main { grid-row:2; border-radius:16px; scrollbar-gutter:auto }.page { padding:18px 14px }.pageHeader { margin-bottom:18px }.pageHeader h1 { font-size:26px }.pageHeader p { font-size:12px }.topMeta [class*="badge"] { font-size:11px;padding:3px 6px }.topMeta button { width:30px;height:32px }
+ .layout { grid-template-columns:minmax(0,1fr); grid-template-rows:60px minmax(0,1fr) 66px; padding:0 }
+ .topbar { padding:0 16px; border-radius:0 }.brandText { font-size:13px }.brandSub { display:none }.brandMark { width:30px; height:30px; flex-basis:30px }.topMeta { gap:5px }
+ .sidebar { grid-row:3; border-right:0; border-top:1px solid var(--line); padding:6px 8px; border-radius:0; flex-direction:row; gap:3px }.nav { flex:1; grid-template-columns:repeat(6,minmax(0,1fr)); gap:0 }.navLink { min-height:54px; padding:4px 0; gap:3px; font-size:11px; flex-direction:column; justify-content:center }.navLink svg { display:block; width:17px; height:17px }.navLink::before,.settingsButton::before { display:none }.sidebarBottom { margin:0; width:40px; border-top:0; padding-top:0 }.settingsButton { min-height:54px; font-size:0; padding:4px 0; justify-content:center }.settingsButton svg { display:block; width:18px; height:18px }
+ .main { grid-row:2; border-radius:0; scrollbar-gutter:auto }.page { padding:20px 16px 32px }.pageHeader { margin-bottom:22px }.pageHeader h1 { font-size:27px }.pageHeader p { font-size:12px }.topMeta [class*="badge"] { font-size:11px;padding:3px 6px }.topMeta button { width:30px;height:32px }
 }
 @media(max-width:360px) { .brandText { font-size:11px }.brand { gap:6px }.topMeta { gap:3px } }

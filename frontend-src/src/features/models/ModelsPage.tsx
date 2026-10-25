@@ -161,13 +161,15 @@ export function ModelsPage({ config, dirty, server, toast }: {
     {profilesQuery.isSuccess && profiles.length === 0 && <Panel><p className={page.hint}><PackageOpen size={14} style={{ verticalAlign: -2 }}/> 还没有档案。在「配置」页填写模型与参数后保存，或点击右上角「新建档案」。</p></Panel>}
     {profilesQuery.isSuccess && profiles.length > 0 && visibleProfiles.length === 0 && <div className={styles.noResults}>没有匹配的档案。<Button size="small" onClick={() => { setSearch(''); setEngineFilter('all') }}>清除筛选</Button></div>}
     {profilesQuery.isSuccess && profiles.length > 0 && <div className={styles.grid}>
-      {visibleProfiles.map(profile => <ProfileCard key={profile.name} profile={profile} busy={busy === profile.name} stopping={busy === '__stop__'} serverRunning={serverRunning} dirty={dirty} onLaunch={() => void launch(profile)} onStop={() => void stop()} onEdit={() => void edit(profile).catch(reason => toast(`载入失败：${errorMessage(reason)}`))} onSetCurrent={() => void setCurrent(profile)} onDuplicate={() => void duplicate(profile)} onRemove={() => void remove(profile)} />)}
+      {visibleProfiles.map((profile, index) => <ProfileCard key={profile.name} profile={profile} index={index} delay={Math.min(index * 55, 330)} busy={busy === profile.name} stopping={busy === '__stop__'} serverRunning={serverRunning} dirty={dirty} onLaunch={() => void launch(profile)} onStop={() => void stop()} onEdit={() => void edit(profile).catch(reason => toast(`载入失败：${errorMessage(reason)}`))} onSetCurrent={() => void setCurrent(profile)} onDuplicate={() => void duplicate(profile)} onRemove={() => void remove(profile)} />)}
     </div>}
   </>
 }
 
-function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, onStop, onEdit, onSetCurrent, onDuplicate, onRemove }: {
+function ProfileCard({ profile, index, delay, busy, stopping, serverRunning, dirty, onLaunch, onStop, onEdit, onSetCurrent, onDuplicate, onRemove }: {
   profile: Profile
+  index: number
+  delay: number
   busy: boolean
   stopping: boolean
   serverRunning: boolean
@@ -233,7 +235,8 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
   const featured = profile.is_current || profile.is_running
   const context = isKvmem ? profile.kvmem?.workspace ?? profile.ctx_size : isNinfer ? profile.ninfer?.max_context ?? profile.ctx_size : profile.ctx_size
   const engineLabel = isNinfer ? 'NInfer' : isKvmem ? 'KVMem' : 'llama.cpp'
-  return <article aria-label={`档案 ${profile.name}`} className={`${styles.card} ${featured ? styles.featured : ''}`} data-running={profile.is_running}>
+  return <article aria-label={`档案 ${profile.name}`} className={`${styles.card} ${featured ? styles.featured : ''}`} data-running={profile.is_running} style={{ animationDelay: `${delay}ms` }}>
+    <span className={styles.no} aria-hidden="true">No.{String(index + 1).padStart(2, '0')}</span>
     <header className={styles.cardHeader}>
       <div className={styles.titleRow}><h2 className={styles.titleName} title={profile.name}>{profile.name}</h2>{profile.is_running && <Badge tone="good">运行中</Badge>}{profile.is_current && <Badge>当前</Badge>}</div>
       <div className={styles.cardTools}>

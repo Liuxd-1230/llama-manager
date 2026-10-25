@@ -290,6 +290,19 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false, 
         <Button iconOnly title="删除当前对话" disabled={!state.turns.length} onClick={() => setConfirmDelete(true)}><Trash2 size={15}/></Button>
       </div>
       <CtxGauge used={ctxUsed} pool={providerId === 'local' ? ctxPool : null}/>
+      <div className={styles.modelGroup} ref={panelRef}>
+        <button type="button" className={styles.capsule} aria-haspopup="dialog" aria-expanded={panelOpen} title="模型与推理设置" onClick={() => setPanelOpen(open => !open)}>
+          <b>{providers.find(item => item.id === providerId)?.name ?? providerId}</b>
+          <span>· {model || 'default'}</span>
+          {canThink && <span className={styles.effortChip}>{effort === 'none' ? 'Off' : effort[0].toUpperCase() + effort.slice(1)}</span>}
+          <ChevronDown size={14} className={styles.capsuleChevron}/>
+        </button>
+        {panelOpen && <div className={styles.modelPanel} role="dialog" aria-label="模型与推理设置">
+          <label className={styles.panelField}><span>模型厂商</span><Select aria-label="模型厂商" value={providerId} onChange={event => setProviderId(event.target.value)}>{providers.map(item => <option key={item.id} value={item.id}>{item.name}{item.api_key_set === false ? ' · 未配置' : ''}</option>)}</Select></label>
+          <label className={styles.panelField}><span>对话模型</span><Select aria-label="对话模型" value={model} onChange={event => setModel(event.target.value)}>{(models.length ? models : [model || 'default']).map(item => <option key={item}>{item}</option>)}</Select></label>
+          <label className={styles.panelField}><span>推理强度</span><Select aria-label="推理强度" value={effort} disabled={!canThink} onChange={event => setEffort(event.target.value)}>{effortOptions.map(value => <option key={value} value={value}>{value === 'none' ? 'Off' : value[0].toUpperCase() + value.slice(1)}</option>)}</Select></label>
+        </div>}
+      </div>
       <div className={styles.toolGroup}>
         <Switch checked={thinking} disabled={!canThink} onChange={setThinking} label={<><BrainCircuit size={14}/>思考</>}/>
         <Switch checked={webSearch} disabled={!activeSearch?.configured} onChange={setWebSearch} label={<><Search size={14}/>Web Search</>}/>

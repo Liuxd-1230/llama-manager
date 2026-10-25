@@ -15,9 +15,9 @@
 .table th, .table td { text-align: left; padding: 8px 9px; border-bottom: 1px solid var(--line) }
 .table th { color: var(--text-3); font-size: 12px; text-transform: uppercase }
 .statusGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px }
-.metric { border-bottom: 1px solid var(--line); background: var(--glass-soft); padding: 9px 10px; border-radius: var(--radius-sm) }
-.metric strong { display: block; font-size: 16px }
-.metric span { color: var(--text-3); font-size: 12px; text-transform: uppercase }
+.metric { border-bottom: 1px solid var(--line); background: transparent; padding: 9px 2px; border-radius: 0 }
+.metric strong { display: block; font-family: var(--font-mono); font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums }
+.metric span { color: var(--text-3); font-size: 10.5px; text-transform: uppercase; letter-spacing: .18em; font-family: var(--font-mono) }
 .sticky { position: sticky; top: 0 }
 .splitMain { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(340px, .65fr); align-items: start; gap: 18px }
 .iframe { width: 100%; height: 520px; border: 0; border-radius: var(--radius-sm); background: var(--bg-elevated) }
@@ -28,10 +28,10 @@
   .row { flex-wrap: wrap }
 }
 
-.overlay { position: fixed; z-index: 70; inset: 0; background: rgba(4, 8, 13, .42); backdrop-filter: blur(8px); display: grid; place-items: center; padding: 30px }
+.overlay { position: fixed; z-index: 70; inset: 0; background: rgba(33, 29, 22, .36); backdrop-filter: blur(4px); display: grid; place-items: center; padding: 30px }
 .importDialog { width: min(720px, 92vw) }
 .importDialog textarea { min-height: 150px; font-family: ui-monospace, Consolas, monospace; font-size: 12px }
 
-.configBar { position:sticky;top:0;z-index:5;background:var(--glass-strong) }.advanced { border-top:1px solid var(--line);padding:6px 0 }.advanced summary { cursor:pointer;min-height:64px;display:flex;align-items:center;gap:12px;color:var(--text);font-weight:650;list-style:none }.advanced summary::before { content:"+";color:var(--accent);font-size:20px;font-weight:400 }.advanced[open] summary::before { content:"−" }.advanced summary span { font-size:12px;color:var(--text-3);font-weight:400;margin-left:auto;text-align:right }.advancedBody { padding:8px 0 24px }.commandLabel { margin:24px 0 12px;font-size:13px;font-weight:650 }.error { color:var(--red);font-size:13px;line-height:1.7 }.importModal { width:min(760px,100%);padding:0 }.importDialog { width:100%;border:0 }.hint { line-height:1.7 }.table { display:block;overflow-x:auto }.formGrid .row,.formGridThree .row { flex-wrap:nowrap }.formGrid .row input,.formGridThree .row input { flex:1;width:0 }.configBar .row { flex-wrap:wrap }.sticky { top:0 }.splitMain { gap:24px }.stack { gap:24px }
+.configBar { position:sticky;top:0;z-index:5;background:var(--bg-elevated);border-bottom:1px solid var(--line);margin:0 -6px;padding:0 6px }.advanced { border-top:1px solid var(--line);padding:6px 0 }.advanced summary { cursor:pointer;min-height:60px;display:flex;align-items:center;gap:12px;color:var(--text);font-weight:600;list-style:none;font-size:14.5px }.advanced summary::before { content:"+";color:var(--accent);font-size:20px;font-weight:400 }.advanced[open] summary::before { content:"−" }.advanced summary span { font-size:11.5px;color:var(--text-3);font-weight:400;margin-left:auto;text-align:right;font-family:var(--font-mono) }.advancedBody { padding:8px 0 24px }.commandLabel { margin:24px 0 12px;font-size:13px;font-weight:600 }.error { color:var(--red);font-size:13px;line-height:1.7 }.importModal { width:min(760px,100%);padding:0 }.importDialog { width:100%;border:0 }.hint { line-height:1.7 }.table { display:block;overflow-x:auto }.formGrid .row,.formGridThree .row { flex-wrap:nowrap }.formGrid .row input,.formGridThree .row input { flex:1;width:0 }.configBar .row { flex-wrap:wrap }.sticky { top:0 }.splitMain { gap:32px }.stack { gap:24px }
 @media(max-width:1180px) { .splitMain { grid-template-columns:minmax(0,1fr) }.sticky { position:static } }
 @media(max-width:680px) { .configBar { position:static }.advanced summary { flex-wrap:wrap;gap:6px;min-height:72px }.advanced summary span { width:100%;margin-left:26px;text-align:left }.gridThree { grid-template-columns:minmax(0,1fr) } }

@@ -17,8 +17,8 @@
   position: relative;
   flex: 1;
   min-height: 320px;
-  border: 1px solid var(--glass-edge);
-  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  border-radius: 4px;
   overflow: hidden;
   background: var(--bg-elevated);
 }
