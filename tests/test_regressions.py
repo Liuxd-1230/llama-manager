@@ -15,17 +15,20 @@ from backend import provider_manager as providers
 from backend import search_manager
 from backend.chat_state import CandidateContext, ConversationStore
 from backend.config_manager import read_gguf_metadata
+from backend.chat_adapters import (
+    normalize_non_stream_response,
+    normalize_v2_stream,
+    parse_dsml_tool_calls,
+    strip_dsml_tool_blocks,
+)
 from backend.main import (
     _deepseek_chat_payload,
     _external_chat_request,
     _local_chat_payload,
-    _messages_with_web_tool_guidance,    _normalize_non_stream_response,
-    _normalize_v2_stream,
-    _parse_dsml_tool_calls,
+    _messages_with_web_tool_guidance,
     _stream_anthropic_with_tools,
     _stream_chat_with_tools,
     _stream_responses_with_tools,
-    _strip_dsml_tool_blocks,
     app,
 )
 from backend.models import AppConfig, BasicSettings, KvmemSettings, NinferSettings, SamplingSettings
@@ -879,19 +882,19 @@ class ChatProxyRegressionTests(unittest.TestCase):
             yield sse({"choices": [{"delta": {"content": "hello"}}]})
             yield "data: [DONE]\n\n"
 
-        output = "".join(asyncio.run(collect(_normalize_v2_stream(source(), "candidate"))))
+        output = "".join(asyncio.run(collect(normalize_v2_stream(source(), "candidate"))))
         self.assertIn('"type": "start"', output)
         self.assertIn('"type": "content_delta"', output)
         self.assertIn('"type": "done"', output)
 
     def test_dsml_helpers_remain_defensive(self):
         text = '<|DSML| tool_calls><|DSML| invoke name="web_search"><|DSML| parameter name="query">abc</|DSML| parameter></|DSML| invoke></|DSML| tool_calls>'
-        self.assertEqual(_strip_dsml_tool_blocks(text), "")
-        self.assertEqual(_parse_dsml_tool_calls(text)[0]["function"]["name"], "web_search")
+        self.assertEqual(strip_dsml_tool_blocks(text), "")
+        self.assertEqual(parse_dsml_tool_calls(text)[0]["function"]["name"], "web_search")
 
     def test_non_stream_external_responses_normalize(self):
-        openai = _normalize_non_stream_response("openai_responses", {"output": [{"content": [{"type": "output_text", "text": "hello"}]}]})
-        anthropic = _normalize_non_stream_response("anthropic", {"content": [{"type": "text", "text": "hi"}]})
+        openai = normalize_non_stream_response("openai_responses", {"output": [{"content": [{"type": "output_text", "text": "hello"}]}]})
+        anthropic = normalize_non_stream_response("anthropic", {"content": [{"type": "text", "text": "hi"}]})
         self.assertEqual(openai["choices"][0]["message"]["content"], "hello")
         self.assertEqual(anthropic["choices"][0]["message"]["content"], "hi")
 
