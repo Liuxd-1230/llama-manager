@@ -93,7 +93,7 @@ export function Popover(p: {
   }, [p.open]);
   if (!p.open) return null;
   return createPortal(
-    <div ref={ref} className="menu" style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, width: p.width }}>
+    <div ref={ref} className="menu studio-root" style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, width: p.width }}>
       {p.children}
     </div>,
     document.body,
@@ -143,7 +143,7 @@ export function Modal(p: {
     return () => window.removeEventListener("keydown", k);
   }, []);
   return createPortal(
-    <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && p.onClose()}>
+    <div className="modal-back studio-root" onMouseDown={(e) => e.target === e.currentTarget && p.onClose()}>
       <div className={cx("modal", p.wide && "wide", p.xl && "xl")} role="dialog" aria-modal>
         <div className="modal-head">
           {p.icon}

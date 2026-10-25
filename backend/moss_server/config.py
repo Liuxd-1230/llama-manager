@@ -58,7 +58,7 @@ def save_json(path: Path, data: Any) -> None:
 SETTINGS_DEFAULTS: dict[str, Any] = {
     "provider_id": "deepseek",
     "model": "",
-    "vision_model": "gpt-4o",
+    "vision_model": "",  # 留空 = 跟随主模型
     # 主模型失败（网络 / 5xx / 429）时依次尝试，逗号分隔
     "fallback_models": "",
     "temperature": 0.7,

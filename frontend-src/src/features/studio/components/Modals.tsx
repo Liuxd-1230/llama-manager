@@ -94,7 +94,7 @@ function SettingsModal() {
           <div className="row">
             <div className="field grow"><label>主模型</label>
               <input className="input mono" list="model-list" value={s.model} onChange={(e) => up({ model: e.target.value })} /></div>
-            <div className="field grow"><label>视觉模型（反推 / 看参考图）</label>
+            <div className="field grow"><label>视觉模型（反推 / 看参考图，留空跟随主模型）</label>
               <input className="input mono" list="model-list" value={s.vision_model} onChange={(e) => up({ vision_model: e.target.value })} /></div>
           </div>
           <datalist id="model-list">{models.map((m) => <option key={m} value={m} />)}</datalist>

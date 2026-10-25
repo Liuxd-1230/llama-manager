@@ -48,6 +48,8 @@ def _default_provider() -> ProviderConfig:
 
 def provider_specific_env(provider_id: str) -> str:
     safe = re.sub(r"[^A-Za-z0-9]+", "_", provider_id).strip("_").upper() or "CUSTOM"
+    if safe.startswith("PROVIDER_"):
+        safe = safe[len("PROVIDER_"):]
     return f"LLAMA_MANAGER_PROVIDER_{safe}_API_KEY"
 
 

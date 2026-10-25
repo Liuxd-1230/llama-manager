@@ -591,8 +591,8 @@ kbd {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(46, 38, 30, 0.28);
-  backdrop-filter: blur(2px);
+  background: rgba(20, 16, 10, 0.45);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -603,9 +603,10 @@ kbd {
   max-height: calc(100vh - 64px);
   display: flex;
   flex-direction: column;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #fbfaf7, var(--panel) 80px);
-  box-shadow: var(--sh-float), 0 30px 80px -20px rgba(40, 28, 16, 0.45);
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  box-shadow: var(--sh-float);
   animation: pop 0.14s ease-out;
 }
 .modal.wide {

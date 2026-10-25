@@ -20,6 +20,8 @@ a:focus-visible, summary:focus-visible, button:focus-visible, input:focus-visibl
   outline-offset: 2px;
 }
 select option { color: var(--option-fg); background: var(--option-bg) }
+input[type="range"] { accent-color: var(--accent) }
+input[type="checkbox"] { accent-color: var(--accent) }
 a { color: var(--blue); text-decoration: none }
 a:hover { text-decoration: underline }
 code, pre { font-family: "SFMono-Regular", Consolas, monospace }
