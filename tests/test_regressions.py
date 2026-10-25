@@ -16,19 +16,16 @@ from backend import search_manager
 from backend.chat_state import CandidateContext, ConversationStore
 from backend.config_manager import read_gguf_metadata
 from backend.chat_adapters import (
+    ChatRequest,
     build_chat_request,
     messages_with_web_tool_guidance,
     normalize_non_stream_response,
     normalize_v2_stream,
     parse_dsml_tool_calls,
+    stream_chat_completion,
     strip_dsml_tool_blocks,
 )
-from backend.main import (
-    _stream_anthropic_with_tools,
-    _stream_chat_with_tools,
-    _stream_responses_with_tools,
-    app,
-)
+from backend.main import app
 from backend.models import AppConfig, BasicSettings, KvmemSettings, NinferSettings, SamplingSettings
 from backend.process_manager import process_manager
 
@@ -824,8 +821,9 @@ class ChatProxyRegressionTests(unittest.TestCase):
 
         payload = {"model": "m", "messages": [{"role": "user", "content": "news"}], "tools": [{"type": "function", "function": {"name": "web_search"}}]}
         state = {}
+        request = ChatRequest(provider_kind="openai_chat", target="https://example.test", headers={}, payload=payload)
         with patch("httpx.AsyncClient.stream", new=stream), patch("backend.chat_adapters._run_web_search_tool", new=AsyncMock(return_value="[1] ok")):
-            chunks = asyncio.run(collect(_stream_chat_with_tools("https://example.test", {}, payload, on_complete=state.update)))
+            chunks = asyncio.run(collect(stream_chat_completion(request, candidate_id="c1", on_context=state.update)))
         self.assertEqual(requests[1]["messages"][1]["reasoning_content"], "need web")
         self.assertIn("answer", "".join(chunks))
         self.assertEqual(state["kind"], "chat_messages")
@@ -840,7 +838,8 @@ class ChatProxyRegressionTests(unittest.TestCase):
                 return False
 
         async def run():
-            generator = _stream_chat_with_tools("https://example.test", {}, {"model": "m", "messages": []})
+            request = ChatRequest(provider_kind="openai_chat", target="https://example.test", headers={}, payload={"model": "m", "messages": []})
+            generator = stream_chat_completion(request, candidate_id="c1")
             with patch("httpx.AsyncClient.stream", return_value=Response([sse({"choices": [{"delta": {"content": "part"}}]})])):
                 first = await anext(generator)
                 await generator.aclose()
@@ -859,8 +858,9 @@ class ChatProxyRegressionTests(unittest.TestCase):
             return FakeStreamResponse([sse({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}), sse({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "final"}})])
 
         payload = {"model": "claude", "messages": [{"role": "user", "content": "news"}], "tools": [{"name": "web_search"}]}
+        request = ChatRequest(provider_kind="anthropic", target="https://example.test", headers={}, payload=payload)
         with patch("httpx.AsyncClient.stream", new=stream), patch("backend.chat_adapters._run_web_search_tool", new=AsyncMock(return_value="ok")):
-            output = "".join(asyncio.run(collect(_stream_anthropic_with_tools("https://example.test", {}, payload))))
+            output = "".join(asyncio.run(collect(stream_chat_completion(request, candidate_id="c1"))))
         self.assertIn("final", output)
         self.assertEqual(len(requests), 2)
 
@@ -874,8 +874,9 @@ class ChatProxyRegressionTests(unittest.TestCase):
             return FakeStreamResponse([sse({"type": "response.created", "response": {"id": "resp_2"}}), sse({"type": "response.output_text.delta", "delta": "final"})])
 
         payload = {"model": "gpt", "input": "news", "tools": [{"type": "function", "name": "web_search"}]}
+        request = ChatRequest(provider_kind="openai_responses", target="https://example.test", headers={}, payload=payload)
         with patch("httpx.AsyncClient.stream", new=stream), patch("backend.chat_adapters._run_web_search_tool", new=AsyncMock(return_value="ok")):
-            output = "".join(asyncio.run(collect(_stream_responses_with_tools("https://example.test", {}, payload))))
+            output = "".join(asyncio.run(collect(stream_chat_completion(request, candidate_id="c1"))))
         self.assertIn("final", output)
         self.assertEqual(requests[1]["previous_response_id"], "resp_1")
 
