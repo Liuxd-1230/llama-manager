@@ -25,21 +25,18 @@ from .update_manager import update_manager
 from .download_manager import download_manager
 from .chat_state import CandidateContext, conversation_store
 from .storage import database
-from .jobs import JobManager, noop_handler
-from .evaluation import EvaluationService
 from .routers.conversations import router as conversations_router
-from .routers.evaluation import router as evaluation_router
-from .routers.jobs import router as jobs_router, ws_router as jobs_ws_router
+from .moss_server import db as moss_db
+from .moss_server.api import router as moss_api_router
+from .moss_server.skills import load_skills as moss_load_skills, router as moss_skills_router
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     await database.initialize()
+    moss_db.init()
+    moss_load_skills()
     client = httpx.AsyncClient(follow_redirects=False)
-    jobs = JobManager(database)
-    evaluation = EvaluationService(database, client)
-    jobs.register("noop", noop_handler)
-    jobs.register("evaluation", evaluation.run_job)
     from .process_manager import reap_orphan_engines
     orphans = await asyncio.to_thread(reap_orphan_engines)
     if orphans:
@@ -47,26 +44,16 @@ async def lifespan(application: FastAPI):
     cfg.load_config(cfg.initial_profile_name())
     application.state.db = database
     application.state.http_client = client
-    application.state.jobs = jobs
-    application.state.evaluation = evaluation
-    await jobs.initialize()
-    await evaluation.initialize()
     try:
         yield
     finally:
-        active_tasks = list(jobs.tasks.values())
-        for task in active_tasks:
-            task.cancel()
-        if active_tasks:
-            await asyncio.gather(*active_tasks, return_exceptions=True)
         await client.aclose()
 
 
 app = FastAPI(title="llama.cpp Run Manager", version="2.0.0", lifespan=lifespan)
 app.include_router(conversations_router)
-app.include_router(jobs_router)
-app.include_router(jobs_ws_router)
-app.include_router(evaluation_router)
+app.include_router(moss_api_router)
+app.include_router(moss_skills_router)
 
 def _error_payload(request: Request, code: str, message: str, details: dict | None = None) -> dict:
     return {
@@ -1267,8 +1254,7 @@ def duplicate_profile(body: dict):
 
 
 def _busy_gpu_resources(request: Request) -> list[str]:
-    jobs = getattr(request.app.state, "jobs", None)
-    return jobs.busy_resources(["gpu", "llama_server"]) if jobs else []
+    return []
 
 
 @app.post("/api/profiles/launch")

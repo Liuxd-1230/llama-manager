@@ -6,3 +6,4 @@ python-dotenv>=1.0.0
 aiosqlite>=0.20.0
 pypdf>=5.0.0
 jsonschema>=4.22.0
+python-multipart>=0.0.9

@@ -2,6 +2,10 @@
 
 可视化管理 llama.cpp server 的模型档案、启动、日志、对话、评测和更新编译。
 
+## 提示词工坊
+
+第六个工作区「提示词」由 [MOSS Prompt Studio](https://github.com/xiang6150592/-moss-prompt-editor)（v2.4，作者 xiang6150592）吸收而来：画框式 Layout 编排、Caption 撰写、3D 镜头调度、灯光预设、AI 起稿与提示词编译。该仓库当前未附带开源许可证，代码仅个人学习使用，版权归原作者所有；后端位于 `backend/moss_server/`（挂载在 `/api/moss/*`），官方编译脚本在 `backend/moss_vendor/`，用户数据（SQLite、附件、技能）存于 `~/llama-manager/moss/`。AI 讨论共用主界面的模型提供商（在工坊「设置」中选择，密钥沿用主界面配置的环境变量）。
+
 ## 功能
 
 ### 模型档案

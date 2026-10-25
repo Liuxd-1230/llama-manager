@@ -1,4 +1,4 @@
-"""Public API contracts for persisted workspaces and jobs."""
+"""Public API contracts for the persisted conversation workspace."""
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -6,7 +6,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-JobStatus = Literal["queued", "running", "succeeded", "failed", "cancelled", "interrupted"]
 
 
 class ApiErrorBody(BaseModel):
@@ -16,25 +15,6 @@ class ApiErrorBody(BaseModel):
     request_id: str
 
 
-class JobCreate(BaseModel):
-    kind: str
-    payload: dict[str, Any] = Field(default_factory=dict)
-    resources: list[str] = Field(default_factory=list)
-
-
-class JobRecord(BaseModel):
-    id: str
-    kind: str
-    status: JobStatus
-    payload: dict[str, Any] = Field(default_factory=dict)
-    result: dict[str, Any] = Field(default_factory=dict)
-    checkpoint: dict[str, Any] = Field(default_factory=dict)
-    resources: list[str] = Field(default_factory=list)
-    error: str | None = None
-    created_at: float
-    updated_at: float
-    started_at: float | None = None
-    finished_at: float | None = None
 
 
 class ConversationCreate(BaseModel):
@@ -65,28 +45,6 @@ class TurnWrite(BaseModel):
     active_candidate_id: str = ""
 
 
-class DatasetCreate(BaseModel):
-    name: str
-    description: str = ""
-
-
-class DatasetCaseWrite(BaseModel):
-    id: str | None = None
-    prompt: str
-    expected: str = ""
-    evaluator: dict[str, Any] = Field(default_factory=lambda: {"type": "exact"})
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class EvaluationStart(BaseModel):
-    name: str = "评测运行"
-    dataset_id: str
-    provider_id: str = "local"
-    model: str = "default"
-    judge_provider_id: str | None = None
-    judge_model: str | None = None
-    config_snapshot: dict[str, Any] = Field(default_factory=dict)
-    allow_code_execution: bool = False
 
 
 class KnowledgeSearchRequest(BaseModel):

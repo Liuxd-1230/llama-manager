@@ -1,0 +1,10 @@
+# Default prompts for Gradio. Save as UTF-8 and restart the UI after editing.
+# Text below [prompt_prefix] is prefilled in the editable Prompt field.
+# Text below [negative_prompt] is prefilled in the editable Negative Prompt field.
+# Both sections support multiple lines. Leave a section empty to disable its default.
+
+[prompt_prefix]
+best quality, masterpiece
+
+[negative_prompt]
+nsfw, worst quality, bad anatomy, watermark, jpeg artifact

@@ -1,4 +1,4 @@
-import { Activity, Bot, Boxes, ClipboardCheck, Gauge, ListTodo, Moon, Settings, SlidersHorizontal, Sun, Wrench, Zap } from 'lucide-react'
+import { Activity, Bot, Boxes, Gauge, Moon, PenLine, Settings, SlidersHorizontal, Sun, Wrench, Zap } from 'lucide-react'
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, useReducedMotion } from 'motion/react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -6,7 +6,6 @@ import { HashRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate 
 import { api } from './api'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { SettingsDrawer } from './components/SettingsDrawer'
-import { TaskCenter } from './components/TaskCenter'
 import { Badge, Button, uiStyles } from './components/ui'
 import type { Accent, AppConfig, Theme } from './types'
 import { defaultConfig } from './types'
@@ -16,14 +15,14 @@ const nav = [
   { id: 'models', label: '模型', icon: Boxes },
   { id: 'config', label: '配置', icon: SlidersHorizontal },
   { id: 'run', label: '运行', icon: Activity },
-  { id: 'evaluation', label: '评测', icon: ClipboardCheck },
+  { id: 'studio', label: '提示词', icon: PenLine },
   { id: 'maintenance', label: '维护', icon: Wrench },
   { id: 'chat', label: '对话', icon: Bot },
 ] as const
 
 const ConfigPage = lazy(() => import('./features/config/ConfigPage').then(module => ({ default: module.ConfigPage })))
 const RunPage = lazy(() => import('./features/run/RunPage').then(module => ({ default: module.RunPage })))
-const EvaluationPage = lazy(() => import('./features/evaluation/EvaluationPage').then(module => ({ default: module.EvaluationPage })))
+const StudioPage = lazy(() => import('./features/studio/StudioPage').then(module => ({ default: module.PromptStudioPage })))
 const ModelsPage = lazy(() => import('./features/models/ModelsPage').then(module => ({ default: module.ModelsPage })))
 const MaintenancePage = lazy(() => import('./features/maintenance/MaintenancePage').then(module => ({ default: module.MaintenancePage })))
 const ChatPage = lazy(() => import('./features/chat/ChatPage').then(module => ({ default: module.ChatPage })))
@@ -39,7 +38,6 @@ function Shell() {
   const [accent, setAccentState] = useState<Accent>(resolveInitialAccent)
   const [config, setConfig] = useState<AppConfig>(defaultConfig)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [tasksOpen, setTasksOpen] = useState(false)
   const [toastText, setToastText] = useState('')
   const [scrolled, setScrolled] = useState(false)
   const [providerRefresh, setProviderRefresh] = useState(0)
@@ -85,7 +83,7 @@ function Shell() {
     <div className={styles.layout}>
       <header className={`${styles.topbar} ${scrolled ? styles.topbarScrolled : ''}`}>
         <div className={styles.brand}><span className={styles.brandMark}><Zap size={18}/></span><div><div className={styles.brandText}>llama.cpp Manager</div><div className={styles.brandSub}>本地推理控制台</div></div></div>
-        <div className={styles.topMeta}><span className={styles.serverAddress}>{ENGINE_LABELS[config.engine] || config.engine} · {config.server.host}:{config.server.port}</span>{dirty && <button type="button" className={styles.dirtyButton} title="有未保存的配置修改，点击前往配置页" onClick={() => navigate('/config')}><Badge tone="warn">未保存</Badge></button>}<Badge tone={server.state === 'running' ? 'good' : 'neutral'}><Gauge size={12}/>{server.state === 'running' ? `运行中 · ${server.pid || ''}` : '已停止'}</Badge><Button iconOnly title="任务中心" onClick={() => setTasksOpen(true)}><ListTodo size={16}/></Button><Button iconOnly title="切换主题" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>{theme === 'light' ? <Moon size={16}/> : <Sun size={16}/>}</Button></div>
+        <div className={styles.topMeta}><span className={styles.serverAddress}>{ENGINE_LABELS[config.engine] || config.engine} · {config.server.host}:{config.server.port}</span>{dirty && <button type="button" className={styles.dirtyButton} title="有未保存的配置修改，点击前往配置页" onClick={() => navigate('/config')}><Badge tone="warn">未保存</Badge></button>}<Badge tone={server.state === 'running' ? 'good' : 'neutral'}><Gauge size={12}/>{server.state === 'running' ? `运行中 · ${server.pid || ''}` : '已停止'}</Badge><Button iconOnly title="切换主题" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>{theme === 'light' ? <Moon size={16}/> : <Sun size={16}/>}</Button></div>
       </header>
       <aside className={styles.sidebar}><nav className={styles.nav}>{nav.map(item => <NavLink key={item.id} to={`/${item.id}`} aria-label={item.label} title={item.label} className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`}><item.icon size={16}/><span>{item.label}</span></NavLink>)}</nav><div className={styles.sidebarBottom}><Button className={styles.settingsButton} onClick={() => setSettingsOpen(true)}><Settings size={16}/>设置</Button></div></aside>
       <main className={styles.main} ref={main} onScroll={event => setScrolled(event.currentTarget.scrollTop > 16)}>
@@ -94,7 +92,7 @@ function Shell() {
           <Route path="/models" element={<Page title="模型" description="一键加载并切换整套推理配置"><ModelsPage config={config} dirty={dirty} server={server} toast={toast}/></Page>}/>
           <Route path="/config" element={<Page title="配置" description="编辑当前档案的模型、推理、采样和服务参数"><ConfigPage config={config} setConfig={setConfig} dirty={dirty} toast={toast}/></Page>}/>
           <Route path="/run" element={<Page title="运行" description="控制 llama-server 并观察实时状态"><RunPage config={config} toast={toast}/></Page>}/>
-          <Route path="/evaluation" element={<Page title="评测" description="用真实任务比较模型质量与响应表现"><EvaluationPage toast={toast}/></Page>}/>
+          <Route path="/studio" element={<StudioPage/>}/>
           <Route path="/maintenance" element={<Page title="维护" description="下载、更新和编译 llama.cpp"><MaintenancePage config={config} setConfig={setConfig} toast={toast}/></Page>}/>
           {/* Chat renders outside the routes and stays mounted: switching
               pages must not drop the conversation or a running generation. */}
@@ -111,7 +109,6 @@ function Shell() {
       </main>
     </div>
     <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} onProvidersChanged={() => setProviderRefresh(value => value + 1)} toast={toast}/>
-    {tasksOpen && <TaskCenter open onClose={() => setTasksOpen(false)}/>}
     {toastText && <motion.div role="status" aria-live="polite" className={uiStyles.toast} initial={reduced ? false : { y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: reduced ? 0 : .18 }}>{toastText}</motion.div>}
   </div>
 }
