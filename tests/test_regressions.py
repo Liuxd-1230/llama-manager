@@ -15,19 +15,17 @@ from backend import provider_manager as providers
 from backend import search_manager
 from backend.chat_state import CandidateContext, ConversationStore
 from backend.config_manager import read_gguf_metadata
-from backend.main import (
-    _deepseek_chat_payload,
-    _external_chat_request,
-    _local_chat_payload,
-    _messages_with_web_tool_guidance,    _normalize_non_stream_response,
-    _normalize_v2_stream,
-    _parse_dsml_tool_calls,
-    _stream_anthropic_with_tools,
-    _stream_chat_with_tools,
-    _stream_responses_with_tools,
-    _strip_dsml_tool_blocks,
-    app,
+from backend.chat_adapters import (
+    ChatRequest,
+    build_chat_request,
+    messages_with_web_tool_guidance,
+    normalize_non_stream_response,
+    normalize_v2_stream,
+    parse_dsml_tool_calls,
+    stream_chat_completion,
+    strip_dsml_tool_blocks,
 )
+from backend.main import app
 from backend.models import AppConfig, BasicSettings, KvmemSettings, NinferSettings, SamplingSettings
 from backend.process_manager import process_manager
 
@@ -550,23 +548,23 @@ class NinferCommandTests(unittest.TestCase):
 
     def test_ninfer_local_payload_uses_standard_fields(self):
         config = AppConfig(model_path="E:\\m.ninfer", engine="ninfer")
-        payload = _local_chat_payload({"thinking_enabled": False}, config, [{"role": "user", "content": "hi"}])
+        payload = build_chat_request(config=config, data={"thinking_enabled": False}, messages=[{"role": "user", "content": "hi"}]).payload
         self.assertNotIn("top_k", payload)
         self.assertNotIn("chat_template_kwargs", payload)
         self.assertEqual(payload["reasoning_effort"], "none")
         # NInfer validates the model id: omit the field unless the caller
         # picked one, because "default" would 404.
         self.assertNotIn("model", payload)
-        payload = _local_chat_payload({"thinking_enabled": True, "model": "qwen3.8-27b"}, config, [])
+        payload = build_chat_request(config=config, data={"thinking_enabled": True, "model": "qwen3.8-27b"}, messages=[]).payload
         self.assertEqual(payload["model"], "qwen3.8-27b")
         self.assertEqual(payload["reasoning_effort"], "medium")
         # The chat page's effort selector passes through when thinking is on.
-        payload = _local_chat_payload({"thinking_enabled": True, "reasoning_effort": "high"}, config, [])
+        payload = build_chat_request(config=config, data={"thinking_enabled": True, "reasoning_effort": "high"}, messages=[]).payload
         self.assertEqual(payload["reasoning_effort"], "high")
-        payload = _local_chat_payload({"thinking_enabled": True, "reasoning_effort": "bogus"}, config, [])
+        payload = build_chat_request(config=config, data={"thinking_enabled": True, "reasoning_effort": "bogus"}, messages=[]).payload
         self.assertEqual(payload["reasoning_effort"], "medium")
         # llama.cpp keeps the extended fields.
-        native = _local_chat_payload({"thinking_enabled": True}, AppConfig(model_path="E:\\m.gguf"), [])
+        native = build_chat_request(config=AppConfig(model_path="E:\\m.gguf"), data={"thinking_enabled": True}, messages=[]).payload
         self.assertIn("top_k", native)
         self.assertEqual(native["chat_template_kwargs"], {"enable_thinking": True})
 
@@ -638,13 +636,14 @@ class NinferCommandTests(unittest.TestCase):
 
 class LocalPayloadThinkingTests(unittest.TestCase):
     def test_thinking_toggle_maps_to_template_kwargs_symmetrically(self):
-        off = _local_chat_payload({"thinking_enabled": False}, AppConfig(model_path="C:\\m.gguf"), [])
+        config = AppConfig(model_path="C:\\m.gguf")
+        off = build_chat_request(config=config, data={"thinking_enabled": False}, messages=[]).payload
         self.assertEqual(off["chat_template_kwargs"], {"enable_thinking": False})
-        on = _local_chat_payload({"thinking_enabled": True}, AppConfig(model_path="C:\\m.gguf"), [])
+        on = build_chat_request(config=config, data={"thinking_enabled": True}, messages=[]).payload
         self.assertEqual(on["chat_template_kwargs"], {"enable_thinking": True})
 
     def test_absent_thinking_field_defers_to_server_default(self):
-        payload = _local_chat_payload({}, AppConfig(model_path="C:\\m.gguf"), [])
+        payload = build_chat_request(config=AppConfig(model_path="C:\\m.gguf"), data={}, messages=[]).payload
         self.assertNotIn("chat_template_kwargs", payload)
 
 
@@ -790,22 +789,25 @@ class SearchRegressionTests(unittest.TestCase):
 class ChatProxyRegressionTests(unittest.TestCase):
     def test_local_payload_uses_config_sampling(self):
         config = AppConfig()
-        payload = _local_chat_payload({"model": "local", "thinking_enabled": True}, config, [{"role": "user", "content": "hi"}])
+        payload = build_chat_request(config=config, data={"model": "local", "thinking_enabled": True}, messages=[{"role": "user", "content": "hi"}]).payload
         self.assertEqual(payload["temperature"], config.sampling.temperature)
         self.assertNotIn("thinking", payload)
 
     def test_deepseek_keeps_thinking_enabled_with_web_search(self):
-        payload = _deepseek_chat_payload({"thinking_enabled": True, "reasoning_effort": "max", "web_search_tool": True}, [{"role": "user", "content": "hi"}])
+        provider = providers.ProviderConfig(id="deepseek", name="DeepSeek", kind="deepseek", api_key_env="DEEPSEEK_API_KEY")
+        with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "sk-test"}):
+            payload = build_chat_request(provider_config=provider, data={"thinking_enabled": True, "reasoning_effort": "max", "web_search_tool": True}, messages=[{"role": "user", "content": "hi"}]).payload
         self.assertEqual(payload["thinking"], {"type": "enabled"})
         self.assertEqual(payload["reasoning_effort"], "max")
 
     def test_web_guidance_requires_native_tool_calls(self):
-        messages = _messages_with_web_tool_guidance([{"role": "user", "content": "news"}], True)
+        messages = messages_with_web_tool_guidance([{"role": "user", "content": "news"}], True)
         self.assertIn("native tool_calls", messages[0]["content"])
 
     def test_chat_completion_provider_gets_web_tool(self):
         provider = providers.ProviderConfig(id="compat", name="Compat", kind="openai_compatible", base_url="https://example.com/v1", default_model="m")
-        _target, payload = _external_chat_request(provider, {"web_search_tool": True}, [{"role": "user", "content": "news"}])
+        with patch.dict("os.environ", {"LLAMA_MANAGER_PROVIDER_COMPAT_API_KEY": "sk-test"}):
+            payload = build_chat_request(provider_config=provider, data={"web_search_tool": True}, messages=[{"role": "user", "content": "news"}]).payload
         self.assertEqual(payload["tool_choice"], "auto")
 
     def test_stream_tool_round_preserves_reasoning_content(self):
@@ -819,8 +821,9 @@ class ChatProxyRegressionTests(unittest.TestCase):
 
         payload = {"model": "m", "messages": [{"role": "user", "content": "news"}], "tools": [{"type": "function", "function": {"name": "web_search"}}]}
         state = {}
-        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="[1] ok")):
-            chunks = asyncio.run(collect(_stream_chat_with_tools("https://example.test", {}, payload, on_complete=state.update)))
+        request = ChatRequest(provider_kind="openai_chat", target="https://example.test", headers={}, payload=payload)
+        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.chat_adapters._run_web_search_tool", new=AsyncMock(return_value="[1] ok")):
+            chunks = asyncio.run(collect(stream_chat_completion(request, candidate_id="c1", on_context=state.update)))
         self.assertEqual(requests[1]["messages"][1]["reasoning_content"], "need web")
         self.assertIn("answer", "".join(chunks))
         self.assertEqual(state["kind"], "chat_messages")
@@ -835,7 +838,8 @@ class ChatProxyRegressionTests(unittest.TestCase):
                 return False
 
         async def run():
-            generator = _stream_chat_with_tools("https://example.test", {}, {"model": "m", "messages": []})
+            request = ChatRequest(provider_kind="openai_chat", target="https://example.test", headers={}, payload={"model": "m", "messages": []})
+            generator = stream_chat_completion(request, candidate_id="c1")
             with patch("httpx.AsyncClient.stream", return_value=Response([sse({"choices": [{"delta": {"content": "part"}}]})])):
                 first = await anext(generator)
                 await generator.aclose()
@@ -854,8 +858,9 @@ class ChatProxyRegressionTests(unittest.TestCase):
             return FakeStreamResponse([sse({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}), sse({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "final"}})])
 
         payload = {"model": "claude", "messages": [{"role": "user", "content": "news"}], "tools": [{"name": "web_search"}]}
-        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="ok")):
-            output = "".join(asyncio.run(collect(_stream_anthropic_with_tools("https://example.test", {}, payload))))
+        request = ChatRequest(provider_kind="anthropic", target="https://example.test", headers={}, payload=payload)
+        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.chat_adapters._run_web_search_tool", new=AsyncMock(return_value="ok")):
+            output = "".join(asyncio.run(collect(stream_chat_completion(request, candidate_id="c1"))))
         self.assertIn("final", output)
         self.assertEqual(len(requests), 2)
 
@@ -869,8 +874,9 @@ class ChatProxyRegressionTests(unittest.TestCase):
             return FakeStreamResponse([sse({"type": "response.created", "response": {"id": "resp_2"}}), sse({"type": "response.output_text.delta", "delta": "final"})])
 
         payload = {"model": "gpt", "input": "news", "tools": [{"type": "function", "name": "web_search"}]}
-        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="ok")):
-            output = "".join(asyncio.run(collect(_stream_responses_with_tools("https://example.test", {}, payload))))
+        request = ChatRequest(provider_kind="openai_responses", target="https://example.test", headers={}, payload=payload)
+        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.chat_adapters._run_web_search_tool", new=AsyncMock(return_value="ok")):
+            output = "".join(asyncio.run(collect(stream_chat_completion(request, candidate_id="c1"))))
         self.assertIn("final", output)
         self.assertEqual(requests[1]["previous_response_id"], "resp_1")
 
@@ -879,19 +885,19 @@ class ChatProxyRegressionTests(unittest.TestCase):
             yield sse({"choices": [{"delta": {"content": "hello"}}]})
             yield "data: [DONE]\n\n"
 
-        output = "".join(asyncio.run(collect(_normalize_v2_stream(source(), "candidate"))))
+        output = "".join(asyncio.run(collect(normalize_v2_stream(source(), "candidate"))))
         self.assertIn('"type": "start"', output)
         self.assertIn('"type": "content_delta"', output)
         self.assertIn('"type": "done"', output)
 
     def test_dsml_helpers_remain_defensive(self):
         text = '<|DSML| tool_calls><|DSML| invoke name="web_search"><|DSML| parameter name="query">abc</|DSML| parameter></|DSML| invoke></|DSML| tool_calls>'
-        self.assertEqual(_strip_dsml_tool_blocks(text), "")
-        self.assertEqual(_parse_dsml_tool_calls(text)[0]["function"]["name"], "web_search")
+        self.assertEqual(strip_dsml_tool_blocks(text), "")
+        self.assertEqual(parse_dsml_tool_calls(text)[0]["function"]["name"], "web_search")
 
     def test_non_stream_external_responses_normalize(self):
-        openai = _normalize_non_stream_response("openai_responses", {"output": [{"content": [{"type": "output_text", "text": "hello"}]}]})
-        anthropic = _normalize_non_stream_response("anthropic", {"content": [{"type": "text", "text": "hi"}]})
+        openai = normalize_non_stream_response("openai_responses", {"output": [{"content": [{"type": "output_text", "text": "hello"}]}]})
+        anthropic = normalize_non_stream_response("anthropic", {"content": [{"type": "text", "text": "hi"}]})
         self.assertEqual(openai["choices"][0]["message"]["content"], "hello")
         self.assertEqual(anthropic["choices"][0]["message"]["content"], "hi")
 
