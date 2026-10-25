@@ -12,7 +12,7 @@
 .capsule > span { overflow: hidden; text-overflow: ellipsis; min-width: 0 }
 .capsule .effortChip { flex: none; font-size: 11px; line-height: 1; padding: 4px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 550 }
 .capsule .capsuleChevron { color: var(--text-3); flex: none }
-.modelPanel { position: absolute; top: calc(100% + 8px); left: 0; z-index: 40; width: min(300px, calc(100vw - 48px)); display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 16px; border: 1px solid var(--line-strong); background: var(--glass-strong); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow-shell) }
+.modelPanel { position: absolute; top: calc(100% + 8px); left: 0; z-index: 40; width: min(300px, calc(100vw - 48px)); display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 16px; border: 1px solid var(--line-strong); background: var(--glass-strong); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow-shell); transform-origin: top left; animation: panelIn 180ms cubic-bezier(.16, 1, .3, 1) }
 .panelField { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 550; color: var(--text-2); cursor: default }
 .panelField select { flex: 0 0 auto; width: 100%; min-width: 0; max-width: none }
 .keyWarn { display: inline-flex; align-items: center; color: var(--yellow); cursor: help }
@@ -20,8 +20,8 @@
 .messages { overflow: auto; padding: 18px clamp(18px, 5vw, 76px); display: flex; flex-direction: column; gap: 18px; scroll-behavior: smooth }
 .empty { flex: 1; display: grid; place-items: center; color: var(--text-3); text-align: center }
 .turn { display: contents }
-.user { align-self: flex-end; max-width: min(76%, 820px); padding: 10px 13px; border-radius: var(--radius); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent); white-space: pre-wrap }
-.assistant { align-self: flex-start; width: min(88%, 980px); min-width: 0 }
+.user { align-self: flex-end; max-width: min(76%, 820px); padding: 10px 13px; border-radius: var(--radius); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent); white-space: pre-wrap; animation: msgRise 180ms cubic-bezier(.16, 1, .3, 1) }
+.assistant { align-self: flex-start; width: min(88%, 980px); min-width: 0; animation: msgRise 180ms cubic-bezier(.16, 1, .3, 1) }
 .assistantBody { border-left: 1px solid var(--line-strong); padding: 2px 0 2px 14px }
 .assistant[data-streaming='true'] .assistantBody { border-left-color: var(--accent) }
 .reasoning, .tools, .codeBlock { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--glass-soft); margin: 0 0 9px; overflow: hidden }
@@ -56,6 +56,8 @@
 .error { color: var(--red); margin-top: 8px }
 .cursor { display: inline-block; width: 7px; height: 14px; margin-left: 3px; vertical-align: -2px; background: var(--accent); animation: blink .8s steps(1) infinite }
 @keyframes blink { 50% { opacity: 0 } }
+@keyframes msgRise { from { opacity: 0; transform: translateY(6px) } }
+@keyframes panelIn { from { opacity: 0; transform: translateY(-4px) scale(.97) } }
 @media (max-width: 760px) {
   .messages { padding: 14px }
   .assistant { width: 96% }

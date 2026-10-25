@@ -66,7 +66,7 @@ export function RunPage({ config, toast }: { config: AppConfig; toast: (text: st
     <div className={styles.controlRow}>
       <Button tone="success" disabled={running} onClick={() => void start()}><Play size={15}/>启动</Button>
       <Button tone="danger" disabled={!running} onClick={() => void stop()}><Square size={15}/>停止</Button>
-      <Badge tone={healthy ? 'good' : running ? 'warn' : 'neutral'}>{healthy ? '服务可用' : running ? '启动中' : '未运行'}</Badge>
+      <Badge tone={healthy ? 'good' : running ? 'warn' : 'neutral'}>{running && <i className={styles.pulse}/>}{healthy ? '服务可用' : running ? '启动中' : '未运行'}</Badge>
       <span className={styles.statusDot}>{running ? `PID ${status.pid || '—'} · ${formatTime(status.uptime_seconds || 0)}` : '已停止'}</span>
       {capacity && running && <span className={styles.statusDot}>KV 池 {capacity.kv} · 显存余量 {capacity.free}</span>}
       <span className={page.muted}>{serverUrl}</span>
