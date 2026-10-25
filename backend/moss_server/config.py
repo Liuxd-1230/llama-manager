@@ -100,6 +100,10 @@ def public_settings(s: dict) -> dict:
     from .bridge import resolve, ProviderError
 
     out = dict(s)
+    # Legacy moss settings could carry a plaintext key; credentials now live
+    # only in the shared provider store, so never echo them to the client.
+    out.pop("api_key", None)
+    out.pop("base_url", None)
     try:
         resolved = resolve(out.get("provider_id"))
         out["api_key_set"] = bool(resolved["api_key"])
@@ -116,11 +120,3 @@ def model_chain(s: dict, primary: str | None = None) -> list[str]:
     return bridge_chain(s.get("provider_id"), primary)
 
 
-def _legacy_model_chain(s: dict, primary: str | None = None) -> list[str]:
-    first = (primary or s.get("model") or "gpt-4o-mini").strip()
-    rest = [m.strip() for m in str(s.get("fallback_models") or "").split(",") if m.strip()]
-    out: list[str] = []
-    for m in [first, *rest]:
-        if m and m not in out:
-            out.append(m)
-    return out

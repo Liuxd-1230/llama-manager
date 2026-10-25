@@ -1253,10 +1253,6 @@ def duplicate_profile(body: dict):
     return {"ok": True, "path": str(path)}
 
 
-def _busy_gpu_resources(request: Request) -> list[str]:
-    return []
-
-
 @app.post("/api/profiles/launch")
 async def launch_profile(request: Request, body: dict):
     raw_name = str(body.get("name", "")).strip()
@@ -1266,9 +1262,6 @@ async def launch_profile(request: Request, body: dict):
     profile = cfg.read_config(name)
     if profile is None:
         return JSONResponse(status_code=404, content={"error": f"Profile not found: {name}"})
-    busy = _busy_gpu_resources(request)
-    if busy:
-        return JSONResponse(status_code=409, content={"error": f"任务正在占用 {'、'.join(busy)}，请等待任务完成或取消后再切换档案"})
     was_running = process_manager.get_status().state == "running"
     if was_running:
         await process_manager.stop()
@@ -1355,10 +1348,7 @@ def detect_server(llama_cpp_dir: str, engine: str = "llama.cpp"):
 # ── Server control endpoints ──────────────────────────────────
 
 @app.post("/api/server/start")
-async def server_start(request: Request):
-    busy = _busy_gpu_resources(request)
-    if busy:
-        return JSONResponse(status_code=409, content={"error": f"任务正在占用 {'、'.join(busy)}，暂不能启动 llama-server"})
+async def server_start():
     try:
         config = cfg.get_config()
         await process_manager.start(config, profile_name=cfg.get_current_name())

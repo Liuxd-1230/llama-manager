@@ -15,7 +15,7 @@ const nav = [
   { id: 'models', label: '模型', icon: Boxes },
   { id: 'config', label: '配置', icon: SlidersHorizontal },
   { id: 'run', label: '运行', icon: Activity },
-  { id: 'studio', label: '提示词', icon: PenLine },
+  { id: 'studio', label: '提示词工坊', icon: PenLine },
   { id: 'maintenance', label: '维护', icon: Wrench },
   { id: 'chat', label: '对话', icon: Bot },
 ] as const

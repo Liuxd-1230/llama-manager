@@ -785,7 +785,7 @@ export function buildDraftPrompt(o: DraftOpts, doc: Doc): string {
 export function draftLayout(o: DraftOpts): boolean {
   const s = get();
   if (!s.doc || !o.text.trim()) return false;
-  if (s.settings && !s.settings.api_key_set && !s.settings.api_key_set) {
+  if (s.settings && !s.settings.api_key_set) {
     toast("先在「设置」里填写接口地址和 API Key，才能 AI 起稿", "err");
     set({ modal: "settings" });
     return false;
@@ -978,7 +978,7 @@ export function send(text: string, opts: SendOpts = {}) {
 export function assistAgent(opts: { prefs?: AssistPrefs; note?: string } = {}): boolean {
   const s = get();
   if (!s.doc) return false;
-  if (s.settings && !s.settings.api_key_set && !s.settings.api_key_set) {
+  if (s.settings && !s.settings.api_key_set) {
     toast("先在「设置」里填写接口地址和 API Key，Agent 才能补全", "err");
     set({ modal: "settings" });
     return false;

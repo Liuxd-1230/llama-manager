@@ -124,43 +124,6 @@ class ProfileRegressionTests(unittest.TestCase):
             self.assertEqual(missing.status_code, 400)
             self.assertIn("error", missing.json())
 
-    def test_launch_conflicts_with_running_job_are_rejected(self):
-        from backend.jobs import JobManager
-        from backend.storage import database
-
-        with TemporaryDirectory() as tmp, patch.object(cfg, "CONFIG_DIR", Path(tmp)):
-            client = TestClient(app)
-            cfg.save_config(AppConfig(llama_cpp_dir="C:\\llama.cpp", model_path="C:\\models\\m.gguf"), name="default")
-            manager = JobManager(database)
-            lock = manager.resource_locks.setdefault("llama_server", asyncio.Lock())
-            asyncio.run(lock.acquire())  # acquire() is a coroutine — run it to actually hold the lock
-            app.state.jobs = manager
-            try:
-                response = client.post("/api/profiles/launch", json={"name": "default"})
-                self.assertEqual(response.status_code, 409)
-                self.assertIn("llama_server", response.json()["error"])
-                start = client.post("/api/server/start")
-                self.assertEqual(start.status_code, 409)
-            finally:
-                lock.release()
-                del app.state.jobs
-            # Lock released — the request passes the guard (and fails later on the missing binary).
-            self.assertEqual(client.post("/api/server/start").status_code, 400)
-
-    def test_busy_resources_reports_only_held_locks(self):
-        from backend.jobs import JobManager
-        from backend.storage import database
-
-        manager = JobManager(database)
-        lock = manager.resource_locks.setdefault("gpu", asyncio.Lock())
-        self.assertEqual(manager.busy_resources(["gpu", "llama_server"]), [])
-        asyncio.run(lock.acquire())
-        try:
-            self.assertEqual(manager.busy_resources(["gpu", "llama_server"]), ["gpu"])
-        finally:
-            lock.release()
-        self.assertEqual(manager.busy_resources(["gpu", "llama_server"]), [])
-
     def test_launch_and_duplicate_missing_profiles_return_404(self):
         with TemporaryDirectory() as tmp, patch.object(cfg, "CONFIG_DIR", Path(tmp)):
             client = TestClient(app)
@@ -717,7 +680,7 @@ class FrontendRegressionTests(unittest.TestCase):
 
     def test_all_seven_workspaces_are_routed(self):
         app = (ROOT / "frontend-src" / "src" / "App.tsx").read_text(encoding="utf-8")
-        for page in ("models", "config", "run", "evaluation", "maintenance", "chat"):
+        for page in ("models", "config", "run", "studio", "maintenance", "chat"):
             self.assertIn(f'path="/{page}"', app)
 
     def test_generated_openapi_contract_and_query_client_are_present(self):

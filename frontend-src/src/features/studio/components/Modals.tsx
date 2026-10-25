@@ -58,7 +58,12 @@ function SettingsModal() {
   const save = async () => {
     setBusy("save");
     try {
-      const r = await api.saveSettings({ ...s });
+      const r = await api.saveSettings({
+        provider_id: s.provider_id, model: s.model, vision_model: s.vision_model,
+        fallback_models: s.fallback_models, temperature: s.temperature,
+        agent_protocol: s.agent_protocol, context_turns: s.context_turns,
+        prompt_prefix: s.prompt_prefix, negative_prompt: s.negative_prompt,
+      });
       useStore.setState({ settings: r });
       toast("设置已保存", "ok");
       setUi({ modal: null });

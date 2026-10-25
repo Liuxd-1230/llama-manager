@@ -27,20 +27,15 @@
   --r-s: 4px;
   --r: 5px;
   --r-l: 8px;
-  --sh-panel: 0 1px 0 rgba(255, 255, 255, 0.85) inset, 0 0 0 1px rgba(64, 52, 40, 0.07), 0 1px 2px rgba(64, 48, 30, 0.07),
-    0 8px 22px -10px rgba(64, 48, 30, 0.22);
-  --sh-float: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 0 0 1px rgba(64, 52, 40, 0.09), 0 4px 10px -2px rgba(64, 48, 30, 0.14),
-    0 18px 40px -12px rgba(64, 48, 30, 0.3);
-  --sh-key: 0 1px 0 rgba(255, 255, 255, 0.95) inset, 0 -1px 0 rgba(64, 52, 40, 0.05) inset, 0 1px 1.5px rgba(64, 48, 30, 0.16),
-    0 2px 5px -3px rgba(64, 48, 30, 0.28);
-  --sh-press: inset 0 1px 2.5px rgba(64, 48, 30, 0.22), inset 0 0 0 1px rgba(64, 52, 40, 0.06);
-  --sh-well: inset 0 1px 2px rgba(64, 48, 30, 0.1), 0 1px 0 rgba(255, 255, 255, 0.75);
-  --font: "Inter", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans SC",
-    "Noto Sans CJK SC", system-ui, sans-serif;
-  --mono: "JetBrains Mono", "Cascadia Code", "Cascadia Mono", Consolas, "Noto Sans Mono", ui-monospace, monospace;
+  --sh-panel: 0 1px 3px rgba(63, 52, 32, 0.06);
+  --sh-float: 0 1px 3px rgba(63, 52, 32, 0.08), 0 10px 28px -12px rgba(63, 52, 32, 0.18);
+  --sh-key: none;
+  --sh-press: none;
+  --sh-well: none;
+  --font: var(--font-body);
+  --mono: var(--font-mono);
   --left-w: clamp(272px, 19vw, 320px);
   --right-w: clamp(352px, 26vw, 440px);
-  color-scheme: light;
 }
 
 * {
@@ -72,7 +67,7 @@ html,
   user-select: text;
 }
 .studio-root ::selection {
-  background: rgba(63, 111, 216, 0.22);
+  background: var(--accent-soft);
 }
 ::-webkit-scrollbar {
   width: 10px;
@@ -143,24 +138,25 @@ kbd {
   gap: 6px;
   height: 28px;
   padding: 0 10px;
-  border: 0;
-  border-radius: var(--r);
-  background: linear-gradient(#fdfcfa, #f0ece5);
-  box-shadow: var(--sh-key), 0 0 0 1px rgba(64, 52, 40, 0.13);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-s);
+  background: transparent;
+  box-shadow: none;
   color: var(--ink);
   font-size: 12.5px;
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.12s, box-shadow 0.12s, transform 0.06s, color 0.12s;
+  transition: background 0.16s, border-color 0.16s, color 0.16s, transform 0.1s;
 }
 .btn:hover {
-  background: linear-gradient(#ffffff, #f4f1eb);
+  background: var(--panel-2);
+  border-color: var(--ink-3);
 }
 .btn:active,
 .btn.on {
-  background: linear-gradient(#ebe7e0, #f2efe9);
-  box-shadow: var(--sh-press);
+  background: var(--accent-soft);
+  box-shadow: none;
   transform: translateY(0.5px);
 }
 .btn.on {
@@ -199,32 +195,33 @@ kbd {
   width: 20px;
 }
 .btn-primary {
-  color: #fff;
-  background: linear-gradient(#5a85e8, #3a66cf);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.3) inset, 0 0 0 1px rgba(28, 58, 140, 0.55), 0 1px 2px rgba(28, 58, 140, 0.3),
-    0 3px 8px -3px rgba(28, 58, 140, 0.45);
-  text-shadow: 0 -1px 0 rgba(20, 40, 100, 0.25);
+  color: var(--accent-fg);
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: none;
+  text-shadow: none;
 }
 .btn-primary:hover {
-  background: linear-gradient(#6690ee, #4170d8);
+  background: var(--accent-2);
+  border-color: var(--accent-2);
 }
 .btn-primary:active {
-  background: linear-gradient(#3962c7, #4a74d8);
-  box-shadow: inset 0 1px 3px rgba(10, 30, 90, 0.45), 0 0 0 1px rgba(28, 58, 140, 0.6);
+  background: var(--accent-2);
+  box-shadow: none;
 }
 .btn-warm {
-  color: #fff;
-  background: linear-gradient(#e7984a, #cf7622);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.3) inset, 0 0 0 1px rgba(130, 70, 10, 0.5), 0 1px 2px rgba(130, 70, 10, 0.25),
-    0 3px 8px -3px rgba(130, 70, 10, 0.4);
-  text-shadow: 0 -1px 0 rgba(100, 50, 0, 0.25);
+  color: var(--accent-fg);
+  background: var(--warm, var(--accent));
+  border-color: transparent;
+  box-shadow: none;
+  text-shadow: none;
 }
 .btn-warm:hover {
-  background: linear-gradient(#eda257, #d77f2b);
+  filter: brightness(1.06);
 }
 .btn-warm:active {
-  background: linear-gradient(#c96f1c, #dc8735);
-  box-shadow: inset 0 1px 3px rgba(90, 40, 0, 0.45), 0 0 0 1px rgba(130, 70, 10, 0.55);
+  filter: brightness(0.96);
+  box-shadow: none;
 }
 .btn-danger {
   color: var(--err);
@@ -283,8 +280,8 @@ kbd {
 .textarea:focus,
 .select:focus {
   outline: none;
-  background: #fff;
-  box-shadow: var(--sh-well), 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-soft);
+  background: var(--paper);
+  box-shadow: inset 0 -2px 0 0 var(--accent);
 }
 .input::placeholder,
 .textarea::placeholder {
@@ -411,7 +408,7 @@ kbd {
 .chip.accent {
   background: var(--accent-soft);
   color: var(--accent-ink);
-  box-shadow: 0 0 0 1px rgba(63, 111, 216, 0.25);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .chip.warm {
   background: var(--warm-soft);
