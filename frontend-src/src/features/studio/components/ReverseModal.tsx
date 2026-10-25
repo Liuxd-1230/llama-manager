@@ -12,7 +12,7 @@ import { normalizeLayout } from "../lib/doc";
 import { addPage, replaceCurrentDoc, setUi, toast, useStore } from "../store";
 import type { BBox, Doc, ItemLabel } from "../types";
 import { LABEL_TEXT } from "../types";
-import { AutoTextarea, Modal, Seg, cx } from "../ui";
+import { AutoTextarea, Modal, Seg, cx } from "../../../components/kit";
 
 type NBox = [number, number, number, number];
 type Fit = "cover" | "stretch" | "contain";
@@ -429,7 +429,7 @@ export function ReverseModal() {
   const cutCount = mapped.filter((m) => m.it.on && !m.bbox).length;
 
   return (
-    <Modal xl title="图像反推" icon={<ImageUp size={16} />} onClose={() => setUi({ modal: null })}
+    <Modal className="studio-root" xl title="图像反推" icon={<ImageUp size={16} />} onClose={() => setUi({ modal: null })}
       head={img && <span className="hint num">原图 {img.w} × {img.h}</span>}
       foot={<>
         <span className="hint">{isLayout ? "拖动框可修正位置；在图上空白处拖拽可新增框；Delete 删除选中框。" : "需要视觉模型；结果先预览，确认后再写入。"}</span>

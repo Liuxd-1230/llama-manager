@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import React, { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -32,20 +32,6 @@ export function Seg<T extends string | number>(p: {
         </button>
       ))}
     </div>
-  );
-}
-
-export function Switch(p: { on: boolean; onChange: (v: boolean) => void; warm?: boolean; title?: string; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={p.on}
-      title={p.title}
-      disabled={p.disabled}
-      className={cx("switch", p.on && "on", p.warm && "warm")}
-      onClick={() => p.onChange(!p.on)}
-    />
   );
 }
 
@@ -124,44 +110,6 @@ export function MenuItem(p: {
   );
 }
 
-// ---------- 弹窗 ----------
-export function Modal(p: {
-  title: React.ReactNode;
-  icon?: React.ReactNode;
-  onClose: () => void;
-  children: React.ReactNode;
-  foot?: React.ReactNode;
-  wide?: boolean;
-  xl?: boolean;
-  head?: React.ReactNode;
-}) {
-  const close = useRef(p.onClose);
-  close.current = p.onClose;
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === "Escape" && close.current();
-    window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
-  }, []);
-  return createPortal(
-    <div className="modal-back studio-root" onMouseDown={(e) => e.target === e.currentTarget && p.onClose()}>
-      <div className={cx("modal", p.wide && "wide", p.xl && "xl")} role="dialog" aria-modal>
-        <div className="modal-head">
-          {p.icon}
-          <div className="modal-title">{p.title}</div>
-          <div className="spacer" />
-          {p.head}
-          <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={p.onClose} title="关闭 (Esc)" aria-label="关闭">
-            <X size={15} />
-          </button>
-        </div>
-        <div className="modal-body">{p.children}</div>
-        {p.foot && <div className="modal-foot">{p.foot}</div>}
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
 // ---------- 刻度拨杆（摄像机参数 / 体块参数） ----------
 export function Dial(p: {
   label: string;
@@ -236,7 +184,6 @@ export function Dial(p: {
           p.onChange(clamp(p.value + (e.deltaY < 0 ? 1 : -1) * p.step * (e.shiftKey ? 1 : p.step < 1 ? 5 : 1)));
         }}
       >
-        <div className="dial-ticks" />
         <div className="dial-fill" style={{ left: `${Math.min(t, tz) * 100}%`, width: `${Math.abs(t - tz) * 100}%` }} />
         <div className="dial-thumb" style={{ left: `${t * 100}%` }} />
       </div>

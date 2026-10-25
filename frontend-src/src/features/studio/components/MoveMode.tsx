@@ -3,7 +3,7 @@
  */
 import { ChevronDown, Lock, Move, Snowflake, Video } from "lucide-react";
 import { setMovePrefs, useStore } from "../store";
-import { Popover, Seg, cx, useAnchor } from "../ui";
+import { Popover, Seg, cx, useAnchor } from "../../../components/kit";
 
 export const SCOPE_TEXT = { free: "自由", frozen: "冻结" } as const;
 export const HOLD_TEXT = { fixed: "镜头固定", subject: "镜头随主体" } as const;

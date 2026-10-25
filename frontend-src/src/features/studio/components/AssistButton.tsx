@@ -2,7 +2,7 @@ import { ChevronDown, Loader2, Send, Wand2 } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { assistStats, loadAssistPrefs, saveAssistPrefs, type AssistPrefs } from "../lib/assist";
 import { assistAgent, useStore } from "../store";
-import { AutoTextarea, Popover, cx, useAnchor } from "../ui";
+import { AutoTextarea, Popover, cx, useAnchor } from "../../../components/kit";
 
 /**
  * 「交给 Agent 补全」分裂按钮：主按钮一键发送（按上次的勾选），右侧箭头展开选项和补充要求。

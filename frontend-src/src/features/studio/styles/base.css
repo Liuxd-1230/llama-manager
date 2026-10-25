@@ -376,43 +376,6 @@ kbd {
   justify-content: center;
 }
 
-.switch {
-  position: relative;
-  width: 30px;
-  height: 18px;
-  border-radius: 10px;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  flex: none;
-  background: var(--bone);
-  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 22%, transparent), 0 0 0 1px color-mix(in srgb, var(--ink) 10%, transparent);
-  transition: background 0.15s;
-}
-.switch::after {
-  content: "";
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--panel);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 30%, transparent), 0 0 0 0.5px color-mix(in srgb, var(--ink) 15%, transparent);
-  transition: transform 0.15s;
-}
-.switch.on {
-  background: var(--accent);
-  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--shadow-blue) 35%, transparent);
-}
-.switch.on::after {
-  transform: translateX(12px);
-}
-.switch.warm.on {
-  background: var(--warm);
-  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--shadow-ember) 35%, transparent);
-}
-
 .chip {
   display: inline-flex;
   align-items: center;
@@ -619,69 +582,6 @@ kbd {
   color: var(--ink-3);
 }
 
-/* ---------- 弹窗 ---------- */
-.modal-back {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: color-mix(in srgb, var(--inv) 45%, transparent);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: fade 0.12s ease-out;
-}
-.modal {
-  width: min(720px, calc(100vw - 48px));
-  max-height: calc(100vh - 64px);
-  display: flex;
-  flex-direction: column;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: var(--bg-elevated);
-  box-shadow: var(--sh-float);
-  animation: pop 0.14s ease-out;
-}
-.modal.wide {
-  width: min(980px, calc(100vw - 48px));
-}
-.modal-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 16px 12px;
-  border-bottom: 1px solid var(--line);
-}
-.modal-title {
-  font-size: 14.5px;
-  font-weight: 650;
-}
-.modal-body {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 14px 16px;
-}
-.modal-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--line);
-  background: color-mix(in srgb, var(--paper) 50%, transparent);
-  border-radius: 0 0 14px 14px;
-}
-@keyframes fade {
-  from {
-    opacity: 0;
-  }
-}
-@keyframes pop {
-  from {
-    opacity: 0;
-    transform: translateY(6px) scale(0.985);
-  }
-}
 
 /* ---------- 提示 ---------- */
 .toasts {

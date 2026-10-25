@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
-import { Modal } from "./ui";
+import { Modal } from "../../components/kit";
 
 interface Req {
   kind: "confirm" | "prompt";
@@ -39,7 +39,7 @@ export function DialogHost() {
   };
   const ok = () => done(req.kind === "confirm" ? true : v.trim() || null);
   return (
-    <Modal
+    <Modal className="studio-root"
       title={req.title}
       onClose={() => done(req.kind === "confirm" ? false : null)}
       foot={

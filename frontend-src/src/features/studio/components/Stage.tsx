@@ -13,7 +13,7 @@ import {
 } from "../store";
 import type { BBox, ItemLabel, LayoutDraft, LayoutItem } from "../types";
 import { LABEL_TEXT } from "../types";
-import { Seg, cx } from "../ui";
+import { Seg, cx } from "../../../components/kit";
 import { CameraCard } from "./CameraCard";
 import { AssistButton } from "./AssistButton";
 import { MoveModeMenu } from "./MoveMode";

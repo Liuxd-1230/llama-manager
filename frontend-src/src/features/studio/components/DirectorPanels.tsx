@@ -15,7 +15,7 @@ import {
 } from "../store";
 import type { Anchor, Camera, LayoutDraft, Light, LightRole, Lighting } from "../types";
 import { LABEL_TEXT } from "../types";
-import { Dial, MenuItem, Popover, Seg, Switch, cx, useAnchor } from "../ui";
+import { Dial, MenuItem, Popover, Seg, Switch, cx, useAnchor } from "../../../components/kit";
 
 // ---------------- 被灯照亮的球 ----------------
 type Rel = ReturnType<typeof relLights>[number] | ReturnType<typeof presetRel>[number];
@@ -129,7 +129,7 @@ function LightRow({ l, lg, cam, open, onOpen }: { l: Light; lg: Lighting; cam: C
         </Popover>
         <span className="muted ellipsis lt-row-meta num">{Math.round(r.h)}° · {Math.round(l.elevation)}° · {l.kelvin !== null ? `${l.kelvin}K` : l.color}</span>
         <div className="spacer" />
-        <span onClick={(e) => e.stopPropagation()}><Switch warm on={l.enabled} onChange={(v) => upd({ enabled: v }, "")} title={l.enabled ? "关掉这盏灯" : "打开这盏灯"} /></span>
+        <span onClick={(e) => e.stopPropagation()}><Switch warm checked={l.enabled} onChange={(v) => upd({ enabled: v }, "")} title={l.enabled ? "关掉这盏灯" : "打开这盏灯"} /></span>
         <button type="button" className="btn btn-ghost btn-xs btn-icon" title="删除这盏灯"
           onClick={(e) => { e.stopPropagation(); setLighting((cur) => ({ preset: "", lights: cur.lights.filter((x) => x.id !== l.id) }), ""); }}><Trash2 size={12} /></button>
         <ChevronDown size={12} className={cx("lt-caret", open && "on")} />
@@ -203,7 +203,7 @@ export function LightingPanel({ L, cam, active, setActive, onSent }: {
         <div className="dir-sec-head">
           <Lightbulb size={13} className={lg.enabled ? "warm-text" : "muted"} />
           <span className="section-title">灯光</span>
-          <Switch warm on={lg.enabled} onChange={(v) => {
+          <Switch warm checked={lg.enabled} onChange={(v) => {
             if (v && !lg.lights.length) applyLightingPreset("natural");
             else setLighting({ enabled: v }, "");
           }} title="编译时把光线方向、色温、氛围写进提示词" />
@@ -277,7 +277,7 @@ export function LightingPanel({ L, cam, active, setActive, onSent }: {
       <section className="dir-sec">
         <div className="dir-sec-head">
           <span className="section-title">写进提示词</span>
-          <Switch warm on={writeOn} disabled={!lg.enabled} onChange={(v) => editLayout((d) => ({ ...d, prompt_options: { depth: true, perspective: false, camera: true, ...d.prompt_options, lighting: v } }))}
+          <Switch warm checked={writeOn} disabled={!lg.enabled} onChange={(v) => editLayout((d) => ({ ...d, prompt_options: { depth: true, perspective: false, camera: true, ...d.prompt_options, lighting: v } }))}
             title="编译时把灯光短语追加到整体描述后面" />
           <div className="spacer" />
           <button type="button" className="btn btn-ghost btn-xs" onClick={() => setShowEn(!showEn)}>{showEn ? "看中文" : "看英文"}</button>

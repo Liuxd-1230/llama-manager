@@ -4,7 +4,7 @@ import { CAMERA_LIMITS, CAMERA_PRESETS, bodyOf, cameraMoved, cameraPhraseZh, cla
 import { defaultCamera } from "../lib/doc";
 import { DEFAULT_QUICK, bakeCamera, openDirector, reestimateBodies, resetCamera, send, setCamera, setUi, toggleCamera, useStore, useWorkState } from "../store";
 import type { Camera, CameraKey } from "../types";
-import { Dial, MenuItem, Popover, Switch, cx, useAnchor } from "../ui";
+import { Dial, MenuItem, Popover, Switch, cx, useAnchor } from "../../../components/kit";
 
 const EL = (28 * Math.PI) / 180;
 
@@ -104,7 +104,7 @@ export function CameraCard() {
       <div className="cam-head">
         <CameraIcon size={14} className="warm-text" />
         <span className="panel-title">摄像机</span>
-        <Switch warm on={cam.enabled} onChange={(v) => toggleCamera(v)} title="开启后框变成 3D 体块，按机位实时投影" />
+        <Switch warm checked={cam.enabled} onChange={(v) => toggleCamera(v)} title="开启后框变成 3D 体块，按机位实时投影" />
         <div className="spacer" />
         {cam.enabled && (
           <>

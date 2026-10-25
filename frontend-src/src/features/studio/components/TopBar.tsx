@@ -7,7 +7,7 @@ import {
   addPage, addSeries, currentSeries, deletePage, deleteSeries, duplicatePage, redo, renamePage, renameSeries,
   selectPage, setUi, undo, useStore, useWorkState } from "../store";
 import { confirmDialog, promptDialog } from "../dialog";
-import { MenuItem, Popover, cx, useAnchor } from "../ui";
+import { MenuItem, Popover, cx, useAnchor } from "../../../components/kit";
 
 function PageTab({ id, name, kind, active, pending }: { id: string; name: string; kind: string; active: boolean; pending: boolean }) {
   const [edit, setEdit] = useState<string | null>(null);

@@ -22,7 +22,7 @@ import {
 } from "../store";
 import type { BBox, Camera, LayoutDraft } from "../types";
 import { LABEL_TEXT } from "../types";
-import { Dial, MenuItem, Popover, Seg, Switch, cx, useAnchor } from "../ui";
+import { Dial, MenuItem, Popover, Seg, Switch, cx, useAnchor } from "../../../components/kit";
 import { AssistButton } from "./AssistButton";
 import { Gizmo, ROWS } from "./CameraCard";
 import { MoveModeMenu } from "./MoveMode";
@@ -747,7 +747,7 @@ export function DirectorView() {
           <MenuItem icon={<Maximize2 size={13} />} disabled={!selWorld.length} onClick={() => { auto.close(); if (L) animateTo(solveFraming(L, cam, selWorld, { cx: W / 2, cy: H / 2, fit: { w: W * 0.7, h: H * 0.7 } })); }}>选中项充满画面</MenuItem>
         </Popover>
         <div className={cx("dir-follow", follow && "on")}>
-          <Switch warm on={!!follow} onChange={toggleFollow} title="转动机位时自动平移，让主体保持在画面中的位置" />
+          <Switch warm checked={!!follow} onChange={toggleFollow} title="转动机位时自动平移，让主体保持在画面中的位置" />
           <span className="ellipsis" title={followNames}>{follow ? `跟随 · ${followNames}` : "跟随主体"}</span>
           <button ref={fol.ref} type="button" className="btn btn-ghost btn-xs btn-icon" onClick={fol.toggle}><ChevronDown size={12} /></button>
         </div>

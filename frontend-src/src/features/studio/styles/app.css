@@ -56,9 +56,7 @@
   font-weight: 800;
   font-size: 15px;
   color: var(--accent-fg);
-  background: linear-gradient(145deg, var(--accent), var(--accent-hover));
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--white) 20%, transparent) inset;
-  text-shadow: 0 -1px 0 color-mix(in srgb, var(--scrim) 15%, transparent);
+  background: var(--accent);
 }
 .brand-mark.big {
   width: 48px;
@@ -330,7 +328,7 @@ fieldset.insp:disabled {
   margin-top: 12px;
   padding: 9px 10px 10px;
   border-radius: 10px;
-  background: linear-gradient(color-mix(in srgb, var(--warm) 6%, transparent), color-mix(in srgb, var(--warm) 3%, transparent));
+  background: color-mix(in srgb, var(--warm) 5%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warm) 18%, transparent);
   display: flex;
   flex-direction: column;
@@ -382,16 +380,9 @@ fieldset.insp:disabled {
   height: 14px;
   border-radius: 7px;
   background: var(--panel-2);
-  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 20%, transparent), 0 1px 0 color-mix(in srgb, var(--white) 80%, transparent);
+  box-shadow: inset 0 0 0 1px var(--line);
   cursor: ew-resize;
   touch-action: none;
-}
-.dial-ticks {
-  position: absolute;
-  inset: 4px 6px;
-  background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--ink) 18%, transparent) 0 1px, transparent 1px 10%);
-  opacity: 0.6;
-  pointer-events: none;
 }
 .dial-fill {
   position: absolute;
@@ -402,7 +393,7 @@ fieldset.insp:disabled {
   pointer-events: none;
 }
 .dial.warm .dial-fill {
-  background: linear-gradient(var(--warm-bright), var(--warm));
+  background: var(--warm);
 }
 .dial-thumb {
   position: absolute;
@@ -412,7 +403,7 @@ fieldset.insp:disabled {
   margin: -8px 0 0 -6px;
   border-radius: 4px;
   background: var(--panel);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 35%, transparent), 0 0 0 0.5px color-mix(in srgb, var(--ink) 25%, transparent), 0 1px 0 var(--white) inset;
+  box-shadow: 0 0 0 1px var(--line-2);
   pointer-events: none;
 }
 .dial-thumb::after {
@@ -500,7 +491,7 @@ fieldset.insp:disabled {
   border-radius: var(--r-l);
   background:
     radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--paper) 10%, transparent) 1px, transparent 1.3px) 0 0 / 18px 18px,
-    linear-gradient(var(--bone), var(--bone));
+    var(--bone);
   box-shadow: inset 0 2px 6px color-mix(in srgb, var(--ink) 18%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--ink) 10%, transparent), 0 1px 0 color-mix(in srgb, var(--white) 70%, transparent);
   overflow: auto;
 }
@@ -1136,7 +1127,7 @@ fieldset.insp:disabled {
   display: grid;
   place-items: center;
   color: var(--accent);
-  background: linear-gradient(var(--white), var(--paper-shade));
+  background: var(--paper);
   box-shadow: var(--sh-key), 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent);
 }
 .welcome-title {
@@ -1220,7 +1211,7 @@ fieldset.insp:disabled {
   max-width: 88%;
   padding: 8px 11px;
   border-radius: 12px 12px 4px 12px;
-  background: linear-gradient(var(--paper), var(--paper-shade));
+  background: var(--paper);
   box-shadow: var(--sh-key), 0 0 0 1px color-mix(in srgb, var(--ink) 10%, transparent);
   font-size: 13px;
   line-height: 1.6;
@@ -1418,7 +1409,7 @@ fieldset.insp:disabled {
   align-items: center;
   gap: 6px;
   padding: 7px 10px;
-  background: linear-gradient(color-mix(in srgb, var(--warm) 10%, transparent), color-mix(in srgb, var(--warm) 5%, transparent));
+  background: color-mix(in srgb, var(--warm) 8%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--warm) 18%, transparent);
   color: var(--warm-ink);
 }
@@ -2570,16 +2561,6 @@ fieldset.insp:disabled {
 }
 
 /* ===================== 图像反推 + 定位框标注 ===================== */
-.modal.xl {
-  width: min(1320px, calc(100vw - 32px));
-  height: calc(100vh - 40px);
-  max-height: none;
-}
-.modal.xl .modal-body {
-  padding: 0;
-  overflow: hidden;
-  display: flex;
-}
 .rev {
   flex: 1;
   min-height: 0;

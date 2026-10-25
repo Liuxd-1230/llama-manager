@@ -11,7 +11,7 @@ import {
   DEFAULT_QUICK, addPage, currentPage, draftLayout, flushSave, replaceCurrentDoc, setQuick, setUi, toast, useStore, type DraftOpts, type QuickAction, useWorkState } from "../store";
 import type { AppSettings, ArchiveItem, Doc, Revision, Skill, SkillKind } from "../types";
 import { RESOLUTIONS } from "../types";
-import { AutoTextarea, Dial, Modal, Seg, cx } from "../ui";
+import { AutoTextarea, Dial, Modal, Seg, cx } from "../../../components/kit";
 
 const err = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const fmtTime = (t?: string) => {
@@ -71,7 +71,7 @@ function SettingsModal() {
     }
   };
   return (
-    <Modal title="设置" icon={<Settings size={16} />} onClose={() => setUi({ modal: null })}
+    <Modal className="studio-root" title="设置" icon={<Settings size={16} />} onClose={() => setUi({ modal: null })}
       foot={<>
         <div className="spacer" />
         <button type="button" className="btn" onClick={() => setUi({ modal: null })}>取消</button>
@@ -155,7 +155,7 @@ function SkillsModal() {
   if (!st) return null;
   const dirty = draft && sk && (draft.name !== sk.name || draft.description !== sk.description || draft.system_prompt !== sk.system_prompt);
   return (
-    <Modal wide title="Skills" icon={<Sparkles size={16} />} onClose={() => setUi({ modal: null })}>
+    <Modal className="studio-root" wide title="Skills" icon={<Sparkles size={16} />} onClose={() => setUi({ modal: null })}>
       <div className="skills">
         <div className="skills-list">
           {(["layout", "caption", "context"] as SkillKind[]).map((k) => (
@@ -221,7 +221,7 @@ function ArchiveModal() {
   const cur = shown.find((x) => x.id === selId) || shown[0];
   const page = currentPage(s);
   return (
-    <Modal wide title="档案库" icon={<Archive size={16} />} onClose={() => setUi({ modal: null })}
+    <Modal className="studio-root" wide title="档案库" icon={<Archive size={16} />} onClose={() => setUi({ modal: null })}
       head={<button type="button" className="btn btn-sm" onClick={async () => {
         const title = await promptDialog("存入档案库", page?.name || "未命名");
         if (!title) return;
@@ -298,7 +298,7 @@ function RevisionsModal() {
     if (list?.length && !sel) void api.revision(list[0].id).then(setSel);
   }, [list]);
   return (
-    <Modal wide title={`操作记录 · ${page?.name || ""}`} icon={<History size={16} />} onClose={() => setUi({ modal: null })}>
+    <Modal className="studio-root" wide title={`操作记录 · ${page?.name || ""}`} icon={<History size={16} />} onClose={() => setUi({ modal: null })}>
       <div className="archive">
         <div className="archive-side">
           <p className="hint" style={{ margin: "0 0 8px" }}>每条记录是该操作<b>之前</b>的页面状态。Agent 改动、载入、回滚都会自动留档；手动编辑每两分钟留一次。</p>
@@ -356,7 +356,7 @@ function QuickModal() {
     setList(n);
   };
   return (
-    <Modal title="快捷操作" icon={<Zap size={16} />} onClose={() => setUi({ modal: null })}
+    <Modal className="studio-root" title="快捷操作" icon={<Zap size={16} />} onClose={() => setUi({ modal: null })}
       foot={<>
         <button type="button" className="btn btn-sm btn-ghost" onClick={() => setList(clone(DEFAULT_QUICK))}><RotateCcw size={13} />恢复默认</button>
         <div className="spacer" />
@@ -459,7 +459,7 @@ function DraftModal() {
   const canvasHint = p.mode === "append" ? `追加时保持当前 ${L?.width}×${L?.height}`
     : p.canvas === "ai" ? "按内容自动选竖幅 / 横幅 / 方形" : p.canvas === "keep" ? (L ? `当前 ${L.width}×${L.height}` : "") : "";
   return (
-    <Modal title="AI 起稿" icon={<Sparkles size={16} />} onClose={close}
+    <Modal className="studio-root" title="AI 起稿" icon={<Sparkles size={16} />} onClose={close}
       foot={<>
         <span className="hint">{streaming ? "Agent 正在回复，生成会排在后面" : "Ctrl+Enter 生成 · 结果可整体撤销"}</span>
         <div className="spacer" />

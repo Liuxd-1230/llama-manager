@@ -12,7 +12,7 @@ import {
 } from "../lib/scene3d";
 import { applyMove, select, setLighting, toast, useStore, withGroup } from "../store";
 import type { Camera, LayoutDraft } from "../types";
-import { cx } from "../ui";
+import { cx } from "../../../components/kit";
 
 type V3 = Vec3;
 const OBS = new Map<string, Obs>();

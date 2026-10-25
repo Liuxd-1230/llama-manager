@@ -15,7 +15,7 @@ import {
   resolveProposal, selectPage, send, setAutoApprove, setUi, startNewSession, stop, toast, useStore,
 } from "../store";
 import type { Ask, Attachment, Message, Proposal, Skill, Step } from "../types";
-import { AutoTextarea, MenuItem, Popover, Switch, cx, useAnchor } from "../ui";
+import { AutoTextarea, MenuItem, Popover, Switch, cx, useAnchor } from "../../../components/kit";
 import { Markdown } from "./Markdown";
 
 const EMPTY_MSGS: Message[] = [];
@@ -565,7 +565,7 @@ export function AgentPanel() {
         <div className="spacer" />
         <label className="row hint" title="Agent 的改动直接生效（仍可撤销 / 在记录里回滚）">
           <CheckCheck size={12} />自动采纳
-          <Switch on={autoApprove} onChange={setAutoApprove} />
+          <Switch checked={autoApprove} onChange={setAutoApprove} />
         </label>
       </div>
       <MessageList />

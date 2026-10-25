@@ -10,7 +10,7 @@ import {
   updateItem, useStore, useWorkState } from "../store";
 import type { Anchor, CanvasKind, DepthTier, ItemLabel, LayoutItem } from "../types";
 import { ANCHOR_TEXT, DEPTH_TEXT, LABEL_TEXT, RESOLUTIONS } from "../types";
-import { AutoTextarea, Dial, MenuItem, NumField, Popover, Seg, Switch, cx, useAnchor } from "../ui";
+import { AutoTextarea, Dial, MenuItem, NumField, Popover, Seg, Switch, cx, useAnchor } from "../../../components/kit";
 
 const LABEL_ICON: Record<ItemLabel, React.ReactNode> = {
   object: <Box size={12} />, character: <User size={12} />, text: <Type size={12} />,
@@ -101,13 +101,13 @@ function PageSection() {
           </div>
           <div className="field opts">
             <label className="opt-row" title="根据图层顺序和重叠，给各框追加前后遮挡关系">
-              <Switch on={po.depth} onChange={(v) => editLayout((d) => ({ ...d, prompt_options: { ...po, depth: v } }))} />写入前后关系
+              <Switch checked={po.depth} onChange={(v) => editLayout((d) => ({ ...d, prompt_options: { ...po, depth: v } }))} />写入前后关系
             </label>
             <label className="opt-row" title="摄像机开启时，把镜头语言追加到整体描述">
-              <Switch warm on={po.camera} onChange={(v) => editLayout((d) => ({ ...d, prompt_options: { ...po, camera: v } }))} />写入镜头语言
+              <Switch warm checked={po.camera} onChange={(v) => editLayout((d) => ({ ...d, prompt_options: { ...po, camera: v } }))} />写入镜头语言
             </label>
             <label className="opt-row" title="灯光开启时（镜头调度 → 灯光），把灯光描述追加到整体描述">
-              <Switch warm on={po.lighting !== false} onChange={(v) => editLayout((d) => ({ ...d, prompt_options: { ...po, lighting: v } }))} />写入灯光描述
+              <Switch warm checked={po.lighting !== false} onChange={(v) => editLayout((d) => ({ ...d, prompt_options: { ...po, lighting: v } }))} />写入灯光描述
               {!L.lighting?.enabled && <span className="hint">（灯光未开启）</span>}
             </label>
           </div>
