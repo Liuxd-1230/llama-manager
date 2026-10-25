@@ -30,7 +30,9 @@
     "rehype-katex": "latest",
     "rehype-sanitize": "latest",
     "remark-gfm": "latest",
-    "remark-math": "latest"
+    "remark-math": "latest",
+    "use-sync-external-store": "^1.7.0",
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
