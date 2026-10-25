@@ -4,12 +4,12 @@ const pages = [
   ['模型', '#/models'],
   ['配置', '#/config'],
   ['运行', '#/run'],
-  ['评测', '#/evaluation'],
+  ['提示词工坊', '#/studio'],
   ['维护', '#/maintenance'],
   ['对话', '#/chat'],
 ] as const
 
-test('six workspaces, themes, glass header and settings stay usable', async ({ page }) => {
+test('six workspaces, themes, hairline header and settings stay usable', async ({ page }) => {
   const errors: string[] = []
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
   page.on('pageerror', error => errors.push(error.message))
@@ -17,7 +17,12 @@ test('six workspaces, themes, glass header and settings stay usable', async ({ p
 
   for (const [title, hash] of pages) {
     await page.goto(`/${hash}`)
-    await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
+    if (title === '提示词工坊') {
+      // Studio is a full-bleed workspace mounted without the standard page header.
+      await expect(page.locator('.studio-root')).toBeVisible()
+    } else {
+      await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
+    }
     await expectNoOverflow(page)
   }
 
@@ -38,8 +43,9 @@ test('six workspaces, themes, glass header and settings stay usable', async ({ p
   const restingBackground = await topbar.evaluate(element => getComputedStyle(element).backgroundColor)
   await main.evaluate(element => element.scrollTo(0, 500))
   await expect.poll(async () => main.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
-  await expect.poll(async () => topbar.evaluate(element => getComputedStyle(element).backdropFilter)).not.toBe('none')
-  await expect.poll(async () => topbar.evaluate(element => getComputedStyle(element).backgroundColor)).not.toBe(restingBackground)
+  // Editorial topbar: transparent with a hairline bottom border, unchanged by scrolling.
+  await expect.poll(async () => topbar.evaluate(element => getComputedStyle(element).borderBottomStyle)).toBe('solid')
+  await expect.poll(async () => topbar.evaluate(element => getComputedStyle(element).backgroundColor)).toBe(restingBackground)
   await expectNoOverflow(page)
   expect(errors).toEqual([])
 })

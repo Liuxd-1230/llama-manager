@@ -61,7 +61,13 @@ test('failed config save preserves the draft and gives actionable feedback', asy
 test('narrow chat settings, composer and named navigation fit the screen', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/#/chat')
-  for (const name of ['模型厂商', '对话模型', '推理强度', '消息内容']) {
+  const capsule = page.getByTitle('模型与推理设置')
+  await expect(capsule).toBeVisible()
+  const capsuleBox = await capsule.boundingBox()
+  expect(capsuleBox!.x).toBeGreaterThanOrEqual(0)
+  expect(capsuleBox!.x + capsuleBox!.width).toBeLessThanOrEqual(390)
+  await capsule.click()
+  for (const name of ['模型厂商', '对话模型', '推理强度']) {
     const field = page.getByLabel(name, { exact: true })
     await expect(field).toBeVisible()
     const rect = await field.boundingBox()
@@ -69,9 +75,15 @@ test('narrow chat settings, composer and named navigation fit the screen', async
     expect(rect!.x).toBeGreaterThanOrEqual(0)
     expect(rect!.x + rect!.width).toBeLessThanOrEqual(390)
   }
+  await capsule.click()
+  const composer = page.getByLabel('消息内容', { exact: true })
+  await expect(composer).toBeVisible()
+  const composerRect = await composer.boundingBox()
+  expect(composerRect!.x).toBeGreaterThanOrEqual(0)
+  expect(composerRect!.x + composerRect!.width).toBeLessThanOrEqual(390)
   const send = await page.getByRole('button', { name: '发送', exact: true }).boundingBox()
   expect(send!.y + send!.height).toBeLessThanOrEqual(844)
-  for (const name of ['模型', '配置', '运行', '评测', '维护', '对话']) await expect(page.getByRole('link', { name, exact: true })).toBeVisible()
+  for (const name of ['模型', '配置', '运行', '提示词工坊', '维护', '对话']) await expect(page.getByRole('link', { name, exact: true })).toBeVisible()
 })
 
 test('resource threshold uses the same scale as an over-capacity estimate', async ({ page }) => {
