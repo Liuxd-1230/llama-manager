@@ -326,7 +326,7 @@ kbd {
   color: var(--ink);
 }
 .seg > button.on {
-  background: linear-gradient(#ffffff, #f7f5f1);
+  background: var(--panel);
   color: var(--ink);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 1) inset, 0 0 0 1px rgba(64, 52, 40, 0.12), 0 1px 2px rgba(64, 48, 30, 0.14);
 }
@@ -364,7 +364,7 @@ kbd {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: linear-gradient(#ffffff, #f1eee9);
+  background: var(--panel);
   box-shadow: 0 1px 2px rgba(40, 30, 20, 0.3), 0 0 0 0.5px rgba(40, 30, 20, 0.15);
   transition: transform 0.15s;
 }
@@ -447,7 +447,7 @@ kbd {
 
 /* ---------- 面板 ---------- */
 .panel {
-  background: linear-gradient(180deg, #f9f7f3 0, var(--panel) 64px);
+  background: var(--panel);
   border-radius: var(--r-l);
   box-shadow: var(--sh-panel);
   display: flex;

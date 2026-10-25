@@ -136,7 +136,7 @@
 .page-tab-input {
   width: 90px;
   border: 0;
-  background: #fff;
+  background: var(--paper);
   border-radius: 4px;
   padding: 0 4px;
   box-shadow: 0 0 0 1px var(--accent);
@@ -457,7 +457,7 @@ fieldset.insp:disabled {
   height: 40px;
   padding: 0 8px;
   border-radius: 11px;
-  background: linear-gradient(#f9f7f3, var(--panel));
+  background: var(--panel);
   box-shadow: var(--sh-panel);
   flex: none;
   min-width: 0;
@@ -744,8 +744,8 @@ fieldset.insp:disabled {
   gap: 8px;
   padding: 6px 8px 6px 10px;
   border-radius: 10px;
-  background: #fffaf3;
-  box-shadow: var(--sh-float), 0 0 0 1px rgba(217, 130, 43, 0.35);
+  background: var(--panel);
+  box-shadow: var(--sh-float), 0 0 0 1px var(--line-2);
   font-size: 12.5px;
   z-index: 300;
 }
@@ -787,7 +787,7 @@ fieldset.insp:disabled {
   display: flex;
   flex-direction: column;
   border-radius: var(--r-l);
-  background: linear-gradient(#f9f7f3, var(--panel) 40px);
+  background: var(--panel);
   box-shadow: var(--sh-panel);
   overflow: hidden;
   animation: pop 0.14s ease-out;
@@ -849,7 +849,7 @@ fieldset.insp:disabled {
   max-height: calc(100% - 20px);
   overflow: auto;
   border-radius: 12px;
-  background: linear-gradient(#fbfaf7, #f4f1ec);
+  background: var(--panel);
   box-shadow: var(--sh-float);
   z-index: 300;
 }
@@ -1678,7 +1678,7 @@ fieldset.insp:disabled {
   transition: box-shadow 0.12s;
 }
 .composer:focus-within {
-  background: #fff;
+  background: var(--paper);
   box-shadow: var(--sh-well), 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-soft);
 }
 .composer-refs {
@@ -1977,7 +1977,7 @@ fieldset.insp:disabled {
   flex: none;
   border-radius: 4px;
   box-shadow: 0 0 0 1px var(--line-2), 0 4px 12px -4px rgba(50, 36, 20, 0.3);
-  background: #fff;
+  background: var(--paper);
 }
 .doc-preview.caption {
   padding: 10px;
@@ -2060,7 +2060,7 @@ fieldset.insp:disabled {
   align-items: center;
   gap: 6px;
   padding: 0 10px 0 14px;
-  background: linear-gradient(#f9f7f3, var(--panel));
+  background: var(--panel);
   box-shadow: 0 1px 0 var(--line-2), 0 4px 12px -8px rgba(64, 48, 30, 0.25);
   z-index: 2;
   min-width: 0;
@@ -2334,7 +2334,7 @@ fieldset.insp:disabled {
 }
 .dir-sec {
   border-radius: 11px;
-  background: linear-gradient(#fbfaf7, #f4f1ec);
+  background: var(--panel);
   box-shadow: var(--sh-panel);
   padding: 8px 10px 10px;
 }

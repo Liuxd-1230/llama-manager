@@ -8,7 +8,7 @@
 .search input:focus { border-bottom-color:transparent; background:transparent; box-shadow:none; outline:none }
 .search input:focus { box-shadow:inset 0 -2px 0 0 var(--accent) }
 .filter { height:34px; border:0; background:transparent; font-size:13px; color:var(--text-2); max-width:100%; cursor:pointer }
-.count { font-family:var(--font-mono); font-size:10.5px; letter-spacing:.24em; color:var(--text-3); text-transform:uppercase; margin-right:auto; white-space:nowrap }
+.count { font-family:var(--font-mono); font-size:11px; letter-spacing:.24em; color:var(--text-3); text-transform:uppercase; margin-right:auto; white-space:nowrap }
 .createRow { display:flex; gap:10px; align-items:center; flex-wrap:wrap }
 .createRow input { width:200px; flex:0 1 200px }
 
@@ -39,7 +39,7 @@
 .identity { min-width:0 }
 .metaLine { color:var(--text-3); font-family:var(--font-mono); font-size:11.5px; letter-spacing:.04em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin:0 }
 .facts { display:flex; gap:34px; margin-top:16px; flex-wrap:wrap }
-.facts span { display:flex; flex-direction:column-reverse; gap:5px; color:var(--text-3); font-family:var(--font-mono); font-size:10px; letter-spacing:.2em; text-transform:uppercase }
+.facts span { display:flex; flex-direction:column-reverse; gap:5px; color:var(--text-3); font-family:var(--font-mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase }
 .facts b { font-family:var(--font-mono); color:var(--text); font-size:15px; font-weight:500; letter-spacing:-.01em; font-variant-numeric:tabular-nums }
 .featured .facts b { font-size:16px }
 .geometry { color:var(--text-3); font-family:var(--font-mono); font-size:11px; margin:14px 0 0; letter-spacing:.03em }
