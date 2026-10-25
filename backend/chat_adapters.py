@@ -14,6 +14,7 @@ import re
 from dataclasses import dataclass
 
 from . import provider_manager as providers
+from . import search_manager
 from .models import AppConfig
 
 
@@ -270,6 +271,76 @@ def _web_search_tool_schema() -> dict:
 def _anthropic_web_search_tool_schema() -> dict:
     fn = _web_search_tool_schema()["function"]
     return {"name": fn["name"], "description": fn["description"], "input_schema": fn["parameters"]}
+
+
+# ── Tool execution ────────────────────────────────────────────
+# Exactly one real tool exists today (web_search); anything else the model
+# names is answered with an "Unsupported tool" stub. Introduce an injected
+# tool registry only when a second real tool appears.
+
+def _tool_summary(text: str, limit: int = 700) -> str:
+    text = str(text or "").strip()
+    return text if len(text) <= limit else text[:limit].rstrip() + "..."
+
+
+def _merge_tool_call_delta(acc: dict[int, dict], delta_call: dict) -> None:
+    index = int(delta_call.get("index") or 0)
+    call = acc.setdefault(index, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+    if delta_call.get("id"):
+        call["id"] = delta_call.get("id")
+    if delta_call.get("type"):
+        call["type"] = delta_call.get("type")
+    fn = delta_call.get("function") or {}
+    if fn.get("name"):
+        call["function"]["name"] = fn.get("name")
+    if fn.get("arguments"):
+        call["function"]["arguments"] += fn.get("arguments")
+
+
+async def _run_web_search_tool(arguments: dict) -> str:
+    query = " ".join(str(arguments.get("query", "")).split())
+    limit = int(arguments.get("limit") or 4)
+    provider, results = await search_manager.search_web(query, limit=max(1, min(limit, 5)))
+    if not results:
+        return "No web results found."
+    lines = [f"Search provider: {provider}"]
+    for idx, item in enumerate(results, 1):
+        lines.append(f"[{idx}] {item['title']}\nURL: {item['url']}")
+        if item.get("snippet"):
+            lines.append(f"Summary: {item['snippet']}")
+    return "\n\n".join(lines)
+
+
+async def _execute_chat_tool_calls(
+    messages: list[dict],
+    tool_calls: list[dict],
+    assistant_message: dict | None = None,
+) -> list[dict]:
+    events = []
+    if assistant_message is None:
+        assistant_message = {"role": "assistant", "content": "", "tool_calls": tool_calls}
+    else:
+        assistant_message = dict(assistant_message)
+        assistant_message["role"] = "assistant"
+        assistant_message["tool_calls"] = tool_calls
+    messages.append(assistant_message)
+    for call in tool_calls:
+        fn = call.get("function", {})
+        try:
+            args = json.loads(fn.get("arguments") or "{}")
+        except Exception:
+            args = {}
+        events.append({"type": "call", "name": fn.get("name") or "", "query": args.get("query") or "", "limit": args.get("limit") or ""})
+        if fn.get("name") != "web_search":
+            result = f"Unsupported tool: {fn.get('name')}"
+        else:
+            try:
+                result = await _run_web_search_tool(args)
+            except Exception as exc:
+                result = f"web_search failed: {type(exc).__name__}: {exc}"
+        events.append({"type": "result", "name": fn.get("name") or "", "summary": _tool_summary(result)})
+        messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": result})
+    return events
 
 
 def _local_chat_payload(data: dict, config: AppConfig, messages: list[dict]) -> dict:

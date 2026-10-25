@@ -824,7 +824,7 @@ class ChatProxyRegressionTests(unittest.TestCase):
 
         payload = {"model": "m", "messages": [{"role": "user", "content": "news"}], "tools": [{"type": "function", "function": {"name": "web_search"}}]}
         state = {}
-        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="[1] ok")):
+        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.chat_adapters._run_web_search_tool", new=AsyncMock(return_value="[1] ok")):
             chunks = asyncio.run(collect(_stream_chat_with_tools("https://example.test", {}, payload, on_complete=state.update)))
         self.assertEqual(requests[1]["messages"][1]["reasoning_content"], "need web")
         self.assertIn("answer", "".join(chunks))
@@ -859,7 +859,7 @@ class ChatProxyRegressionTests(unittest.TestCase):
             return FakeStreamResponse([sse({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}), sse({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "final"}})])
 
         payload = {"model": "claude", "messages": [{"role": "user", "content": "news"}], "tools": [{"name": "web_search"}]}
-        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="ok")):
+        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.chat_adapters._run_web_search_tool", new=AsyncMock(return_value="ok")):
             output = "".join(asyncio.run(collect(_stream_anthropic_with_tools("https://example.test", {}, payload))))
         self.assertIn("final", output)
         self.assertEqual(len(requests), 2)
@@ -874,7 +874,7 @@ class ChatProxyRegressionTests(unittest.TestCase):
             return FakeStreamResponse([sse({"type": "response.created", "response": {"id": "resp_2"}}), sse({"type": "response.output_text.delta", "delta": "final"})])
 
         payload = {"model": "gpt", "input": "news", "tools": [{"type": "function", "name": "web_search"}]}
-        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="ok")):
+        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.chat_adapters._run_web_search_tool", new=AsyncMock(return_value="ok")):
             output = "".join(asyncio.run(collect(_stream_responses_with_tools("https://example.test", {}, payload))))
         self.assertIn("final", output)
         self.assertEqual(requests[1]["previous_response_id"], "resp_1")

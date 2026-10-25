@@ -7,7 +7,6 @@ import io
 import json
 import os
 from pathlib import Path
-import re
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -32,10 +31,14 @@ from .moss_server.skills import load_skills as moss_load_skills, router as moss_
 # Interim bridge while the chat adapter layer migrates into chat_adapters;
 # shrinks to the deep interface as slices land.
 from .chat_adapters import (
-    _openai_chunk,
+    _execute_chat_tool_calls,
     _force_web_search_tool_choice,
     _looks_like_missed_web_search,
+    _merge_tool_call_delta,
+    _openai_chunk,
+    _run_web_search_tool,
     _tool_event_chunk,
+    _tool_summary,
     build_chat_request,
     local_base_url,
     messages_with_web_tool_guidance,
@@ -135,71 +138,6 @@ async def _messages_with_search_context(messages: list[dict], enabled: bool) -> 
         else:
             search_text = "网页搜索没有返回可用结果。"
     return [{"role": "system", "content": search_text}, *messages]
-
-
-async def _run_web_search_tool(arguments: dict) -> str:
-    query = " ".join(str(arguments.get("query", "")).split())
-    limit = int(arguments.get("limit") or 4)
-    provider, results = await search_manager.search_web(query, limit=max(1, min(limit, 5)))
-    if not results:
-        return "No web results found."
-    lines = [f"Search provider: {provider}"]
-    for idx, item in enumerate(results, 1):
-        lines.append(f"[{idx}] {item['title']}\nURL: {item['url']}")
-        if item.get("snippet"):
-            lines.append(f"Summary: {item['snippet']}")
-    return "\n\n".join(lines)
-
-
-def _tool_summary(text: str, limit: int = 700) -> str:
-    text = str(text or "").strip()
-    return text if len(text) <= limit else text[:limit].rstrip() + "..."
-
-
-def _merge_tool_call_delta(acc: dict[int, dict], delta_call: dict) -> None:
-    index = int(delta_call.get("index") or 0)
-    call = acc.setdefault(index, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
-    if delta_call.get("id"):
-        call["id"] = delta_call.get("id")
-    if delta_call.get("type"):
-        call["type"] = delta_call.get("type")
-    fn = delta_call.get("function") or {}
-    if fn.get("name"):
-        call["function"]["name"] = fn.get("name")
-    if fn.get("arguments"):
-        call["function"]["arguments"] += fn.get("arguments")
-
-
-async def _execute_chat_tool_calls(
-    messages: list[dict],
-    tool_calls: list[dict],
-    assistant_message: dict | None = None,
-) -> list[dict]:
-    events = []
-    if assistant_message is None:
-        assistant_message = {"role": "assistant", "content": "", "tool_calls": tool_calls}
-    else:
-        assistant_message = dict(assistant_message)
-        assistant_message["role"] = "assistant"
-        assistant_message["tool_calls"] = tool_calls
-    messages.append(assistant_message)
-    for call in tool_calls:
-        fn = call.get("function", {})
-        try:
-            args = json.loads(fn.get("arguments") or "{}")
-        except Exception:
-            args = {}
-        events.append({"type": "call", "name": fn.get("name") or "", "query": args.get("query") or "", "limit": args.get("limit") or ""})
-        if fn.get("name") != "web_search":
-            result = f"Unsupported tool: {fn.get('name')}"
-        else:
-            try:
-                result = await _run_web_search_tool(args)
-            except Exception as exc:
-                result = f"web_search failed: {type(exc).__name__}: {exc}"
-        events.append({"type": "result", "name": fn.get("name") or "", "summary": _tool_summary(result)})
-        messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": result})
-    return events
 
 
 async def _complete_with_chat_tools(target: str, headers: dict[str, str], payload: dict, max_rounds: int = 4) -> dict:
