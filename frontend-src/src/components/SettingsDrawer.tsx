@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { useModalFocus } from './Modal'
 import { api, uid } from '../api'
 import type { Accent, Provider, SearchSettings, Theme } from '../types'
+import type { AppSettings } from '../features/studio/types'
 import { Button, ConfirmButton, Field, Input, Select, Switch } from './ui'
 import styles from './SettingsDrawer.module.css'
 
@@ -28,12 +29,12 @@ export function SettingsDrawer({ open, onClose, theme, setTheme, accent, setAcce
   const [selectedId, setSelectedId] = useState('deepseek')
   const [draft, setDraft] = useState<Provider | null>(null)
   const [search, setSearch] = useState<SearchSettings | null>(null)
-  const [moss, setMoss] = useState<any>(null)
-  const loadMoss = async () => { setMoss(await api<any>('/api/moss/settings')) }
+  const [moss, setMoss] = useState<AppSettings | null>(null)
+  const loadMoss = async () => { setMoss(await api<AppSettings>('/api/moss/settings')) }
   const saveMoss = async () => {
     if (!moss) return
-    const payload = { provider_id: moss.provider_id, model: moss.model, vision_model: moss.vision_model, fallback_models: moss.fallback_models, temperature: moss.temperature, agent_protocol: moss.agent_protocol, context_turns: moss.context_turns }
-    setMoss(await api<any>('/api/moss/settings', { method: 'PUT', body: JSON.stringify(payload) }))
+    const payload: Partial<AppSettings> = { provider_id: moss.provider_id, model: moss.model, vision_model: moss.vision_model, fallback_models: moss.fallback_models, temperature: moss.temperature, agent_protocol: moss.agent_protocol, context_turns: moss.context_turns }
+    setMoss(await api<AppSettings>('/api/moss/settings', { method: 'PUT', body: JSON.stringify(payload) }))
     toast('提示词工坊设置已保存')
   }
   const load = async () => {
@@ -84,11 +85,11 @@ export function SettingsDrawer({ open, onClose, theme, setTheme, accent, setAcce
         {tab === 'studio' && moss && <div>
           <p>提示词工坊（画框编排 / 镜头 / 灯光）的 Agent 使用以下模型设置，与对话页共享同一批厂商。</p>
           <div className={styles.grid}>
-            <Field label="提供商"><Select value={moss.provider_id} onChange={event => setMoss({ ...moss, provider_id: event.target.value })}>{(moss.providers || []).map((p: any) => <option key={p.id} value={p.id}>{p.name}{p.enabled ? '' : '（已停用）'}</option>)}</Select></Field>
+            <Field label="提供商"><Select value={moss.provider_id} onChange={event => setMoss({ ...moss, provider_id: event.target.value })}>{(moss.providers || []).map(p => <option key={p.id} value={p.id}>{p.name}{p.enabled ? '' : '（已停用）'}</option>)}</Select></Field>
             <Field label="主模型"><Input value={moss.model} onChange={event => setMoss({ ...moss, model: event.target.value })}/></Field>
             <Field label="视觉模型（图像反推）"><Input value={moss.vision_model} onChange={event => setMoss({ ...moss, vision_model: event.target.value })}/></Field>
             <Field label="后备模型（逗号分隔）"><Input value={moss.fallback_models} onChange={event => setMoss({ ...moss, fallback_models: event.target.value })}/></Field>
-            <Field label="工具协议"><Select value={moss.agent_protocol} onChange={event => setMoss({ ...moss, agent_protocol: event.target.value })}><option value="auto">自动</option><option value="tools">函数调用</option><option value="tags">标签协议</option></Select></Field>
+            <Field label="工具协议"><Select value={moss.agent_protocol} onChange={event => setMoss({ ...moss, agent_protocol: event.target.value as AppSettings['agent_protocol'] })}><option value="auto">自动</option><option value="tools">函数调用</option><option value="tags">标签协议</option></Select></Field>
             <Field label={`温度 ${moss.temperature ?? 0.7}`}><Input type="range" min={0} max={2} step={0.05} value={moss.temperature ?? 0.7} onChange={event => setMoss({ ...moss, temperature: Number(event.target.value) })}/></Field>
           </div>
           <p style={{ margin: '10px 0 0', color: 'var(--text-3)', fontSize: 12, lineHeight: 1.7 }}>密钥沿用各厂商在「模型厂商」页签里配置的环境变量；工坊内的「设置」弹窗与本页读写同一份数据。</p>
