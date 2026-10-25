@@ -690,3 +690,18 @@ kbd {
     transform: rotate(360deg);
   }
 }
+
+/* Studio dark-mode lift: moss components sit on a deeper panel than the host,
+   so their ink/panel tokens get one extra step of lightness when dark. */
+:root[data-theme='dark'] .studio-root {
+  --ink: #f2ecde;
+  --ink-2: #c6bfae;
+  --ink-3: #a8a08e;
+  --ink-4: #8b8371;
+  --panel: #211e18;
+  --panel-2: #1b1813;
+  --paper: #262218;
+  --well: #262218;
+  --line: rgba(235, 225, 205, 0.16);
+  --line-2: rgba(235, 225, 205, 0.3);
+}

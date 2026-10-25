@@ -3831,8 +3831,8 @@ button.chip.accent:hover {
   width: min(380px, calc(100% - 24px));
   padding: 12px 12px 8px;
   border-radius: 12px;
-  background: rgba(255, 253, 249, 0.96);
-  box-shadow: 0 0 0 1px var(--line-2), 0 8px 24px rgba(64, 48, 30, 0.12);
+  background: var(--panel);
+  box-shadow: 0 0 0 1px var(--line-2), 0 8px 24px rgba(0, 0, 0, 0.25);
   color: var(--ink-2);
   cursor: default;
 }
