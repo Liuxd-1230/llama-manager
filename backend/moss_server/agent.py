@@ -212,8 +212,11 @@ async def run_agent(*, session_id: str, page_id: str, doc: dict, view: Optional[
         yield sse({"type": "error", "message": "页面不存在"})
         return
     s = load_settings()
-    if not (s.get("api_key") or "").strip():
-        yield sse({"type": "error", "message": "未配置 API Key：请先在「设置」里填写接口地址和密钥。画框、编辑与编译不受影响。"})
+    from .bridge import resolve, ProviderError
+    try:
+        resolve(s.get("provider_id"))
+    except ProviderError as exc:
+        yield sse({"type": "error", "message": f"{exc}。画框、编辑与编译不受影响。"})
         return
 
     if replace_from_seq:

@@ -167,7 +167,7 @@ function Toasts() {
   );
 }
 
-export function PromptStudioPage() {
+function App() {
   const ready = useStore((s) => s.ready);
   const bootError = useStore((s) => s.bootError);
   const director = useStore((s) => s.director && s.doc?.kind === "layout");
@@ -201,6 +201,15 @@ export function PromptStudioPage() {
       <Modals />
       <DialogHost />
       <Toasts />
+    </div>
+  );
+}
+
+/** Host wrapper: scopes the studio palette (.studio-root) to the host theme. */
+export function PromptStudioPage() {
+  return (
+    <div className="studio-root" style={{ height: "100%" }}>
+      <App />
     </div>
   );
 }

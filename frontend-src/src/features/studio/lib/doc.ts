@@ -1,7 +1,7 @@
 import type { BBox, Camera, Doc, LayoutDraft, LayoutItem, PerspectiveSettings, PromptOptions } from "../types";
 import { defaultLighting, normalizeLighting } from "./lighting";
 
-export const BOX_COLORS = ["#3F6FD8", "#D9822B", "#3E9B6B", "#C2457A", "#7A5BD1", "#2A97A8"];
+export const BOX_COLORS = ["#C2552F", "#3E9B6B", "#D9822B", "#C2457A", "#7A5BD1", "#2A97A8"];
 export const boxColor = (it: Pick<LayoutItem, "color">, i = 0) =>
   BOX_COLORS[(((it.color ?? i) % BOX_COLORS.length) + BOX_COLORS.length) % BOX_COLORS.length];
 
