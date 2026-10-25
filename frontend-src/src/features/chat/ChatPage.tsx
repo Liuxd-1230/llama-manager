@@ -1,4 +1,4 @@
-import { AlertTriangle, BrainCircuit, ChevronLeft, ChevronRight, Copy, Download, FileText, Globe2, Paperclip, Radio, RefreshCw, Search, Send, Square, Trash2, Wrench, X } from 'lucide-react'
+import { AlertTriangle, BrainCircuit, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, FileText, Gauge, Globe2, Paperclip, Radio, RefreshCw, Search, Send, Square, Trash2, Wrench, X } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { api, ApiError, uid } from '../../api'
@@ -38,6 +38,16 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false, 
   const [searchSettings, setSearchSettings] = useState<SearchSettings | null>(null)
   const [requestPending, setRequestPending] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(false)
+  const panelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!panelOpen) return
+    const onPointerDown = (event: PointerEvent) => { if (panelRef.current && !panelRef.current.contains(event.target as Node)) setPanelOpen(false) }
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') setPanelOpen(false) }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => { document.removeEventListener('pointerdown', onPointerDown); document.removeEventListener('keydown', onKeyDown) }
+  }, [panelOpen])
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const controller = useRef<AbortController | null>(null)
@@ -274,23 +284,18 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false, 
   return <div className={styles.chat}>
     {confirmDelete && <ConfirmDialog title="删除当前对话？" description="此对话及其所有回答将被永久删除。导出后可保留 Markdown 副本。" confirmLabel="删除对话" onClose={() => setConfirmDelete(false)} onConfirm={() => { setConfirmDelete(false); void clear() }}/>}
     <div className={styles.toolbar}>
-      <div className={styles.toolGroup}>
+      <div className={`${styles.toolGroup} ${styles.sessionGroup}`}>
         <Select aria-label="历史会话" value={(conversations.data?.conversations || []).some(item => item.id === conversationId.current) ? conversationId.current : ''} onChange={event => void loadConversation(event.target.value)}><option value="">新对话</option>{(conversations.data?.conversations || []).map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</Select>
         <Button iconOnly title="新对话" onClick={newConversation}><FileText size={15}/></Button>
         <Button iconOnly title="删除当前对话" disabled={!state.turns.length} onClick={() => setConfirmDelete(true)}><Trash2 size={15}/></Button>
       </div>
-      <div className={styles.toolGroup}>
-        <Select aria-label="模型厂商" value={providerId} onChange={event => setProviderId(event.target.value)}>{providers.map(item => <option key={item.id} value={item.id}>{item.name}{item.api_key_set === false ? ' · 未配置' : ''}</option>)}</Select>
-        <Select aria-label="对话模型" value={model} onChange={event => setModel(event.target.value)}>{(models.length ? models : [model || 'default']).map(item => <option key={item}>{item}</option>)}</Select>
-        <Select aria-label="推理强度" value={effort} disabled={!canThink} onChange={event => setEffort(event.target.value)}>{effortOptions.map(value => <option key={value} value={value}>{value === 'none' ? 'Off' : value[0].toUpperCase() + value.slice(1)}</option>)}</Select>
-        <Button iconOnly title="导出当前对话为 Markdown" disabled={!state.turns.length} onClick={exportConversation}><Download size={16}/></Button>
-        {providerId === 'local' && ctxUsed > 0 && <span className={styles.ctxMeter} title={ctxUsed >= ctxPool ? '已达到/超过引擎上下文,请开新对话' : `引擎上下文 ${ctxPool.toLocaleString()} token`}>上下文 {ctxUsed.toLocaleString()} / {ctxPool >= 1024 ? `${Math.round(ctxPool / 1024)}K` : ctxPool}<span className={styles.ctxBar}><span style={{ width: `${Math.min(100, (ctxUsed / ctxPool) * 100)}%`, background: ctxUsed / ctxPool > 0.9 ? 'var(--red)' : ctxUsed / ctxPool > 0.7 ? 'var(--yellow)' : 'var(--green)' }}/></span></span>}
-      </div>
+      <CtxGauge used={ctxUsed} pool={providerId === 'local' ? ctxPool : null}/>
       <div className={styles.toolGroup}>
         <Switch checked={thinking} disabled={!canThink} onChange={setThinking} label={<><BrainCircuit size={14}/>思考</>}/>
         <Switch checked={webSearch} disabled={!activeSearch?.configured} onChange={setWebSearch} label={<><Search size={14}/>Web Search</>}/>
         {!activeSearch?.configured && <span className={styles.keyWarn} title={`缺少 ${activeSearch?.env_var || '搜索 Key'}，可在设置中配置`}><AlertTriangle size={13}/></span>}
         <Switch checked={stream} onChange={setStream} label={<><Radio size={14}/>流式</>}/>
+        <Button iconOnly title="导出当前对话为 Markdown" disabled={!state.turns.length} onClick={exportConversation}><Download size={16}/></Button>
       </div>
     </div>
     <div className={styles.messages} ref={messagesRef}>
@@ -332,6 +337,17 @@ function fileToBase64DataUrl(file: File) {
     reader.onerror = () => reject(new Error('无法读取文件'))
     reader.readAsDataURL(file)
   })
+}
+
+function CtxGauge({ used, pool }: { used: number; pool: number | null }) {
+  const ratio = pool && pool > 0 ? used / pool : 0
+  const tone = ratio > 0.9 ? 'var(--red)' : ratio > 0.7 ? 'var(--yellow)' : 'var(--green)'
+  const fmt = (value: number) => value >= 1024 ? `${(value / 1024).toFixed(1)}K` : String(value)
+  return <span className={styles.ctxGauge} title={pool != null ? (ratio >= 1 ? '已达到/超过引擎上下文,请开新对话' : `上下文 ${used.toLocaleString()} / ${pool.toLocaleString()} token`) : `对话累计 ${used.toLocaleString()} token`}>
+    <Gauge size={14}/>
+    <span className={styles.ctxNums}><b>{fmt(used)}</b>{pool != null && <><em>/</em><span className={styles.ctxPool}>{fmt(pool)}</span></>}</span>
+    {pool != null && <span className={styles.ctxFill}><span style={{ width: `${Math.min(100, ratio * 100)}%`, background: tone }}/></span>}
+  </span>
 }
 
 function PrefillWait() {

@@ -1,9 +1,20 @@
 .chat { flex: 1 1 auto; height: auto; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; border: 1px solid var(--glass-edge); border-radius: var(--radius); background: var(--glass); box-shadow: var(--shadow-panel); backdrop-filter: var(--blur); overflow: hidden }
-.toolbar { min-width: 0; min-height: 50px; padding: 7px 10px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 7px }
-.toolbar select { flex: 1 1 150px; width: auto; min-width: 130px; max-width: 260px }
+.toolbar { min-width: 0; min-height: 52px; padding: 8px 12px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: nowrap; align-items: center; gap: 12px }
+.toolbar .sessionGroup select { flex: 0 1 280px; width: 280px; min-width: 150px; max-width: 280px }
 .toolbar > span { min-width: 0; overflow-wrap: anywhere }
-.toolGroup { display: flex; align-items: center; gap: 7px; padding-right: 10px; border-right: 1px solid var(--line) }
-.toolGroup:last-child { border-right: none; padding-right: 0 }
+.toolGroup { display: flex; align-items: center; gap: 6px; min-width: 0 }
+.sessionGroup { flex: 1 1 auto }
+.modelGroup { position: relative; display: flex; align-items: center; min-width: 0 }
+.capsule { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 8px 0 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--input); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; max-width: 380px; min-width: 0; white-space: nowrap }
+.capsule:hover { border-color: var(--line-strong); background: var(--input-hover) }
+.capsule:focus-visible { border-color: var(--accent); outline: none }
+.capsule b { font-weight: 650; flex: none }
+.capsule > span { overflow: hidden; text-overflow: ellipsis; min-width: 0 }
+.capsule .effortChip { flex: none; font-size: 11px; line-height: 1; padding: 4px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 550 }
+.capsule .capsuleChevron { color: var(--text-3); flex: none }
+.modelPanel { position: absolute; top: calc(100% + 8px); left: 0; z-index: 40; width: min(300px, calc(100vw - 48px)); display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 16px; border: 1px solid var(--line-strong); background: var(--glass-strong); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow-shell) }
+.panelField { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 550; color: var(--text-2); cursor: default }
+.panelField select { flex: 0 0 auto; width: 100%; min-width: 0; max-width: none }
 .keyWarn { display: inline-flex; align-items: center; color: var(--yellow); cursor: help }
 .knowledgePicker { position: relative }.knowledgePicker summary { height: 36px; padding: 0 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--input); display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text-2); list-style: none; white-space: nowrap }.knowledgePicker>div { position: absolute; z-index: 12; top: 40px; right: 0; width: 250px; max-height: 260px; overflow: auto; border: 1px solid var(--glass-edge); border-radius: var(--radius); background: var(--glass-strong); box-shadow: var(--shadow-panel); padding: 7px }.knowledgePicker label { min-height: 40px; padding: 5px 7px; display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; column-gap: 7px; cursor: pointer }.knowledgePicker label input { grid-row: 1 / 3; accent-color: var(--accent) }.knowledgePicker label span,.knowledgePicker label small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }.knowledgePicker label small { color: var(--text-3); font-size: 10px }
 .messages { overflow: auto; padding: 18px clamp(18px, 5vw, 76px); display: flex; flex-direction: column; gap: 18px; scroll-behavior: smooth }
@@ -26,7 +37,7 @@
 .attachments { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 7px }
 .attachment { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 7px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--glass-soft); font-size: 11px }
 .attachment button { border: 0; background: transparent; color: var(--text-3); cursor: pointer; display: grid; place-items: center }
-.composeRow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: end; gap: 8px }
+.composeRow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: stretch; gap: 8px }
 .composeRow textarea { min-height: 42px; max-height: 150px; resize: none }
 .markdown { min-width: 0; overflow-wrap: anywhere }
 .markdown > :first-child { margin-top: 0 }.markdown > :last-child { margin-bottom: 0 }
@@ -48,7 +59,6 @@
 @media (max-width: 760px) {
   .messages { padding: 14px }
   .assistant { width: 96% }
-  .toolbar > span { width: 100%; margin-left: 0 !important }
 }
 
 .genStats { margin-left: auto; color: var(--text-3); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap }
@@ -67,9 +77,15 @@
 .userFile { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-2); background: rgba(255,255,255,.14); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .userFileThumb { width: 26px; height: 26px; object-fit: cover; border-radius: 4px }
 
-.ctxMeter { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-3); white-space: nowrap; padding-left: 10px; border-left: 1px solid var(--line) }
-.ctxMeter .ctxBar { width: 70px; height: 6px; border-radius: 4px; background: var(--line); overflow: hidden; display: inline-block }
-.ctxMeter .ctxBar > span { display: block; height: 100%; border-radius: 4px; transition: width .3s ease, background .3s ease }
+.ctxGauge { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--input); white-space: nowrap }
+.ctxGauge:hover { border-color: var(--line-strong); background: var(--input-hover) }
+.ctxGauge svg { color: var(--text-3); flex: none }
+.ctxNums { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--text); display: inline-flex; align-items: baseline; gap: 4px }
+.ctxNums b { font-weight: 650 }
+.ctxNums em { font-style: normal; color: var(--text-3) }
+.ctxNums .ctxPool { color: var(--text-3) }
+.ctxFill { width: 56px; height: 4px; border-radius: 2px; background: var(--line-strong); overflow: hidden; flex: none }
+.ctxFill > span { display: block; height: 100%; border-radius: 2px; transition: width .3s ease, background .3s ease }
 
-.toolbar select { max-width:100% }.toolGroup { min-width:0; max-width:100%; flex-wrap:wrap }.toolGroup > select { flex:1 1 140px }.composer { padding:14px 18px }.composeRow textarea { min-height:52px }.chat { box-shadow:none }.messages { padding:24px }.empty p { color:var(--text);font-size:22px;font-weight:650;margin:18px 0 8px }.empty small { font-size:13px }.empty svg { color:var(--accent) }
-@media(max-width:680px) { .toolbar { padding:10px;gap:10px }.toolGroup { border-right:0;padding-right:0;flex:1 1 100%;gap:8px }.toolbar select { min-width:0;flex:1 1 100px;max-width:100% }.messages { padding:14px }.composer { padding:12px }.composeRow { grid-template-columns:auto minmax(0,1fr);gap:8px }.composeRow textarea { min-height:72px }.composeRow > button:last-child { grid-column:2;justify-self:end }.genStats { white-space:normal }.actions { flex-wrap:wrap } }
+.composer { padding:14px 18px }.composeRow textarea { min-height:52px }.chat { box-shadow:none }.messages { padding:24px }.empty p { color:var(--text);font-size:22px;font-weight:650;margin:18px 0 8px }.empty small { font-size:13px }.empty svg { color:var(--accent) }
+@media(max-width:680px) { .toolbar { padding:10px;gap:10px;flex-wrap:wrap }.sessionGroup { flex:1 1 100% }.toolbar .sessionGroup select { flex:1 1 100px;width:auto;max-width:100% }.modelPanel { width:min(300px, calc(100vw - 28px)) }.messages { padding:14px }.composer { padding:12px }.composeRow { grid-template-columns:auto minmax(0,1fr);gap:8px }.composeRow textarea { min-height:72px }.composeRow > button:last-child { grid-column:2;justify-self:end }.genStats { white-space:normal }.actions { flex-wrap:wrap } }
