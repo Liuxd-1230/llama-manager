@@ -6,7 +6,7 @@ const stylesDir = resolve(__dirname, 'styles')
 const appCss = readFileSync(resolve(stylesDir, 'app.css'), 'utf8')
 const baseCss = readFileSync(resolve(stylesDir, 'base.css'), 'utf8')
 
-const LITERAL = /#[0-9a-fA-F]{3,8}\b|rgba?\(|hsl\(/
+const LITERAL = /#[0-9a-fA-F]{3,8}\b|rgba?\(|hsl\(|%23[0-9a-fA-F]{3,6}\b/
 
 describe('studio styles guard', () => {
   it('app.css contains no color literals', () => {
