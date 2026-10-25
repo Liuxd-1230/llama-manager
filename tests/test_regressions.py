@@ -332,6 +332,48 @@ class KvmemCommandTests(unittest.TestCase):
             command = process_manager.build_command(config)
             self.assertEqual(command[command.index("--reasoning-budget") + 1], "3072")
 
+    def test_kvmem_retrieval_defaults_stay_out_of_the_command(self):
+        # sink/recent/lrfu default to off so a profile launched against a
+        # pre-v0.17 package builds exactly the command it used to.
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "bin").mkdir()
+            (root / "bin" / "llama-kvmem-server.exe").write_text("", encoding="utf-8")
+            command = process_manager.build_command(AppConfig(llama_cpp_dir=str(root), engine="kvmem"))
+        for flag in ("--kvmem-sink-tokens", "--kvmem-recent-tokens", "--kvmem-lrfu", "--kvmem-score-agg"):
+            self.assertNotIn(flag, command)
+
+    def test_kvmem_pinned_windows_align_to_blocks_and_gate_on_budget(self):
+        from backend import process_manager as pm
+        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: {"--kvmem-lrfu"}):
+            root = Path(tmp)
+            (root / "bin").mkdir()
+            (root / "bin" / "llama-kvmem-server.exe").write_text("", encoding="utf-8")
+            config = AppConfig(
+                llama_cpp_dir=str(root), engine="kvmem",
+                kvmem=KvmemSettings(block_tokens=128, budget=16384, gen_reserve=8192, workspace=131072,
+                                    sink_tokens=5000, recent_tokens=1500, lrfu=True, lrfu_lambda=0.7, score_agg="max"),
+            )
+            command = process_manager.build_command(config)
+            self.assertEqual(command[command.index("--kvmem-sink-tokens") + 1], "4992")
+            self.assertEqual(command[command.index("--kvmem-recent-tokens") + 1], "1408")
+            self.assertEqual(command[command.index("--kvmem-lrfu-lambda") + 1], "0.7")
+            self.assertEqual(command[command.index("--kvmem-score-agg") + 1], "max")
+            config.kvmem.sink_tokens = 24576
+            with self.assertRaises(ValueError):
+                process_manager.build_command(config)
+
+    def test_kvmem_lrfu_on_pre_v017_build_fails_with_a_usable_message(self):
+        from backend import process_manager as pm
+        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: set()):
+            root = Path(tmp)
+            (root / "bin").mkdir()
+            (root / "bin" / "llama-kvmem-server.exe").write_text("", encoding="utf-8")
+            config = AppConfig(llama_cpp_dir=str(root), engine="kvmem", kvmem=KvmemSettings(lrfu=True))
+            with self.assertRaises(ValueError) as caught:
+                process_manager.build_command(config)
+        self.assertIn("LRFU", str(caught.exception))
+
 
     def test_kvmem_binary_missing_fails_cleanly(self):
         config = AppConfig(engine="kvmem", llama_cpp_dir="C:\\definitely-not-here")
@@ -340,103 +382,199 @@ class KvmemCommandTests(unittest.TestCase):
 
 
 class NinferCommandTests(unittest.TestCase):
-    def _pack(self, tmp: str, exe_name: str = "ninfer-serve-89.exe", with_webui: bool = False) -> Path:
+    # A v0.18+ unified worker advertises the retrieval flags in --help; older
+    # builds do not, and the command builders gate on that.
+    V018_FLAGS = {"--kvmem-budget", "--kvmem-lrfu", "--kvmem-score-agg", "--kvmem-sessions"}
+
+    def _pack(self, tmp: str) -> Path:
+        """KVMem v0.18.0 layout: workers/ninfer/ninfer-kvmem-server.exe."""
+        root = Path(tmp)
+        worker_dir = root / "workers" / "ninfer"
+        worker_dir.mkdir(parents=True)
+        (worker_dir / "ninfer-kvmem-server.exe").write_text("", encoding="utf-8")
+        return root
+
+    def _legacy_pack(self, tmp: str, exe_name: str = "ninfer-serve-89.exe") -> Path:
+        """Pre-v0.18 standalone pack layout: engine/ninfer-serve-<arch>.exe."""
         root = Path(tmp)
         engine_dir = root / "engine"
         engine_dir.mkdir()
         (engine_dir / exe_name).write_text("", encoding="utf-8")
-        if with_webui:
-            (root / "webui").mkdir()
         return root
 
-    def test_ninfer_engine_builds_ninfer_serve_command(self):
-        with TemporaryDirectory() as tmp:
+    def test_ninfer_engine_builds_v018_command(self):
+        from backend import process_manager as pm
+        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: self.V018_FLAGS):
             root = self._pack(tmp)
             config = AppConfig(
                 llama_cpp_dir=str(root), model_path="E:\\models\\bonsai.ninfer", engine="ninfer",
                 sampling=SamplingSettings(top_k=40),
             )
             command = process_manager.build_command(config)
-        self.assertIn("ninfer-serve-89.exe", command[0])
+        self.assertIn("ninfer-kvmem-server.exe", command[0])
         # The .ninfer model is a bare positional, not -m.
         self.assertEqual(command[1], "E:\\models\\bonsai.ninfer")
         self.assertNotIn("-m", command)
-        self.assertEqual(command[command.index("--max-context") + 1], "262144")
-        self.assertEqual(command[command.index("--kv-capacity") + 1], "4032")
-        self.assertEqual(command[command.index("--host-kv-mib") + 1], "16384")
+        self.assertEqual(command[command.index("--max-context") + 1], "204800")
+        self.assertEqual(command[command.index("--kvmem-budget") + 1], "8192")
+        self.assertEqual(command[command.index("--kvmem-gen-reserve") + 1], "8192")
+        self.assertEqual(command[command.index("--kvmem-host-mib") + 1], "4096")
+        # Retrieval is a configured block, not something parked in extra_params.
+        self.assertEqual(command[command.index("--kvmem-sink-tokens") + 1], "4096")
+        self.assertEqual(command[command.index("--kvmem-recent-tokens") + 1], "1024")
+        self.assertEqual(command[command.index("--kvmem-sessions") + 1], "1")
+        self.assertIn("--kvmem-lrfu", command)
+        self.assertEqual(command[command.index("--kvmem-lrfu-lambda") + 1], "0.5")
+        self.assertEqual(command[command.index("--kvmem-lrfu-top-frac") + 1], "0.9")
+        self.assertEqual(command[command.index("--kvmem-score-agg") + 1], "max")
         self.assertEqual(command[command.index("--kv-dtype") + 1], "k8v4")
         self.assertEqual(command[command.index("--prefill-chunk") + 1], "256")
         self.assertIn("--no-cuda-graph", command)
         self.assertEqual(command[command.index("--spec") + 1], "mtp")
         self.assertEqual(command[command.index("--draft-tokens") + 1], "4")
+        self.assertIn("--adaptive-mtp", command)
+        self.assertEqual(command[command.index("--ngram-draft-tokens") + 1], "31")
+        self.assertEqual(command[command.index("--ngram-min-match") + 1], "12")
         # The engine only accepts top-k 0..20; the 40 default must clamp.
         self.assertEqual(command[command.index("--top-k") + 1], "20")
         # llama.cpp/kvmem-only flags must not leak into the ninfer command line.
         self.assertNotIn("-c", command)
         self.assertNotIn("-ngl", command)
-        self.assertNotIn("--kvmem-budget", command)
         self.assertNotIn("--flash-attn", command)
+        # Retired with the pre-v0.18 ring pack.
+        self.assertNotIn("--kv-capacity", command)
+        self.assertNotIn("--host-kv-mib", command)
+
+    def test_ninfer_aligns_windows_down_to_whole_pages(self):
+        from backend import process_manager as pm
+        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: self.V018_FLAGS):
+            root = self._pack(tmp)
+            config = AppConfig(
+                llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer",
+                ninfer=NinferSettings(budget=9000, gen_reserve=9000, sink_tokens=4000, recent_tokens=1000),
+            )
+            command = process_manager.build_command(config)
+        self.assertEqual(command[command.index("--kvmem-budget") + 1], "8960")
+        self.assertEqual(command[command.index("--kvmem-gen-reserve") + 1], "8960")
+        self.assertEqual(command[command.index("--kvmem-sink-tokens") + 1], "3968")
+        self.assertEqual(command[command.index("--kvmem-recent-tokens") + 1], "960")
+
+    def test_ninfer_rejects_pinned_windows_larger_than_budget(self):
+        from backend import process_manager as pm
+        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: self.V018_FLAGS):
+            root = self._pack(tmp)
+            config = AppConfig(
+                llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer",
+                ninfer=NinferSettings(budget=4096, gen_reserve=4096, sink_tokens=4096, recent_tokens=1024),
+            )
+            with self.assertRaises(ValueError):
+                process_manager.build_command(config)
+
+    def test_ninfer_rejects_device_tokens_over_context(self):
+        from backend import process_manager as pm
+        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: self.V018_FLAGS):
+            root = self._pack(tmp)
+            config = AppConfig(
+                llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer",
+                ninfer=NinferSettings(max_context=16384, budget=16384, gen_reserve=16384),
+            )
+            with self.assertRaises(ValueError):
+                process_manager.build_command(config)
+
+    def test_ninfer_lrfu_on_older_worker_fails_with_a_usable_message(self):
+        from backend import process_manager as pm
+        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: set()):
+            root = self._legacy_pack(tmp)
+            config = AppConfig(llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer")
+            with self.assertRaises(ValueError) as caught:
+                process_manager.build_command(config)
+        self.assertIn("LRFU", str(caught.exception))
 
     def test_ninfer_thinking_maps_to_reasoning_effort(self):
-        with TemporaryDirectory() as tmp:
+        from backend import process_manager as pm
+        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: self.V018_FLAGS):
             root = self._pack(tmp)
             config = AppConfig(llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer")
             command = process_manager.build_command(config)
             self.assertEqual(command[command.index("--default-reasoning-effort") + 1], "none")
             config.basic.enable_thinking = True
+            config.ninfer.default_thinking_budget = 8192
             command = process_manager.build_command(config)
             self.assertEqual(command[command.index("--default-reasoning-effort") + 1], "medium")
+            self.assertEqual(command[command.index("--default-thinking-budget") + 1], "8192")
 
     def test_ninfer_spec_none_and_draft_clamp(self):
-        with TemporaryDirectory() as tmp:
+        from backend import process_manager as pm
+        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: self.V018_FLAGS):
             root = self._pack(tmp)
             config = AppConfig(llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer",
                                ninfer=NinferSettings(spec="none"))
             command = process_manager.build_command(config)
             self.assertNotIn("--spec", command)
+            self.assertNotIn("--ngram-draft-tokens", command)
             config.ninfer.spec = "dflash2"
             config.ninfer.draft_tokens = 30
             command = process_manager.build_command(config)
             self.assertEqual(command[command.index("--spec") + 1], "dflash2")
             self.assertEqual(command[command.index("--draft-tokens") + 1], "15")
 
-    def test_ninfer_env_configures_ring_and_webui(self):
-        with TemporaryDirectory() as tmp:
-            root = self._pack(tmp, with_webui=True)
+    def test_ninfer_ssd_tier_opt_in(self):
+        from backend import process_manager as pm
+        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: self.V018_FLAGS):
+            root = self._pack(tmp)
             config = AppConfig(llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer")
-            env = process_manager.build_env(config)
-            self.assertEqual(env["NINFER_KV_WINDOW"], "16384")
-            self.assertEqual(env["NINFER_KV_RETRIEVE"], "8192")
-            self.assertEqual(env["NINFER_KV_RING"], "1")
-            self.assertEqual(env["NINFER_HOST_PAGEABLE"], "1")
-            self.assertEqual(env["NINFER_KV_REUSE_HOSTBACKED"], "1")
-            self.assertEqual(env["NINFER_TERNARY_PTQ1_FAST"], "1")
-            self.assertEqual(env["NINFER_WEBUI_DIR"], str(root / "webui"))
-            # kv_window 0 = don't configure the ring at all.
-            config.ninfer.kv_window = 0
-            env = process_manager.build_env(config)
-            self.assertNotIn("NINFER_KV_WINDOW", env)
+            command = process_manager.build_command(config)
+            self.assertNotIn("--kvmem-disk-path", command)
+            config.ninfer.disk_path = "D:\\kvmem-cache"
+            config.ninfer.disk_mib = 8192
+            command = process_manager.build_command(config)
+            self.assertEqual(command[command.index("--kvmem-disk-path") + 1], "D:\\kvmem-cache")
+            self.assertEqual(command[command.index("--kvmem-disk-mib") + 1], "8192")
 
-    def test_ninfer_other_engines_inherit_environment(self):
-        config = AppConfig(model_path="E:\\m.gguf", engine="llama.cpp")
-        self.assertIsNone(process_manager.build_env(config))
-
-    def test_ninfer_binary_detection_prefers_89_and_skips_old_backups(self):
+    def test_ninfer_binary_detection_prefers_unified_worker_then_arch_builds(self):
         with TemporaryDirectory() as tmp:
             root = self._pack(tmp)
+            detected = cfg.detect_ninfer_binary(str(root))
+            self.assertTrue(detected.endswith(str(Path("workers") / "ninfer" / "ninfer-kvmem-server.exe")))
+        with TemporaryDirectory() as tmp:
+            root = self._legacy_pack(tmp)
             (Path(tmp) / "engine" / "ninfer-serve-89.exe.old-20261002").write_text("", encoding="utf-8")
             detected = cfg.detect_ninfer_binary(str(root))
             self.assertTrue(detected.endswith("ninfer-serve-89.exe"))
         with TemporaryDirectory() as tmp:
-            root = self._pack(tmp, exe_name="ninfer-serve-86.exe")
+            root = self._legacy_pack(tmp, exe_name="ninfer-serve-86.exe")
             detected = cfg.detect_ninfer_binary(str(root))
             self.assertTrue(detected.endswith("ninfer-serve-86.exe"))
         self.assertEqual(cfg.detect_ninfer_binary("C:\\definitely-not-here"), "")
+
+    def test_empty_engine_dir_falls_back_to_bundled_package(self):
+        with TemporaryDirectory() as tmp:
+            root = self._pack(tmp)
+            with patch.object(cfg, "bundled_package_dir", lambda: str(root)):
+                self.assertEqual(cfg.resolve_engine_dir("", "ninfer"), str(root))
+                self.assertEqual(cfg.resolve_engine_dir("  ", "kvmem"), str(root))
+                # llama.cpp needs a real build tree; no bundled guess.
+                self.assertEqual(cfg.resolve_engine_dir("", "llama.cpp"), "")
+                # An explicit directory always wins.
+                self.assertEqual(cfg.resolve_engine_dir("E:\\other", "ninfer"), "E:\\other")
+
+    def test_bundled_package_dir_picks_highest_version(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "engine"
+            for name, version in (("kvmem-v0.17.0", "0.17.0"), ("kvmem-v0.18.0", "0.18.0")):
+                (root / name).mkdir(parents=True)
+                (root / name / "VERSION").write_text(version, encoding="utf-8")
+            with patch.object(cfg, "BUNDLED_ENGINE_ROOT", root):
+                self.assertEqual(Path(cfg.bundled_package_dir()).name, "kvmem-v0.18.0")
+        with TemporaryDirectory() as tmp:
+            with patch.object(cfg, "BUNDLED_ENGINE_ROOT", Path(tmp) / "absent"):
+                self.assertEqual(cfg.bundled_package_dir(), "")
 
     def test_ninfer_binary_missing_fails_cleanly(self):
         config = AppConfig(engine="ninfer", llama_cpp_dir="C:\\definitely-not-here")
         with self.assertRaises(FileNotFoundError):
             process_manager.build_command(config)
+
 
     def test_scan_models_includes_ninfer_files(self):
         with TemporaryDirectory() as tmp:
@@ -487,7 +625,10 @@ class NinferCommandTests(unittest.TestCase):
             profiles = client.get("/api/profiles").json()["profiles"]
             summary = next(p for p in profiles if p["name"] == "ninfer-bonsai")
             self.assertEqual(summary["engine"], "ninfer")
-            self.assertEqual(summary["ninfer"]["kv_capacity"], 4032)
+            self.assertEqual(summary["ninfer"]["budget"], 8192)
+            self.assertEqual(summary["ninfer"]["gen_reserve"], 8192)
+            self.assertTrue(summary["ninfer"]["lrfu"])
+            self.assertEqual(summary["ninfer"]["score_agg"], "max")
             self.assertEqual(summary["ninfer"]["spec"], "mtp")
             self.assertEqual(summary["ninfer"]["kv_dtype"], "k8v4")
 
