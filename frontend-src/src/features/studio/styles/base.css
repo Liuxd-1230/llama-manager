@@ -1,32 +1,66 @@
-/* ===== 轻度现代拟物：暖灰纸感桌面 + 凸起键帽 + 内凹输入槽 ===== */
+/* ===== remap 派生层：studio 颜色的唯一定义点（guard-sanctioned） =====
+   中性色用 color-mix 从宿主 token 派生，明暗两主题各得其所；
+   状态色与画布/舞台色是 studio 自有常量，不跟宿主 accent 走。 */
 .studio-root {
+  /* 中性（派生自宿主，随主题自动翻转） */
   --desk: var(--bg);
   --desk-2: var(--bg);
-  --panel: var(--bg-elevated);
+  --panel: color-mix(in oklab, var(--bg-elevated) 90%, #d9822b);
   --panel-2: var(--bg);
-  --paper: var(--bg-elevated);
-  --well: var(--bg-elevated);
+  --paper: color-mix(in oklab, var(--bg-elevated) 87%, #d9822b);
+  --paper-shade: color-mix(in oklab, var(--paper) 94%, var(--text));
+  --well: color-mix(in oklab, var(--bg-elevated) 87%, #d9822b);
   --line: var(--line);
   --line-2: var(--line-strong);
-  --ink: var(--text);
-  --ink-2: var(--text-2);
-  --ink-3: var(--text-3);
-  --ink-4: var(--text-3);
+  --warm-paper: #f5e2b8;
+  --ink: color-mix(in oklab, var(--text) 95%, var(--warm-paper));
+  --ink-2: color-mix(in oklab, var(--text-2) 95%, var(--warm-paper));
+  --ink-3: color-mix(in oklab, var(--text-3) 94%, var(--warm-paper));
+  --ink-4: color-mix(in oklab, var(--text-3) 94%, var(--warm-paper));
   --accent: var(--accent);
   --accent-2: var(--accent-hover);
   --accent-ink: var(--accent);
   --accent-soft: var(--accent-soft);
   --accent-ring: var(--accent-soft);
+  /* 状态色（studio 自有常量，无宿主对应物） */
   --warm: #d9822b;
   --warm-ink: #a85f17;
   --warm-soft: rgba(217, 130, 43, 0.14);
+  --warm-bright: #eaa45e;
+  --warm-glow: #ffc677;
   --ok: #3b8a5a;
   --ok-soft: rgba(59, 138, 90, 0.12);
+  --ok-ink: #22603b;
+  --ok-bright: #8fd3a8;
   --err: #c4483b;
   --err-soft: rgba(196, 72, 59, 0.1);
-  --r-s: 4px;
-  --r: 5px;
-  --r-l: 8px;
+  --err-ink: #8e2f25;
+  --err-deep: #5a2620;
+  /* 暗表面与反转面（两主题恒定） */
+  --inv: #181613;
+  --inv-ink: #f6ecdc;
+  --scrim: #000000;
+  --white: #ffffff;
+  /* 画布与舞台（编辑性表面，studio 的性格所在） */
+  --stage-1: #3e3a34;
+  --stage-2: #2c2925;
+  --stage-3: #25221f;
+  --dark-1: #191714;
+  --dark-2: #1d1b18;
+  --dark-3: #262320;
+  --dark-4: #2b2824;
+  --dark-5: #2f2b26;
+  --dark-6: #3a352f;
+  --bone: #dcd7ce;
+  --mark: #e0457b;
+  --wheel: conic-gradient(#f44, #fd4, #4f6, #4df, #46f, #f4d, #f44);
+  /* 阴影与光晕（恒定，不随主题翻转） */
+  --shadow-deep: #1e140a;
+  --shadow-blue: #1c3a8c;
+  --shadow-ember: #552a00;
+  --shadow-warm: #784614;
+  --glow-warm: #ffbe6e;
+  --glow-amber: #ffd678;
   --sh-panel: 0 1px 3px rgba(63, 52, 32, 0.06);
   --sh-float: 0 1px 3px rgba(63, 52, 32, 0.08), 0 10px 28px -12px rgba(63, 52, 32, 0.18);
   --sh-key: none;
@@ -73,13 +107,13 @@
   height: 10px;
 }
 .studio-root ::-webkit-scrollbar-thumb {
-  background: rgba(64, 52, 40, 0.18);
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
   border-radius: 10px;
   border: 3px solid transparent;
   background-clip: padding-box;
 }
 .studio-root ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(64, 52, 40, 0.3);
+  background-color: color-mix(in srgb, var(--ink) 30%, transparent);
 }
 .studio-root ::-webkit-scrollbar-track {
   background: transparent;
@@ -231,12 +265,12 @@ kbd {
   color: var(--ink-2);
 }
 .btn-ghost:hover {
-  background: rgba(64, 52, 40, 0.06);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
   color: var(--ink);
 }
 .btn-ghost:active,
 .btn-ghost.on {
-  background: rgba(64, 52, 40, 0.1);
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
   box-shadow: var(--sh-press);
 }
 .btn-ghost.on {
@@ -252,7 +286,7 @@ kbd {
   border: 0;
   border-radius: var(--r);
   background: var(--well);
-  box-shadow: var(--sh-well), 0 0 0 1px rgba(64, 52, 40, 0.14);
+  box-shadow: var(--sh-well), 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent);
   color: var(--ink);
   transition: box-shadow 0.12s, background 0.12s;
 }
@@ -304,7 +338,7 @@ kbd {
   gap: 2px;
   border-radius: 9px;
   background: var(--panel-2);
-  box-shadow: var(--sh-well), 0 0 0 1px rgba(64, 52, 40, 0.1);
+  box-shadow: var(--sh-well), 0 0 0 1px color-mix(in srgb, var(--ink) 10%, transparent);
 }
 .seg > button {
   height: 24px;
@@ -327,7 +361,7 @@ kbd {
 .seg > button.on {
   background: var(--panel);
   color: var(--ink);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 1) inset, 0 0 0 1px rgba(64, 52, 40, 0.12), 0 1px 2px rgba(64, 48, 30, 0.14);
+  box-shadow: 0 1px 0 var(--white) inset, 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent), 0 1px 2px color-mix(in srgb, var(--ink) 14%, transparent);
 }
 .seg.seg-sm > button {
   height: 20px;
@@ -351,8 +385,8 @@ kbd {
   padding: 0;
   cursor: pointer;
   flex: none;
-  background: #e2ddd5;
-  box-shadow: inset 0 1px 2px rgba(64, 48, 30, 0.22), 0 0 0 1px rgba(64, 52, 40, 0.1);
+  background: var(--bone);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 22%, transparent), 0 0 0 1px color-mix(in srgb, var(--ink) 10%, transparent);
   transition: background 0.15s;
 }
 .switch::after {
@@ -364,19 +398,19 @@ kbd {
   height: 14px;
   border-radius: 50%;
   background: var(--panel);
-  box-shadow: 0 1px 2px rgba(40, 30, 20, 0.3), 0 0 0 0.5px rgba(40, 30, 20, 0.15);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 30%, transparent), 0 0 0 0.5px color-mix(in srgb, var(--ink) 15%, transparent);
   transition: transform 0.15s;
 }
 .switch.on {
   background: var(--accent);
-  box-shadow: inset 0 1px 2px rgba(10, 30, 90, 0.35);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--shadow-blue) 35%, transparent);
 }
 .switch.on::after {
   transform: translateX(12px);
 }
 .switch.warm.on {
   background: var(--warm);
-  box-shadow: inset 0 1px 2px rgba(90, 40, 0, 0.35);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--shadow-ember) 35%, transparent);
 }
 
 .chip {
@@ -387,7 +421,7 @@ kbd {
   padding: 0 8px;
   border-radius: 11px;
   background: var(--paper);
-  box-shadow: 0 0 0 1px var(--line-2), 0 1px 1px rgba(64, 48, 30, 0.06);
+  box-shadow: 0 0 0 1px var(--line-2), 0 1px 1px color-mix(in srgb, var(--ink) 6%, transparent);
   font-size: 11.5px;
   color: var(--ink-2);
   white-space: nowrap;
@@ -412,7 +446,7 @@ kbd {
 .chip.warm {
   background: var(--warm-soft);
   color: var(--warm-ink);
-  box-shadow: 0 0 0 1px rgba(217, 130, 43, 0.3);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--warm) 30%, transparent);
 }
 .badge {
   display: inline-flex;
@@ -428,12 +462,12 @@ kbd {
 }
 .badge.accent {
   background: var(--accent);
-  color: #fff;
+  color: var(--white);
   box-shadow: none;
 }
 .badge.warm {
   background: var(--warm);
-  color: #fff;
+  color: var(--white);
   box-shadow: none;
 }
 .dot {
@@ -441,7 +475,7 @@ kbd {
   height: 8px;
   border-radius: 50%;
   flex: none;
-  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.9), 0 0 0 2.5px rgba(64, 52, 40, 0.12);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--white) 90%, transparent), 0 0 0 2.5px color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
 /* ---------- 面板 ---------- */
@@ -462,7 +496,7 @@ kbd {
   gap: 8px;
   padding: 0 10px 0 12px;
   border-bottom: 1px solid var(--line);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--white) 70%, transparent);
 }
 .panel-title {
   font-size: 12.5px;
@@ -480,7 +514,7 @@ kbd {
 }
 .section + .section {
   border-top: 1px solid var(--line);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--white) 60%, transparent);
 }
 .section-head {
   display: flex;
@@ -521,7 +555,7 @@ kbd {
   height: 1px;
   background: var(--line);
   margin: 8px 0;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--white) 60%, transparent);
 }
 .empty {
   padding: 18px 12px;
@@ -540,7 +574,7 @@ kbd {
   overflow: auto;
   padding: 5px;
   border-radius: 10px;
-  background: #fbfaf7;
+  background: var(--paper);
   box-shadow: var(--sh-float);
 }
 .menu-item {
@@ -590,7 +624,7 @@ kbd {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(20, 16, 10, 0.45);
+  background: color-mix(in srgb, var(--inv) 45%, transparent);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -634,7 +668,7 @@ kbd {
   gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid var(--line);
-  background: rgba(239, 235, 228, 0.5);
+  background: color-mix(in srgb, var(--paper) 50%, transparent);
   border-radius: 0 0 14px 14px;
 }
 @keyframes fade {
@@ -668,18 +702,18 @@ kbd {
   gap: 8px;
   padding: 8px 14px;
   border-radius: 10px;
-  background: #2f2b26;
-  color: #f6f3ee;
+  background: var(--dark-5);
+  color: var(--inv-ink);
   font-size: 12.5px;
-  box-shadow: 0 8px 24px -6px rgba(30, 20, 10, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 24px -6px color-mix(in srgb, var(--shadow-deep) 45%, transparent), 0 0 0 1px color-mix(in srgb, var(--scrim) 20%, transparent);
   animation: pop 0.16s ease-out;
   max-width: 560px;
 }
 .toast.ok svg {
-  color: #8fd3a6;
+  color: var(--ok-bright);
 }
 .toast.err {
-  background: #5a2620;
+  background: var(--err-deep);
 }
 .spin {
   animation: spin 0.9s linear infinite;
@@ -690,17 +724,6 @@ kbd {
   }
 }
 
-/* Studio dark-mode lift: moss components sit on a deeper panel than the host,
-   so their ink/panel tokens get one extra step of lightness when dark. */
-:root[data-theme='dark'] .studio-root {
-  --ink: #f2ecde;
-  --ink-2: #c6bfae;
-  --ink-3: #a8a08e;
-  --ink-4: #8b8371;
-  --panel: #211e18;
-  --panel-2: #1b1813;
-  --paper: #262218;
-  --well: #262218;
-  --line: rgba(235, 225, 205, 0.16);
-  --line-2: rgba(235, 225, 205, 0.3);
-}
+/* ===== 覆盖清单 escape-hatch overrides（guard-sanctioned） =====
+   派生值与手调值不可接受时，在此按主题覆盖对应 token，每条注明理由。初始为空。
+/* ===== end escape-hatch ===== */
