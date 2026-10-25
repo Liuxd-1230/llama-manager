@@ -7,6 +7,7 @@ import type { AppConfig, Candidate, ChatTurn, Provider, SearchSettings, ToolEven
 import { activeCandidate, chatReducer, initialChatState } from './chatReducer'
 import { canStartChatRequest, SseParser, stripDsml, supportsThinking } from './chatUtils'
 import { Markdown, StreamingMarkdown } from './Markdown'
+import { ConfirmDialog } from '../../components/Modal'
 import styles from './chat.module.css'
 
 interface Attachment { name: string; content?: string; size: number; kind?: 'text' | 'image'; dataUrl?: string }
@@ -22,7 +23,9 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false, 
   // (timings.prompt_n + predicted_n, or usage tokens when the engine
   // prefers the usage chunk). Session-local; resets on conversation switch.
   const [ctxUsed, setCtxUsed] = useState(0)
-  const ctxPool = config.engine === 'kvmem' ? config.kvmem.workspace : config.engine === 'ninfer' ? config.ninfer.kv_capacity : config.basic.ctx_size
+  // Device-resident tokens: past this the engine pages KV out to host/SSD,
+  // which is where the long-context accuracy cliff sits.
+  const ctxPool = config.engine === 'kvmem' ? config.kvmem.workspace : config.engine === 'ninfer' ? config.ninfer.budget + config.ninfer.gen_reserve : config.basic.ctx_size
   // NInfer exposes a six-step effort ladder; other providers only know high/max.
   const effortOptions = useMemo(
     () => (providers.find(item => item.id === 'local')?.engine === 'ninfer'
@@ -33,6 +36,8 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false, 
   const [webSearch, setWebSearch] = useState(false)
   const [stream, setStream] = useState(true)
   const [searchSettings, setSearchSettings] = useState<SearchSettings | null>(null)
+  const [requestPending, setRequestPending] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const controller = useRef<AbortController | null>(null)
@@ -90,6 +95,7 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false, 
 
   const requestAssistant = async (turnIndex: number) => {
     if (controller.current) return toast('请先停止当前生成')
+    setRequestPending(true)
     const turn = state.turns[turnIndex]
     const requestConversationId = conversationId.current
     const candidateId = uid('candidate')
@@ -159,7 +165,7 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false, 
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === 'AbortError') { dispatch({ type: 'finish', turnId: turn.id, candidateId, status: 'stopped' }); await persistTurn(turnIndex, { ...candidate, backendId, content: accumulatedContent, reasoning: accumulatedReasoning, tools: accumulatedTools, status: 'stopped' }, requestConversationId).catch(() => {}) }
       else { const error = reason instanceof Error ? reason.message : String(reason); dispatch({ type: 'finish', turnId: turn.id, candidateId, status: 'error', error }); await persistTurn(turnIndex, { ...candidate, backendId, content: accumulatedContent, reasoning: accumulatedReasoning, tools: accumulatedTools, status: 'error', error }, requestConversationId).catch(() => {}) }
-    } finally { controller.current = null }
+    } finally { controller.current = null; setRequestPending(false) }
   }
 
   useEffect(() => {
@@ -208,7 +214,17 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false, 
     link.download = `对话-${new Date().toISOString().slice(0, 10)}.md`
     link.click(); URL.revokeObjectURL(link.href)
   }
-  const clear = async () => { const deleting = conversationId.current; discardedConversations.current.add(deleting); controller.current?.abort(); await Promise.all([api(`/api/chat/conversations/${encodeURIComponent(deleting)}`, { method: 'DELETE' }).catch(() => {}), api(`/api/conversations/${encodeURIComponent(deleting)}`, { method: 'DELETE' }).catch(() => {})]); conversationId.current = uid('conversation'); dispatch({ type: 'clear' }); setAttachments([]); setCtxUsed(0); void queryClient.invalidateQueries({ queryKey: ['conversations'] }) }
+  const clear = async () => {
+    const deleting = conversationId.current
+    discardedConversations.current.add(deleting)
+    controller.current?.abort()
+    try {
+      await Promise.all([api(`/api/chat/conversations/${encodeURIComponent(deleting)}`, { method: 'DELETE' }), api(`/api/conversations/${encodeURIComponent(deleting)}`, { method: 'DELETE' })])
+      conversationId.current = uid('conversation'); dispatch({ type: 'clear' }); setAttachments([]); setCtxUsed(0)
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] })
+      toast('对话已删除')
+    } catch (reason) { discardedConversations.current.delete(deleting); toast(`删除失败：${reason instanceof Error ? reason.message : String(reason)}，可重试。`) }
+  }
   const newConversation = () => { controller.current?.abort(); conversationId.current = uid('conversation'); dispatch({ type: 'clear' }); setAttachments([]); setCtxUsed(0) }
   const loadConversation = async (id: string) => {
     if (!id) return newConversation()
@@ -256,16 +272,17 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false, 
   }
 
   return <div className={styles.chat}>
+    {confirmDelete && <ConfirmDialog title="删除当前对话？" description="此对话及其所有回答将被永久删除。导出后可保留 Markdown 副本。" confirmLabel="删除对话" onClose={() => setConfirmDelete(false)} onConfirm={() => { setConfirmDelete(false); void clear() }}/>}
     <div className={styles.toolbar}>
       <div className={styles.toolGroup}>
         <Select aria-label="历史会话" value={(conversations.data?.conversations || []).some(item => item.id === conversationId.current) ? conversationId.current : ''} onChange={event => void loadConversation(event.target.value)}><option value="">新对话</option>{(conversations.data?.conversations || []).map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</Select>
         <Button iconOnly title="新对话" onClick={newConversation}><FileText size={15}/></Button>
-        <Button iconOnly title="删除当前对话" onClick={() => void clear()}><Trash2 size={15}/></Button>
+        <Button iconOnly title="删除当前对话" disabled={!state.turns.length} onClick={() => setConfirmDelete(true)}><Trash2 size={15}/></Button>
       </div>
       <div className={styles.toolGroup}>
-        <Select value={providerId} onChange={event => setProviderId(event.target.value)}>{providers.map(item => <option key={item.id} value={item.id}>{item.name}{item.api_key_set === false ? ' · 未配置' : ''}</option>)}</Select>
-        <Select value={model} onChange={event => setModel(event.target.value)}>{(models.length ? models : [model || 'default']).map(item => <option key={item}>{item}</option>)}</Select>
-        <Select value={effort} disabled={!canThink} onChange={event => setEffort(event.target.value)}>{effortOptions.map(value => <option key={value} value={value}>{value === 'none' ? 'Off' : value[0].toUpperCase() + value.slice(1)}</option>)}</Select>
+        <Select aria-label="模型厂商" value={providerId} onChange={event => setProviderId(event.target.value)}>{providers.map(item => <option key={item.id} value={item.id}>{item.name}{item.api_key_set === false ? ' · 未配置' : ''}</option>)}</Select>
+        <Select aria-label="对话模型" value={model} onChange={event => setModel(event.target.value)}>{(models.length ? models : [model || 'default']).map(item => <option key={item}>{item}</option>)}</Select>
+        <Select aria-label="推理强度" value={effort} disabled={!canThink} onChange={event => setEffort(event.target.value)}>{effortOptions.map(value => <option key={value} value={value}>{value === 'none' ? 'Off' : value[0].toUpperCase() + value.slice(1)}</option>)}</Select>
         <Button iconOnly title="导出当前对话为 Markdown" disabled={!state.turns.length} onClick={exportConversation}><Download size={16}/></Button>
         {providerId === 'local' && ctxUsed > 0 && <span className={styles.ctxMeter} title={ctxUsed >= ctxPool ? '已达到/超过引擎上下文,请开新对话' : `引擎上下文 ${ctxPool.toLocaleString()} token`}>上下文 {ctxUsed.toLocaleString()} / {ctxPool >= 1024 ? `${Math.round(ctxPool / 1024)}K` : ctxPool}<span className={styles.ctxBar}><span style={{ width: `${Math.min(100, (ctxUsed / ctxPool) * 100)}%`, background: ctxUsed / ctxPool > 0.9 ? 'var(--red)' : ctxUsed / ctxPool > 0.7 ? 'var(--yellow)' : 'var(--green)' }}/></span></span>}
       </div>
@@ -277,7 +294,7 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false, 
       </div>
     </div>
     <div className={styles.messages} ref={messagesRef}>
-      {!state.turns.length && <div className={styles.empty}><div><Globe2 size={26}/><p>选择模型后开始对话</p><small>模型会在需要当前信息时自行调用 Web Search</small></div></div>}
+      {!state.turns.length && <div className={styles.empty}><div><Globe2 size={26}/><p>从一个问题开始</p><small>{activeSearch?.configured && webSearch ? '已开启 Web Search，模型可按需搜索' : '输入消息，与当前模型开始对话'}</small></div></div>}
       {state.turns.map((turn, turnIndex) => {
         const candidate = activeCandidate(turn); const index = candidate ? turn.candidates.findIndex(item => item.id === candidate.id) : -1
         return <div key={turn.id} className={styles.turn}><div className={styles.user}>{turn.user.display}{turn.images?.length ? <div className={styles.userImages}>{turn.images.map((url, i) => <img key={i} src={url} alt="" />)}</div> : null}{(turn.attachments?.length || 0) > 0 && <div className={styles.userFiles}>{turn.attachments!.map(file => <span key={file.name} className={styles.userFile}>{file.kind === 'image' && file.dataUrl ? <img src={file.dataUrl} alt="" className={styles.userFileThumb}/> : <FileText size={13}/>}{file.name}</span>)}</div>}</div>{candidate && <article className={styles.assistant} data-streaming={candidate.status === 'streaming'}>
@@ -287,13 +304,13 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false, 
             {candidate.reasoning && <details className={styles.reasoning} open={candidate.status === 'streaming'}><summary><BrainCircuit size={14}/>思考过程{candidate.status === 'streaming' ? '（进行中）' : ''}</summary><div><StreamingMarkdown content={stripDsml(candidate.reasoning)} streaming={candidate.status === 'streaming'}/></div></details>}
             <StreamingMarkdown content={candidate.content || (candidate.status === 'streaming' ? '' : '(空回复)')} streaming={candidate.status === 'streaming' && !!candidate.content}/>{candidate.status === 'streaming' && candidate.content && <span className={styles.cursor}/>} {candidate.error && <div className={styles.error}>{candidate.error}</div>}
           </div>
-          <div className={styles.actions}><Button size="small" onClick={() => { void navigator.clipboard.writeText(candidate.content); toast('回答已复制') }}><Copy size={13}/>复制</Button><Button size="small" disabled={!!state.generating} onClick={() => void requestAssistant(turnIndex)}><RefreshCw size={13}/>刷新</Button><Button size="small" iconOnly title="上一个回答" disabled={index <= 0} onClick={() => dispatch({ type: 'select', turnId: turn.id, candidateId: turn.candidates[index - 1].id })}><ChevronLeft size={14}/></Button><span className={styles.counter}>{index + 1}/{turn.candidates.length}</span><Button size="small" iconOnly title="下一个回答" disabled={index >= turn.candidates.length - 1} onClick={() => dispatch({ type: 'select', turnId: turn.id, candidateId: turn.candidates[index + 1].id })}><ChevronRight size={14}/></Button>{candidate.stats && <span className={styles.genStats}>{[candidate.stats.tokPerSec != null && `${candidate.stats.tokPerSec.toFixed(1)} tok/s`, candidate.stats.firstTokenMs != null && `首token ${candidate.stats.firstTokenMs}ms`, candidate.stats.totalTokens != null && `${candidate.stats.totalTokens} tok`, candidate.stats.elapsedMs != null && `${(candidate.stats.elapsedMs / 1000).toFixed(1)}s`].filter(Boolean).join(' · ')}</span>}</div>
+          <div className={styles.actions}><Button size="small" onClick={() => { void navigator.clipboard.writeText(candidate.content); toast('回答已复制') }}><Copy size={13}/>复制</Button><Button size="small" disabled={!!state.generating || requestPending} onClick={() => void requestAssistant(turnIndex)}><RefreshCw size={13}/>刷新</Button><Button size="small" iconOnly title="上一个回答" disabled={index <= 0} onClick={() => dispatch({ type: 'select', turnId: turn.id, candidateId: turn.candidates[index - 1].id })}><ChevronLeft size={14}/></Button><span className={styles.counter}>{index + 1}/{turn.candidates.length}</span><Button size="small" iconOnly title="下一个回答" disabled={index >= turn.candidates.length - 1} onClick={() => dispatch({ type: 'select', turnId: turn.id, candidateId: turn.candidates[index + 1].id })}><ChevronRight size={14}/></Button>{candidate.stats && <span className={styles.genStats}>{[candidate.stats.tokPerSec != null && `${candidate.stats.tokPerSec.toFixed(1)} tok/s`, candidate.stats.firstTokenMs != null && `首token ${candidate.stats.firstTokenMs}ms`, candidate.stats.totalTokens != null && `${candidate.stats.totalTokens} tok`, candidate.stats.elapsedMs != null && `${(candidate.stats.elapsedMs / 1000).toFixed(1)}s`].filter(Boolean).join(' · ')}</span>}</div>
         </article>}</div>
       })}
     </div>
     <div className={styles.composer}>
       {attachments.length > 0 && <div className={styles.attachments}>{attachments.map((file, index) => <span className={styles.attachment} key={`${file.name}-${index}`}>{file.kind === 'image' && file.dataUrl ? <img src={file.dataUrl} alt="" className={styles.attachmentThumb}/> : <FileText size={13}/>}{file.name}<button onClick={() => setAttachments(items => items.filter((_, i) => i !== index))}><X size={12}/></button></span>)}</div>}
-      <div className={styles.composeRow}><Button iconOnly title="导入文本文件" onClick={() => fileRef.current?.click()}><Paperclip size={16}/></Button><Textarea value={input} placeholder="输入消息，Enter 发送，Shift+Enter 换行" onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (controller.current) toast('请先停止当前生成'); else void send() } }}/><Button tone={state.generating ? 'danger' : 'primary'} onClick={state.generating ? stop : () => void send()}>{state.generating ? <><Square size={15}/>停止</> : <><Send size={15}/>发送</>}</Button></div>
+      <div className={styles.composeRow}><Button iconOnly title="导入文本文件" onClick={() => fileRef.current?.click()}><Paperclip size={16}/></Button><Textarea aria-label="消息内容" value={input} placeholder="输入消息，Enter 发送，Shift+Enter 换行" onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (controller.current) toast('请先停止当前生成'); else void send() } }}/><Button tone={state.generating ? 'danger' : 'primary'} onClick={state.generating ? stop : () => void send()}>{state.generating ? <><Square size={15}/>停止</> : <><Send size={15}/>发送</>}</Button></div>
       <input ref={fileRef} hidden type="file" multiple onChange={event => { void files(event.target.files); event.target.value = '' }}/>
     </div>
   </div>

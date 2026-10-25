@@ -143,64 +143,93 @@ describe('applyLaunchCommand', () => {
     expect(llamacpp.config.extra_params).toContain('-n 512')
   })
 
-  it('detects a ninfer command and fills the positional model plus flags', () => {
+  it('detects the v0.18 unified worker and fills retrieval plus ninfer flags', () => {
     const text = [
-      '"E:\\infer-engine-sm89-20261002\\engine\\ninfer-serve-89.exe"',
-      '"E:\\infer-engine-sm89-20261002\\models\\bonsai2_27b_ternary_ptq1_native_mtp.ninfer"',
+      '"D:\\funproject\\llama-manager\\engine\\kvmem-v0.18.0-ninfer-windows-rtx40-sm89\\workers\\ninfer\\ninfer-kvmem-server.exe"',
+      '"E:\\models\\bonsai2_27b_ternary_ptq1_native_mtp.ninfer"',
       '--host 127.0.0.1 --port 8095 --model-id qwen3.8-27b',
-      '--max-context 262144 --kv-capacity 4032 --kv-dtype k8v4 --host-kv-mib 16384',
-      '--prefill-chunk 256 --spec mtp --draft-tokens 4',
-      '--default-max-tokens 32768 --default-reasoning-effort none --max-concurrency 1',
+      '--max-context 204800 --kvmem-budget 36864 --kvmem-gen-reserve 16384 --kvmem-host-mib 12288',
+      '--kvmem-sink-tokens 12288 --kvmem-recent-tokens 1024 --kvmem-sessions 1',
+      '--kvmem-lrfu --kvmem-lrfu-lambda 0.5 --kvmem-lrfu-top-frac 0.9 --kvmem-score-agg max',
+      '--kv-dtype int8 --prefill-chunk 256 --spec mtp --draft-tokens 4 --adaptive-mtp',
+      '--ngram-draft-tokens 31 --ngram-min-match 12',
+      '--default-max-tokens 16384 --default-reasoning-effort medium --default-thinking-budget 8192 --max-concurrency 1',
       '--max-shared-prefixes 0',
-      '--presence-penalty 0 --temperature 0.7 --top-p 0.9 --top-k 20',
+      '--temperature 0.7 --top-p 0.9 --top-k 20',
       '--no-cuda-graph --cors',
     ].join(' ')
     const { config, applied, unknown } = applyLaunchCommand(defaultConfig, text)
     expect(config.engine).toBe('ninfer')
-    expect(config.model_path).toBe('E:\\infer-engine-sm89-20261002\\models\\bonsai2_27b_ternary_ptq1_native_mtp.ninfer')
-    expect(config.ninfer.max_context).toBe(262144)
-    expect(config.ninfer.kv_capacity).toBe(4032)
-    expect(config.ninfer.host_kv_mib).toBe(16384)
-    expect(config.ninfer.kv_dtype).toBe('k8v4')
-    expect(config.ninfer.prefill_chunk).toBe(256)
-    expect(config.ninfer.spec).toBe('mtp')
-    expect(config.ninfer.draft_tokens).toBe(4)
-    expect(config.ninfer.max_concurrency).toBe(1)
-    expect(config.ninfer.default_max_tokens).toBe(32768)
+    expect(config.model_path).toBe('E:\\models\\bonsai2_27b_ternary_ptq1_native_mtp.ninfer')
+    expect(config.ninfer.max_context).toBe(204800)
+    expect(config.ninfer.budget).toBe(36864)
+    expect(config.ninfer.gen_reserve).toBe(16384)
+    expect(config.ninfer.host_kv_mib).toBe(12288)
+    expect(config.ninfer.sink_tokens).toBe(12288)
+    expect(config.ninfer.recent_tokens).toBe(1024)
+    expect(config.ninfer.sessions).toBe(1)
+    expect(config.ninfer.lrfu).toBe(true)
+    expect(config.ninfer.lrfu_lambda).toBe(0.5)
+    expect(config.ninfer.lrfu_top_frac).toBe(0.9)
+    expect(config.ninfer.score_agg).toBe('max')
+    expect(config.ninfer.kv_dtype).toBe('int8')
+    expect(config.ninfer.adaptive_mtp).toBe(true)
+    expect(config.ninfer.ngram_draft_tokens).toBe(31)
+    expect(config.ninfer.ngram_min_match).toBe(12)
+    expect(config.ninfer.default_thinking_budget).toBe(8192)
+    expect(config.ninfer.default_max_tokens).toBe(16384)
     expect(config.ninfer.cuda_graph).toBe(false)
     expect(config.ninfer.model_id).toBe('qwen3.8-27b')
+    expect(config.basic.enable_thinking).toBe(true)
+    expect(config.ninfer.reasoning_effort).toBe('medium')
     expect(config.server.port).toBe(8095)
-    expect(config.sampling.temperature).toBe(0.7)
-    expect(config.sampling.top_p).toBe(0.9)
-    expect(config.basic.enable_thinking).toBe(false)
     // Unmapped-but-valid ninfer flags stay in extra_params so the built
     // command keeps them verbatim.
     expect(unknown).toEqual(['--max-shared-prefixes 0', '--cors'])
+    expect(applied).toBeGreaterThan(20)
+  })
+
+  it('parses a ninfer launcher bat, dropping boilerplate and joining continuations', () => {
+    const bat = [
+      '@echo off',
+      'set "ROOT=E:\\pack"',
+      'rem generated launcher',
+      '"E:\\pack\\workers\\ninfer\\ninfer-kvmem-server.exe" "E:\\pack\\models\\m.ninfer" ^',
+      '  --host 127.0.0.1 --port 8095 ^',
+      '  --max-context 204800 --kvmem-budget 16384 --kvmem-gen-reserve 8192 ^',
+      '  --kvmem-sink-tokens 8192 --kvmem-recent-tokens 1024 --kvmem-lrfu ^',
+      '  --spec mtp --draft-tokens 4 --no-cuda-graph --default-reasoning-effort none',
+    ].join('\r\n')
+    const { config, applied, unknown } = applyLaunchCommand(defaultConfig, bat)
+    expect(config.engine).toBe('ninfer')
+    expect(config.model_path).toBe('E:\\pack\\models\\m.ninfer')
+    expect(config.ninfer.budget).toBe(16384)
+    expect(config.ninfer.gen_reserve).toBe(8192)
+    expect(config.ninfer.sink_tokens).toBe(8192)
+    expect(config.ninfer.lrfu).toBe(true)
+    expect(config.ninfer.spec).toBe('mtp')
+    expect(config.ninfer.cuda_graph).toBe(false)
+    expect(unknown).toEqual([])
     expect(applied).toBeGreaterThan(10)
   })
 
-  it('parses a ninfer launcher bat with NINFER_* env lines and continuations', () => {
-    const bat = [
-      '@echo off',
-      'set "NINFER_KV_WINDOW=16384"',
-      'set "NINFER_KV_RETRIEVE=8192"',
-      'set "NINFER_TERNARY_PTQ1_FAST=1"',
-      'set "NINFER_WEBUI_DIR=%ROOT%webui"',
-      '"E:\\pack\\engine\\ninfer-serve-89.exe" "E:\\pack\\models\\m.ninfer" ^',
-      '  --host 127.0.0.1 --port 8095 ^',
-      '  --max-context 262144 --kv-capacity 4032 --spec mtp --draft-tokens 4 ^',
-      '  --no-cuda-graph --default-reasoning-effort none',
-    ].join('\r\n')
-    const { config, applied } = applyLaunchCommand(defaultConfig, bat)
+  it('keeps --kvmem flags on the ninfer engine when no binary name is given', () => {
+    const { config } = applyLaunchCommand(defaultConfig, 'ninfer-kvmem-server m.ninfer --kvmem-budget 8192 --max-context 32768')
     expect(config.engine).toBe('ninfer')
-    expect(config.model_path).toBe('E:\\pack\\models\\m.ninfer')
-    expect(config.ninfer.kv_window).toBe(16384)
-    expect(config.ninfer.kv_retrieve).toBe(8192)
-    expect(config.ninfer.ptq1_fast).toBe(true)
-    expect(config.ninfer.spec).toBe('mtp')
-    expect(config.ninfer.cuda_graph).toBe(false)
-    expect(applied).toBeGreaterThan(8)
+    expect(config.ninfer.budget).toBe(8192)
   })
+
+  it('maps kvmem GGUF retrieval flags onto the kvmem block', () => {
+    const { config } = applyLaunchCommand(defaultConfig, 'llama-kvmem-server -m m.gguf --kvmem-budget 24576 --kvmem-sink-tokens 12288 --kvmem-recent-tokens 1024 --kvmem-lrfu --kvmem-lrfu-lambda 0.7 --kvmem-score-agg max')
+    expect(config.engine).toBe('kvmem')
+    expect(config.kvmem.budget).toBe(24576)
+    expect(config.kvmem.sink_tokens).toBe(12288)
+    expect(config.kvmem.recent_tokens).toBe(1024)
+    expect(config.kvmem.lrfu).toBe(true)
+    expect(config.kvmem.lrfu_lambda).toBe(0.7)
+    expect(config.kvmem.score_agg).toBe('max')
+  })
+
 
   it('maps dflash draft windows and spec none for ninfer', () => {
     const { config } = applyLaunchCommand(defaultConfig, 'ninfer-serve-89.exe m.ninfer --spec dflash2 --draft-tokens 12 --adaptive-mtp')

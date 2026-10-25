@@ -7,7 +7,7 @@ body {
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
   font-size: 14px;
   line-height: 1.5;
   letter-spacing: 0;
@@ -15,14 +15,14 @@ body {
 }
 button, input, select, textarea { font: inherit; letter-spacing: 0 }
 button { color: inherit }
-button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 74%, white);
+a:focus-visible, summary:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 select option { color: var(--option-fg); background: var(--option-bg) }
 a { color: var(--blue); text-decoration: none }
 a:hover { text-decoration: underline }
-code, pre { font-family: "Geist Mono", "SFMono-Regular", Consolas, monospace }
+code, pre { font-family: "SFMono-Regular", Consolas, monospace }
 ::selection { background: var(--accent-soft) }
 ::-webkit-scrollbar { width: 9px; height: 9px }
 ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text-3) 35%, transparent); border: 3px solid transparent; background-clip: padding-box; border-radius: 8px }

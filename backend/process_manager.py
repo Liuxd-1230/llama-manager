@@ -5,15 +5,30 @@ import shlex
 import subprocess
 import time
 import sys
-import os
 from pathlib import Path
 from typing import Optional, List, Any
 from .models import AppConfig, ServerStatus
-from .config_manager import detect_server_binary, detect_kvmem_binary, detect_ninfer_binary
+from .config_manager import (
+    binary_flags,
+    detect_kvmem_binary,
+    detect_ninfer_binary,
+    detect_server_binary,
+    resolve_engine_dir,
+)
 
 IS_WINDOWS = sys.platform == "win32"
 
-ENGINE_IMAGE_NAMES = ("llama-server", "llama-kvmem-server", "ninfer-serve")
+ENGINE_IMAGE_NAMES = ("llama-server", "llama-kvmem-server", "ninfer-kvmem-server", "ninfer-serve")
+
+# NInfer allocates its KV in fixed 64-token pages; llama-kvmem-server uses
+# --kvmem-block-tokens instead, so the rounding unit differs per engine.
+KV_PAGE_TOKENS = 64
+
+
+def _align(value: int, unit: int) -> int:
+    """Round a token count down to whole allocation units — the engine's granularity."""
+    return max(0, (int(value) // max(1, unit)) * max(1, unit))
+
 
 
 def engine_pid_file() -> Path:
@@ -92,14 +107,19 @@ class ProcessManager:
             )
         return ServerStatus(state="stopped")
 
+    def _engine_dir(self, config: AppConfig) -> str:
+        """Engine directory to search — an unset one means the bundled package."""
+        return resolve_engine_dir(config.llama_cpp_dir, config.engine)
+
     def build_command(self, config: AppConfig) -> list[str]:
-        """Build the llama-server / llama-kvmem-server / ninfer-serve command line from config."""
+        """Build the llama-server / llama-kvmem-server / ninfer-kvmem-server command line from config."""
         if config.engine == "kvmem":
             return self._build_kvmem_command(config)
         if config.engine == "ninfer":
             return self._build_ninfer_command(config)
 
-        server_bin = detect_server_binary(config.llama_cpp_dir)
+        server_bin = detect_server_binary(self._engine_dir(config))
+
         if not server_bin:
             raise FileNotFoundError(
                 f"llama-server not found in {config.llama_cpp_dir}/build/bin/"
@@ -218,10 +238,10 @@ class ProcessManager:
                 f"KVMem: budget({k.budget}) + gen_reserve({k.gen_reserve}) 不能超过 workspace({k.workspace})"
             )
 
-        server_bin = detect_kvmem_binary(config.llama_cpp_dir)
+        server_bin = detect_kvmem_binary(self._engine_dir(config))
         if not server_bin:
             raise FileNotFoundError(
-                f"llama-kvmem-server not found in {config.llama_cpp_dir}/ (root or bin/)"
+                f"llama-kvmem-server not found in {self._engine_dir(config)}/ (root or bin/)"
             )
 
         cmd = [server_bin, "-m", config.model_path]
@@ -234,7 +254,9 @@ class ProcessManager:
             cmd += ["-ngl", str(config.basic.ngl)]
         cmd += ["--host", config.server.host, "--port", str(config.server.port)]
         # In KVMem, -c is the logical KV workspace, not a VRAM cap; VRAM = budget + gen_reserve.
-        cmd += ["-c", str(k.workspace), "-b", str(k.batch), "--ubatch-size", str(k.ubatch), "-n", str(k.gen_reserve)]
+        # No -n here: upstream master treats gen_reserve as append workspace ("not an
+        # output limit"); v0.16 clamps output to gen_reserve server-side anyway.
+        cmd += ["-c", str(k.workspace), "-b", str(k.batch), "--ubatch-size", str(k.ubatch)]
         cmd += [
             "--kvmem-budget", str(k.budget),
             "--kvmem-gen-reserve", str(k.gen_reserve),
@@ -243,6 +265,35 @@ class ProcessManager:
             "--kvmem-query-replay", "auto",
             "--kv-dtype", k.kv_dtype,
         ]
+        # Retrieval: the pinned sink/recent windows are carved out of the same
+        # GPU budget, so over-sized windows are a launch failure, not a tuning
+        # preference — catch it here where the message can name the fields.
+        unit = k.block_tokens
+        sink = _align(k.sink_tokens, unit)
+        recent = _align(k.recent_tokens, unit)
+        if sink + recent > k.budget:
+            raise ValueError(
+                f"KVMem: 常驻窗口 sink({sink}) + recent({recent}) 对齐到 {unit}-token 块后超过 GPU 预算 {k.budget}"
+            )
+        if sink > 0:
+            cmd += ["--kvmem-sink-tokens", str(sink)]
+        if recent > 0:
+            cmd += ["--kvmem-recent-tokens", str(recent)]
+        scores_lrfu = "--kvmem-lrfu" in binary_flags(server_bin)
+        if k.lrfu and not scores_lrfu:
+            raise ValueError(
+                f"KVMem: 该二进制不支持 LRFU 历史加权（需 v0.17+ 构建）：{server_bin}。"
+                "关闭「历史加权」，或把引擎目录指向内置 KVMem 包。"
+            )
+        if k.lrfu:
+            cmd += [
+                "--kvmem-lrfu",
+                "--kvmem-lrfu-lambda", str(k.lrfu_lambda),
+                "--kvmem-lrfu-top-frac", str(k.lrfu_top_frac),
+            ]
+        if scores_lrfu:
+            cmd += ["--kvmem-score-agg", k.score_agg]
+
         # Serve the package's built-in WebUI when present (prism/rc packages).
         for base in (Path(server_bin).parent.parent, Path(server_bin).parent):
             ui_dir = base / "share" / "kvmem" / "ui"
@@ -252,9 +303,9 @@ class ProcessManager:
         if config.basic.flash_attn:
             cmd += ["--flash-attn", "on"]
         if k.enable_thinking:
-            # reasoning-budget caps THINKING tokens; -n (= gen_reserve) caps the
-            # whole output. Keep at least 1024 tokens of headroom for the answer
-            # or the model gets cut mid-thinking with nothing left to say.
+            # reasoning-budget caps THINKING tokens. v0.16 still hard-caps the whole
+            # output at gen_reserve server-side, so keep at least 1024 tokens of
+            # answer headroom there; on master (no output cap) the clamp is inert.
             thinking_budget = max(0, min(k.reasoning_budget, k.gen_reserve - 1024))
             cmd += ["--enable-thinking", "--reasoning-budget", str(thinking_budget)]
         if config.chat_template_file.strip():
@@ -278,35 +329,85 @@ class ProcessManager:
         return cmd
 
     def _build_ninfer_command(self, config: AppConfig) -> list[str]:
-        """Build the ninfer-serve command line (.ninfer artifact engine)."""
+        """Build the ninfer-kvmem-server command line (.ninfer artifact engine).
+
+        KVMem v0.18.0 folded the NInfer worker onto the KVMem tiering model, so
+        the retrieval vocabulary matches llama-kvmem-server: B/R/H size the
+        device and host KV, sink + recent pin the windows inside B, and LRFU
+        ranks what is left.
+        """
         n = config.ninfer
-        server_bin = detect_ninfer_binary(config.llama_cpp_dir)
+        server_bin = detect_ninfer_binary(self._engine_dir(config))
         if not server_bin:
             raise FileNotFoundError(
-                f"ninfer-serve not found in {config.llama_cpp_dir}/ (root or engine/)"
+                f"ninfer-kvmem-server not found in {self._engine_dir(config)}/ (workers/ninfer/ or engine/)"
+            )
+
+        budget = _align(n.budget, KV_PAGE_TOKENS)
+        reserve = _align(n.gen_reserve, KV_PAGE_TOKENS)
+        sink = _align(n.sink_tokens, KV_PAGE_TOKENS)
+        recent = max(KV_PAGE_TOKENS, _align(n.recent_tokens, KV_PAGE_TOKENS)) if n.recent_tokens > 0 else 0
+        if budget + reserve > n.max_context:
+            raise ValueError(
+                f"NInfer: GPU 预算({budget}) + 生成预留({reserve}) 超过逻辑上下文({n.max_context})，引擎会拒绝装载"
+            )
+        if sink + recent > budget:
+            raise ValueError(
+                f"NInfer: 常驻窗口 sink({sink}) + recent({recent}) 对齐到 64-token 页后超过 GPU 预算({budget})，"
+                f"缩小常驻窗口或把预算加大到至少 {sink + recent}"
             )
 
         cmd = [server_bin, config.model_path]
         cmd += ["--host", config.server.host, "--port", str(config.server.port)]
         cmd += ["--max-context", str(n.max_context)]
-        if n.kv_capacity > 0:
-            cmd += ["--kv-capacity", str(n.kv_capacity)]
-        cmd += ["--kv-dtype", n.kv_dtype, "--host-kv-mib", str(n.host_kv_mib)]
+        cmd += [
+            "--kvmem-budget", str(budget),
+            "--kvmem-gen-reserve", str(reserve),
+            "--kvmem-host-mib", str(n.host_kv_mib),
+            "--kvmem-sessions", str(max(1, min(16, n.sessions))),
+        ]
+        if sink > 0:
+            cmd += ["--kvmem-sink-tokens", str(sink)]
+        if recent > 0:
+            cmd += ["--kvmem-recent-tokens", str(recent)]
+        scores_lrfu = "--kvmem-lrfu" in binary_flags(server_bin)
+        if n.lrfu and not scores_lrfu:
+            raise ValueError(
+                f"NInfer: 该二进制不支持 LRFU 历史加权（需 KVMem v0.18+ 统一包）：{server_bin}。"
+                "关闭「历史加权」，或把引擎目录指向内置引擎包。"
+            )
+        if n.lrfu:
+            cmd += [
+                "--kvmem-lrfu",
+                "--kvmem-lrfu-lambda", str(n.lrfu_lambda),
+                "--kvmem-lrfu-top-frac", str(n.lrfu_top_frac),
+            ]
+        if scores_lrfu:
+            cmd += ["--kvmem-score-agg", n.score_agg]
+        cmd += ["--kv-dtype", n.kv_dtype]
         if n.prefill_chunk > 0:
             # Must be a multiple of 128 or the engine refuses to start.
-            chunk = max(128, (n.prefill_chunk // 128) * 128)
-            cmd += ["--prefill-chunk", str(chunk)]
-        cmd += ["--max-concurrency", str(n.max_concurrency)]
-        cmd += ["--default-max-tokens", str(n.default_max_tokens)]
+            cmd += ["--prefill-chunk", str(max(128, (n.prefill_chunk // 128) * 128))]
+        cmd += ["--max-concurrency", str(max(1, min(8, n.max_concurrency)))]
+        if n.default_max_tokens > 0:
+            cmd += ["--default-max-tokens", str(n.default_max_tokens)]
         if not n.cuda_graph:
             cmd.append("--no-cuda-graph")
-        # Browsers reach the engine cross-origin via the manager-hosted chat
-        # page (the pack binary serves no WebUI of its own).
+        if n.fast_prefill:
+            cmd.append("--fast-prefill-kernel")
+        if n.disk_path.strip():
+            cmd += ["--kvmem-disk-path", n.disk_path.strip(), "--kvmem-disk-mib", str(n.disk_mib)]
+        # Browsers reach the engine cross-origin via the manager-hosted chat page.
         cmd.append("--cors")
         if n.spec != "none":
             cmd += ["--spec", n.spec, "--draft-tokens", str(max(1, min(n.draft_tokens, 15)))]
             if n.adaptive_mtp:
                 cmd.append("--adaptive-mtp")
+            if n.ngram_draft_tokens > 0:
+                cmd += [
+                    "--ngram-draft-tokens", str(max(1, min(63, n.ngram_draft_tokens))),
+                    "--ngram-min-match", str(max(4, min(64, n.ngram_min_match))),
+                ]
 
         # Server-side sampling defaults; per-request fields override them.
         s = config.sampling
@@ -320,6 +421,8 @@ class ProcessManager:
 
         # Thinking: the shared switch maps onto the reasoning-effort knob.
         cmd += ["--default-reasoning-effort", n.reasoning_effort if config.basic.enable_thinking else "none"]
+        if n.default_thinking_budget > 0:
+            cmd += ["--default-thinking-budget", str(n.default_thinking_budget)]
         if n.model_id.strip():
             cmd += ["--model-id", n.model_id.strip()]
 
@@ -330,51 +433,21 @@ class ProcessManager:
                 raise ValueError(f"extra_params 语法错误: {e}") from e
         return cmd
 
-    def build_env(self, config: AppConfig) -> dict[str, str] | None:
-        """Child-process environment. Only the NInfer engine needs extra vars
-        (the KVMem ring configuration); None inherits the parent environment."""
-        if config.engine != "ninfer":
-            return None
-        n = config.ninfer
-        env = dict(os.environ)
-        if n.kv_window > 0:
-            # Ring retrieval config, verbatim from the pack launchers. The
-            # content scorer turns itself on whenever NINFER_KV_WINDOW is set.
-            env["NINFER_KV_WINDOW"] = str(n.kv_window)
-            env["NINFER_KV_RETRIEVE"] = str(n.kv_retrieve)
-            env["NINFER_KV_RING"] = "1"
-            env["NINFER_HOST_PAGEABLE"] = "1"
-            env["NINFER_KV_REUSE_HOSTBACKED"] = "1"
-            if n.ptq1_fast:
-                env["NINFER_TERNARY_PTQ1_FAST"] = "1"
-            else:
-                env.pop("NINFER_TERNARY_PTQ1_FAST", None)
-        # Serve the pack's own WebUI when present (engine sits in <pack>/engine).
-        pack_ui = Path(detect_ninfer_binary(config.llama_cpp_dir) or "").parent.parent / "webui"
-        if pack_ui.is_dir():
-            env["NINFER_WEBUI_DIR"] = str(pack_ui)
-        return env
 
     async def start(self, config: AppConfig, profile_name: str = ""):
         if self._process and self._process.returncode is None:
             raise RuntimeError("Server is already running. Stop it first.")
 
         cmd = self.build_command(config)
-        env = self.build_env(config)
         self._profile_name = profile_name
         self._log_buffer.clear()
         self._append_log(f"[manager] Starting: {' '.join(cmd)}")
-        if env is not None:
-            ring = {k: v for k, v in env.items() if k.startswith("NINFER_")}
-            if ring:
-                self._append_log(f"[manager] Engine env: {' '.join(f'{k}={v}' for k, v in sorted(ring.items()))}")
 
         self._process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
-            cwd=config.llama_cpp_dir or None,
-            env=env,
+            cwd=self._engine_dir(config) or None,
         )
         self._start_time = time.time()
         record_engine_pid(self._process.pid)

@@ -19,16 +19,29 @@ Llama Manager — a visual management tool for running, configuring, and evaluat
 start.bat
 ```
 
-There is no build step, no test suite, and no linter configured.
+There is no build step and no linter configured. Tests exist and are the fastest
+feedback loop:
+
+```bash
+# Backend (pytest is not installed; use unittest, tests/ has no __init__.py)
+.venv\Scripts\python.exe -m unittest tests.test_regressions tests.test_platform
+
+# Frontend (from frontend-src/)
+npx vitest run
+npx tsc -b
+npm run generate:api   # re-export OpenAPI and regenerate src/generated/api.ts
+```
+
 
 ## Architecture
 
 ### Backend (Python / FastAPI)
 
 - **`backend/main.py`** — Single entry point. All REST routes and WebSocket endpoints live here. Serves the `frontend/` directory as static files. Mounts at `/`.
-- **`backend/models.py`** — Pydantic models: `AppConfig` (root config with nested `BasicSettings`, `SamplingSettings`, `MTPSettings`, `KvmemSettings`, `NinferSettings`, `ServerSettings`), `CompileSettings`, `ModelInfo`, `DirEntry`, `ServerStatus`, `UpdateStatus`. Three engines: `"llama.cpp"` (llama-server), `"kvmem"` (llama-kvmem-server), `"ninfer"` (ninfer-serve, .ninfer artifacts).
-- **`backend/config_manager.py`** — Model profile CRUD (JSON files stored at `~/llama-manager/config/`). Tracks the current profile name (`_current_name`) and reads GGUF header metadata (`read_gguf_metadata`) for profile cards. Scans for GGUF and .ninfer models, provides drive listing and directory browsing for the file picker.
-- **`backend/process_manager.py`** — Spawns the engine process via `asyncio.create_subprocess_exec` (engine-specific command builders; `build_env` injects the NINFER_* ring variables for ninfer). Remembers which profile it launched (`profile_name` on `start()`, surfaced in `ServerStatus.profile`). Windows-specific process tree termination (`taskkill /F /T`). Exposes `subscribe()`/`unsubscribe()` for WebSocket log streaming via `asyncio.Queue`.
+- **`backend/models.py`** — Pydantic models: `AppConfig` (root config with nested `BasicSettings`, `SamplingSettings`, `MTPSettings`, `KvmemSettings`, `NinferSettings`, `ServerSettings`), `CompileSettings`, `ModelInfo`, `DirEntry`, `ServerStatus`, `UpdateStatus`. Three engines: `"llama.cpp"` (llama-server), `"kvmem"` (llama-kvmem-server, GGUF + KV virtualization), `"ninfer"` (ninfer-kvmem-server, .ninfer artifacts). `KvmemSettings` and `NinferSettings` each carry the retrieval block (`sink_tokens`/`recent_tokens`/`lrfu`/`lrfu_lambda`/`lrfu_top_frac`/`score_agg`) as first-class fields.
+- **`backend/config_manager.py`** — Model profile CRUD (JSON files stored at `~/llama-manager/config/`). Tracks the current profile name (`_current_name`) and reads GGUF header metadata (`read_gguf_metadata`) for profile cards. Scans for GGUF and .ninfer models, provides drive listing and directory browsing for the file picker. Also owns engine discovery: `bundled_package_dir()` returns the highest-`VERSION` package under `<project root>/engine/`, `resolve_engine_dir()` falls back to it whenever a profile leaves `llama_cpp_dir` empty, and `binary_flags()` runs `--help` on a worker (cached per file revision) to report which flags that build advertises.
+- **`backend/process_manager.py`** — Spawns the engine process via `asyncio.create_subprocess_exec` (engine-specific command builders, all resolving the engine directory through `resolve_engine_dir`). Builders validate what the engine would reject anyway — device tokens against `--max-context`, pinned windows against the budget, page/block alignment — and raise a Chinese `ValueError` naming the field instead of letting the process die on `unknown flag` when a build predates LRFU. Remembers which profile it launched (`profile_name` on `start()`, surfaced in `ServerStatus.profile`). Windows-specific process tree termination (`taskkill /F /T`). Exposes `subscribe()`/`unsubscribe()` for WebSocket log streaming via `asyncio.Queue`.
+
 - **`backend/update_manager.py`** — `git pull` + `cmake` compile management for updating the llama.cpp installation.
 - **`backend/download_manager.py`** — Clones the llama.cpp repository.
 

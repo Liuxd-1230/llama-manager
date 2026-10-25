@@ -1,6 +1,7 @@
 import { ClipboardPaste, Copy, Download, FolderOpen, RefreshCw, Save, Trash2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { ConfirmDialog, Modal } from '../../components/Modal'
+import { ResourceUsage } from '../../components/ResourceUsage'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api'
 import { FileBrowser } from '../../components/FileBrowser'
@@ -15,12 +16,16 @@ type BrowseTarget = { key: 'llama_cpp_dir' | 'model_path' | 'mmproj_path' | 'cha
 export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppConfig; setConfig: (config: AppConfig) => void; dirty: boolean; toast: (text: string) => void }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState('default')
-  const [nameTouched, setNameTouched] = useState(false)
+  const nameTouched = useRef(false)
+  const [operation, setOperation] = useState('')
+  const [operationError, setOperationError] = useState('')
+  const [confirmRemove, setConfirmRemove] = useState(false)
+  const attempt = async (label: string, action: () => Promise<unknown>) => { setOperation(label); setOperationError(''); try { await action() } catch (reason) { setOperationError(`${label}失败：${reason instanceof Error ? reason.message : String(reason)}。修改已保留，请重试。`) } finally { setOperation('') } }
   const [pendingLoad, setPendingLoad] = useState('')
   const requestLoad = (selected: string) => {
     if (!selected) return
     if (dirty) { setPendingLoad(selected); return }
-    void load(selected)
+    void attempt('载入', () => load(selected))
   }
   const currentNameQuery = useQuery({ queryKey: ['current-profile'], queryFn: () => api<{ name: string }>('/api/profiles/current'), staleTime: 0 })
   // Direct read of the model file the current config points at — no second
@@ -32,7 +37,7 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
     staleTime: 60000,
   })
   const usage = estimateFromConfig(config, modelInfoQuery.data?.size_mb || 0, modelInfoQuery.data?.meta)
-  useEffect(() => { if (!nameTouched && currentNameQuery.data?.name) setName(currentNameQuery.data.name) }, [currentNameQuery.data, nameTouched])
+  useEffect(() => { if (!nameTouched.current && currentNameQuery.data?.name) setName(currentNameQuery.data.name) }, [currentNameQuery.data])
   const [configs, setConfigs] = useState<string[]>([])
   const [browse, setBrowse] = useState<BrowseTarget>(null)
   const [importOpen, setImportOpen] = useState(false)
@@ -73,10 +78,13 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
   }
   const detectQuery = useQuery({
     queryKey: ['detect-binary', config.engine, config.llama_cpp_dir],
-    queryFn: () => api<{ found: boolean; path: string }>(`/api/detect-server?llama_cpp_dir=${encodeURIComponent(config.llama_cpp_dir)}&engine=${config.engine}`),
-    enabled: !!config.llama_cpp_dir.trim(),
+    queryFn: () => api<{ found: boolean; path: string; dir: string; bundled: boolean; lrfu: boolean }>(`/api/detect-server?llama_cpp_dir=${encodeURIComponent(config.llama_cpp_dir)}&engine=${config.engine}`),
     staleTime: 30000,
   })
+  // LRFU and --kvmem-score-agg only exist on v0.17+ workers; the preview and
+  // the form both follow whatever the detected binary actually advertises.
+  const engineSupportsLrfu = !!detectQuery.data?.lrfu
+
   const refreshNames = async () => {
     try { setConfigs((await api<{ configs: string[] }>('/api/config/list')).configs || []) } catch { setConfigs([]) }
   }
@@ -90,13 +98,13 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
   const load = async (selected: string) => {
     if (!selected) return
     await api<AppConfig>('/api/config/load', { method: 'POST', body: JSON.stringify({ name: selected }) })
-    setName(selected); setNameTouched(true); toast(`已载入：${selected}`)
+    setName(selected); nameTouched.current = true; toast(`已载入：${selected}`)
     await Promise.all([queryClient.invalidateQueries({ queryKey: ['config'] }), queryClient.invalidateQueries({ queryKey: ['current-profile'] })])
   }
   const remove = async () => {
     if (!name || name === 'default') return toast('默认配置不能删除')
     await api('/api/config/delete', { method: 'POST', body: JSON.stringify({ name }) })
-    setName('default'); toast('配置已删除'); await refreshNames()
+    nameTouched.current = false; await load('default'); toast('配置已删除'); await refreshNames(); await queryClient.invalidateQueries({ queryKey: ['profiles'] })
   }
   const exportConfig = () => {
     const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' })
@@ -122,36 +130,54 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
 
   const command = useMemo(() => {
     if (config.engine === 'ninfer') {
+      // Mirrors _build_ninfer_command, including the page-aligned values the
+      // engine actually receives.
       const n = ninfer
-      const args: string[] = ['ninfer-serve-89', quote(config.model_path || '<model.ninfer>')]
+      const budget = alignTo(n.budget, KV_PAGE), reserve = alignTo(n.gen_reserve, KV_PAGE)
+      const sink = alignTo(n.sink_tokens, KV_PAGE), recent = n.recent_tokens > 0 ? Math.max(KV_PAGE, alignTo(n.recent_tokens, KV_PAGE)) : 0
+      const args: string[] = ['ninfer-kvmem-server', quote(config.model_path || '<model.ninfer>')]
       args.push('--host', config.server.host, '--port', String(config.server.port))
       args.push('--max-context', String(n.max_context))
-      if (n.kv_capacity > 0) args.push('--kv-capacity', String(n.kv_capacity))
-      args.push('--kv-dtype', n.kv_dtype, '--host-kv-mib', String(n.host_kv_mib))
-      if (n.prefill_chunk > 0) args.push('--prefill-chunk', String(n.prefill_chunk))
-      args.push('--max-concurrency', String(n.max_concurrency), '--default-max-tokens', String(n.default_max_tokens))
+      args.push('--kvmem-budget', String(budget), '--kvmem-gen-reserve', String(reserve), '--kvmem-host-mib', String(n.host_kv_mib), '--kvmem-sessions', String(Math.min(16, Math.max(1, n.sessions))))
+      if (sink > 0) args.push('--kvmem-sink-tokens', String(sink))
+      if (recent > 0) args.push('--kvmem-recent-tokens', String(recent))
+      if (n.lrfu) args.push('--kvmem-lrfu', '--kvmem-lrfu-lambda', String(n.lrfu_lambda), '--kvmem-lrfu-top-frac', String(n.lrfu_top_frac))
+      if (engineSupportsLrfu) args.push('--kvmem-score-agg', n.score_agg)
+      args.push('--kv-dtype', n.kv_dtype)
+      if (n.prefill_chunk > 0) args.push('--prefill-chunk', String(Math.max(128, Math.floor(n.prefill_chunk / 128) * 128)))
+      args.push('--max-concurrency', String(Math.min(8, Math.max(1, n.max_concurrency))))
+      if (n.default_max_tokens > 0) args.push('--default-max-tokens', String(n.default_max_tokens))
       if (!n.cuda_graph) args.push('--no-cuda-graph')
+      if (n.fast_prefill) args.push('--fast-prefill-kernel')
+      if (n.disk_path.trim()) args.push('--kvmem-disk-path', quote(n.disk_path.trim()), '--kvmem-disk-mib', String(n.disk_mib))
       args.push('--cors')
       if (n.spec !== 'none') {
-        args.push('--spec', n.spec, '--draft-tokens', String(n.draft_tokens))
+        args.push('--spec', n.spec, '--draft-tokens', String(Math.min(15, Math.max(1, n.draft_tokens))))
         if (n.adaptive_mtp) args.push('--adaptive-mtp')
+        if (n.ngram_draft_tokens > 0) args.push('--ngram-draft-tokens', String(Math.min(63, Math.max(1, n.ngram_draft_tokens))), '--ngram-min-match', String(Math.min(64, Math.max(4, n.ngram_min_match))))
       }
       args.push('--temperature', String(sampling.temperature), '--top-p', String(sampling.top_p), '--top-k', String(Math.max(0, Math.min(sampling.top_k, 20))))
       if (sampling.min_p_enabled) args.push('--min-p', String(sampling.min_p))
       if (sampling.presence_penalty_enabled) args.push('--presence-penalty', String(sampling.presence_penalty))
       args.push('--default-reasoning-effort', basic.enable_thinking ? n.reasoning_effort : 'none')
+      if (n.default_thinking_budget > 0) args.push('--default-thinking-budget', String(n.default_thinking_budget))
       if (n.model_id.trim()) args.push('--model-id', n.model_id.trim())
       if (config.extra_params.trim()) args.push(config.extra_params.trim())
       return args.join(' ')
     }
     if (config.engine === 'kvmem') {
       const k = kvmem
+      const sink = alignTo(k.sink_tokens, k.block_tokens), recent = alignTo(k.recent_tokens, k.block_tokens)
       const args: string[] = ['llama-kvmem-server', '-m', quote(config.model_path || '<model.gguf>')]
       if (config.mmproj_path) { args.push('--mmproj', quote(config.mmproj_path)); args.push(config.mmproj_gpu ? '--mmproj-offload' : '--no-mmproj-offload') }
       if (basic.ngl_enabled) args.push('-ngl', String(basic.ngl))
       args.push('--host', config.server.host, '--port', String(config.server.port))
       args.push('-c', String(k.workspace), '-b', String(k.batch), '--ubatch-size', String(k.ubatch), '-n', String(k.gen_reserve))
       args.push('--kvmem-budget', String(k.budget), '--kvmem-gen-reserve', String(k.gen_reserve), '--kvmem-block-tokens', String(k.block_tokens), '--kvmem-query-policy', k.query_policy, '--kvmem-query-replay', 'auto', '--kv-dtype', k.kv_dtype)
+      if (sink > 0) args.push('--kvmem-sink-tokens', String(sink))
+      if (recent > 0) args.push('--kvmem-recent-tokens', String(recent))
+      if (k.lrfu) args.push('--kvmem-lrfu', '--kvmem-lrfu-lambda', String(k.lrfu_lambda), '--kvmem-lrfu-top-frac', String(k.lrfu_top_frac))
+      if (engineSupportsLrfu) args.push('--kvmem-score-agg', k.score_agg)
       if (basic.flash_attn) args.push('--flash-attn', 'on')
       if (k.enable_thinking) args.push('--enable-thinking', '--reasoning-budget', String(k.reasoning_budget))
       if (config.chat_template_file.trim()) args.push('--chat-template-file', quote(config.chat_template_file.trim()))
@@ -192,27 +218,29 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
     if (config.chat_template_file.trim()) args.push('--chat-template-file', quote(config.chat_template_file.trim()))
     if (config.extra_params.trim()) args.push(config.extra_params.trim())
     return args.join(' ')
-  }, [config, basic, sampling, mtp, kvmem])
+  }, [config, basic, sampling, mtp, kvmem, ninfer, engineSupportsLrfu])
 
   const browseValue = browse ? config[browse.key] : ''
 
   return <>
     <div className={page.splitMain}>
       <div className={page.stack}>
-        <Panel title="配置文件" actions={<div className={page.row}><Button size="small" onClick={exportConfig}><Upload size={14}/>导出</Button><Button size="small" onClick={() => importRef.current?.click()}><Download size={14}/>导入</Button></div>}>
+        <Panel className={page.configBar} title="配置文件" actions={<div className={page.row}><Button size="small" onClick={exportConfig}><Upload size={14}/>导出</Button><Button size="small" onClick={() => importRef.current?.click()}><Download size={14}/>导入</Button></div>}>
           <div className={page.formGridThree}>
-            <Field label="配置名称"><Input value={name} onChange={event => { setName(event.target.value); setNameTouched(true) }} /></Field>
+            <Field label="配置名称"><Input value={name} onChange={event => { setName(event.target.value); nameTouched.current = true }} /></Field>
             <Field label="已保存配置"><Select value={configs.includes(name) ? name : ''} onChange={event => requestLoad(event.target.value)}><option value="">选择配置</option>{configs.map(item => <option key={item}>{item}</option>)}</Select></Field>
-            <div className={page.row} style={{ alignSelf: 'end' }}><Button tone="primary" onClick={() => void save()}><Save size={15}/>保存</Button><Button tone="danger" onClick={() => void remove()}><Trash2 size={15}/>删除</Button></div>
-            {pendingLoad && <div className={`${page.row} ${page.wide}`}><span className={page.hint}>有未保存的修改，载入「{pendingLoad}」将丢弃它们。</span><Button size="small" tone="danger" onClick={() => { const target = pendingLoad; setPendingLoad(''); void load(target) }}>丢弃并载入</Button><Button size="small" onClick={() => setPendingLoad('')}>取消</Button></div>}
+            <div className={page.row} style={{ alignSelf: 'end' }}><Button tone="primary" disabled={!!operation} onClick={() => void attempt('保存', save)}><Save size={15}/>{operation === '保存' ? '保存中…' : '保存'}</Button><Button tone="danger" disabled={!!operation || name === 'default'} onClick={() => setConfirmRemove(true)}><Trash2 size={15}/>删除</Button></div>
+            {pendingLoad && <div className={`${page.row} ${page.wide}`}><span className={page.hint}>有未保存的修改，载入「{pendingLoad}」将丢弃它们。</span><Button size="small" tone="danger" onClick={() => { const target = pendingLoad; setPendingLoad(''); void attempt('载入', () => load(target)) }}>丢弃并载入</Button><Button size="small" onClick={() => setPendingLoad('')}>取消</Button></div>}
           </div>
-          <input ref={importRef} hidden type="file" accept=".json" onChange={event => void importConfig(event.target.files?.[0])} />
+          {operationError && <p role="alert" className={page.error}>{operationError}</p>}
+          {dirty && <p className={page.hint}>有未保存的修改，保存后可在运行页启动。</p>}
+          <input ref={importRef} hidden type="file" accept=".json" onChange={event => void attempt('导入', () => importConfig(event.target.files?.[0]))} />
         </Panel>
 
         <Panel title="模型与运行目录">
           <div className={page.formGrid}>
             <Field label="推理引擎"><Select value={config.engine} onChange={event => switchEngine(event.target.value as AppConfig['engine'])}><option value="llama.cpp">本地 llama.cpp</option><option value="kvmem">KVMem(KV 缓存虚拟化)</option><option value="ninfer">NInfer(.ninfer 引擎)</option></Select></Field>
-            <Field label="引擎目录"><div className={page.row}><Input value={config.llama_cpp_dir} onChange={event => patch('llama_cpp_dir', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'llama_cpp_dir', mode: 'folder' })}><FolderOpen size={16}/></Button></div></Field>
+            <Field label="引擎目录"><div className={page.row}><Input value={config.llama_cpp_dir} placeholder="留空=使用内置引擎包" onChange={event => patch('llama_cpp_dir', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'llama_cpp_dir', mode: 'folder' })}><FolderOpen size={16}/></Button></div></Field>
             <Field label={isNinfer ? 'NInfer 模型' : 'GGUF 模型'}><div className={page.row}><Input value={config.model_path} onChange={event => patch('model_path', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'model_path', mode: 'file', extension: isNinfer ? '.ninfer' : '.gguf' })}><FolderOpen size={16}/></Button></div></Field>
             <Field label="MMProj"><div className={page.row}><Input value={config.mmproj_path} onChange={event => patch('mmproj_path', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'mmproj_path', mode: 'file', extension: '.gguf' })}><FolderOpen size={16}/></Button></div></Field>
             {config.mmproj_path && <Field label="视觉投影器"><div className={page.row}><Switch checked={config.mmproj_gpu} onChange={mmproj_gpu => patch('mmproj_gpu', mmproj_gpu)} label="进显存"/></div></Field>}
@@ -245,25 +273,11 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
             <Switch checked={isKvmem ? kvmem.enable_thinking : basic.enable_thinking} onChange={value => isKvmem ? patchKvmem({ enable_thinking: value }) : patchBasic({ enable_thinking: value })} label="思考(默认)"/>
           </div>
           {isNative && <div className={page.formGrid} style={{ marginTop: 12 }}><NumberField label="Batch" value={basic.batch_size} onChange={batch_size => patchBasic({ batch_size })}/><NumberField label="Micro Batch" value={basic.ubatch_size} onChange={ubatch_size => patchBasic({ ubatch_size })}/></div>}
-          <div style={{ marginTop: 14 }}>
-            {[
-              { title: '预计显存', est: usage.vram, budget: 8, warn: 6.5, line: '安全线 7.4 / 8.0 GB', warnText: '⚠ 超过 7.4GB 安全线：可能启动被拒或推理中 OOM。' },
-              { title: '预计内存', est: { ...usage.ram, over: false }, budget: 16, warn: 12, line: '', warnText: '' },
-            ].map(bar => <div key={bar.title} style={{ marginBottom: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-3)', marginBottom: 5 }}>
-                <span>{bar.title}（估算系数基于 Bonsai 27B 实测{bar.title.includes('显存') ? '，KV 取自模型几何' : ''}）：{bar.est.parts.map(p => `${p.label} ${p.gb.toFixed(2)}`).join(' + ')} ≈ <b style={{ color: bar.est.over ? 'var(--red)' : 'var(--text)' }}>{bar.est.totalGb.toFixed(2)} GB</b></span>
-                {bar.line && <span>{bar.line}</span>}
-              </div>
-              <div style={{ height: 8, borderRadius: 5, background: 'var(--line)', overflow: 'hidden' }}>
-                <div style={{ width: `${Math.min(100, (bar.est.totalGb / bar.budget) * 100)}%`, height: '100%', borderRadius: 5, transition: 'width .25s ease, background .25s ease', background: bar.est.over ? 'var(--red)' : bar.est.totalGb > bar.warn ? 'var(--yellow)' : 'var(--green)' }}/>
-              </div>
-              {bar.warnText && bar.est.over && <p className={page.hint} style={{ color: 'var(--red)', margin: '5px 0 0' }}>{bar.warnText}</p>}
-            </div>)}
-          </div>
+
         </Panel>
 
         {isKvmem && (
-          <Panel title="KVMem(KV 缓存虚拟化)">
+          <details className={page.advanced}><summary>KVMem(KV 缓存虚拟化)<span>上下文、缓存与检索参数</span></summary><div className={page.advancedBody}>
             <div className={page.formGridThree}>
               <NumberField label="逻辑工作区" value={kvmem.workspace} onChange={workspace => patchKvmem({ workspace })}/>
               <NumberField label="GPU 预算" value={kvmem.budget} onChange={budget => patchKvmem({ budget })}/>
@@ -276,35 +290,53 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
               <Field label="MTP 状态"><Select value={kvmem.mtp_state} onChange={event => patchKvmem({ mtp_state: event.target.value })}><option value="snapshots">snapshots(当前构建)</option><option value="replay">replay(当前二进制不支持)</option></Select></Field>
               <NumberField label="推理预算" value={kvmem.reasoning_budget} disabled={!kvmem.enable_thinking} onChange={reasoning_budget => patchKvmem({ reasoning_budget })}/>
             </div>
-            <p className={page.hint}>-c 是逻辑 KV 工作区，不是显存上限；显存由「GPU 预算 + 生成预留」决定，两者之和不能超过工作区。「思考(默认)」开关在上方共用一行。采样参数在此引擎下走请求级设置。</p>
-          </Panel>
+            <div className={page.formGridThree} style={{ marginTop: 14 }}>
+              <RetrievalFields value={kvmem} unit={kvmem.block_tokens} supported={engineSupportsLrfu} onChange={patchKvmem}/>
+            </div>
+            {retrievalOverflow(alignTo(kvmem.sink_tokens, kvmem.block_tokens) + alignTo(kvmem.recent_tokens, kvmem.block_tokens), kvmem.budget, `${kvmem.block_tokens}-token 块`)}
+            <p className={page.hint}>-c 是逻辑 KV 工作区，不是显存上限；显存由「GPU 预算 + 生成预留」决定，两者之和不能超过工作区。sink/recent 是从预算里划走的常驻窗口，不是额外显存；对齐后之和超过预算引擎会拒绝启动。「命中比例」控制累加分数的范围，不是保留 90% KV。「思考(默认)」开关在上方共用一行；采样参数在此引擎下走请求级设置。</p>
+          </div></details>
         )}
 
         {isNinfer && (
-          <Panel title="NInfer(.ninfer 引擎)">
+          <details className={page.advanced}><summary>NInfer(内置 KVMem v0.18 引擎)<span>显存分层、检索与投机解码</span></summary><div className={page.advancedBody}>
             <div className={page.formGridThree}>
               <NumberField label="逻辑上下文" value={ninfer.max_context} onChange={max_context => patchNinfer({ max_context })}/>
-              <NumberField label="设备池(token)" value={ninfer.kv_capacity} onChange={kv_capacity => patchNinfer({ kv_capacity: Math.max(0, kv_capacity) })}/>
-              <NumberField label="主机池 MiB" value={ninfer.host_kv_mib} onChange={host_kv_mib => patchNinfer({ host_kv_mib: Math.max(0, host_kv_mib) })}/>
-              <Field label="KV 类型"><Select value={ninfer.kv_dtype} onChange={event => patchNinfer({ kv_dtype: event.target.value })}><option value="k8v4">k8v4(交付档)</option><option>bf16</option><option>int8</option><option>fp8</option><option>rk8v4</option><option>rk4v4</option><option>rk4v4-e8</option><option>rk2v4-e8</option><option>nvfp4</option></Select></Field>
+              <NumberField label="GPU 预算 B" value={ninfer.budget} onChange={budget => patchNinfer({ budget })}/>
+              <NumberField label="生成预留 R" value={ninfer.gen_reserve} onChange={gen_reserve => patchNinfer({ gen_reserve })}/>
+              <NumberField label="主机预算 MiB" value={ninfer.host_kv_mib} onChange={host_kv_mib => patchNinfer({ host_kv_mib: Math.max(0, host_kv_mib) })}/>
+              <NumberField label="保留会话" value={ninfer.sessions} onChange={sessions => patchNinfer({ sessions: Math.min(16, Math.max(1, sessions)) })}/>
+              <Field label="KV 类型"><Select value={ninfer.kv_dtype} onChange={event => patchNinfer({ kv_dtype: event.target.value })}><option value="k8v4">k8v4(交付档)</option><option>bf16</option><option value="int8">int8</option><option>fp8</option><option>rk8v4</option><option>rk4v4</option><option>rk4v4-e8</option><option>rk2v4-e8</option><option>nvfp4</option></Select></Field>
               <NumberField label="预填块" value={ninfer.prefill_chunk} onChange={prefill_chunk => patchNinfer({ prefill_chunk: Math.max(0, prefill_chunk) })}/>
               <NumberField label="并发数" value={ninfer.max_concurrency} onChange={max_concurrency => patchNinfer({ max_concurrency: Math.min(8, Math.max(1, max_concurrency)) })}/>
               <NumberField label="输出上限" value={ninfer.default_max_tokens} onChange={default_max_tokens => patchNinfer({ default_max_tokens: Math.max(0, default_max_tokens) })}/>
               <Field label="CUDA Graphs"><Switch checked={ninfer.cuda_graph} onChange={cuda_graph => patchNinfer({ cuda_graph })} label={ninfer.cuda_graph ? '开' : '关(8GB 建议)'}/></Field>
-              <NumberField label="检索窗口" value={ninfer.kv_window} onChange={kv_window => patchNinfer({ kv_window: Math.max(0, kv_window) })}/>
-              <NumberField label="检索取回" value={ninfer.kv_retrieve} disabled={ninfer.kv_window <= 0} onChange={kv_retrieve => patchNinfer({ kv_retrieve: Math.max(0, kv_retrieve) })}/>
-              <Field label="PTQ1 快路"><Switch checked={ninfer.ptq1_fast} onChange={ptq1_fast => patchNinfer({ ptq1_fast })} label="NINFER_TERNARY_PTQ1_FAST"/></Field>
-              <Field label="思考档位"><Select value={ninfer.reasoning_effort} disabled={!basic.enable_thinking} onChange={event => patchNinfer({ reasoning_effort: event.target.value })}><option value="minimal">minimal</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option></Select></Field>
+              <Field label="快预填核"><Switch checked={ninfer.fast_prefill} onChange={fast_prefill => patchNinfer({ fast_prefill })} label="仅 int8/rk*"/></Field>
+              <NumberField label="思考预算" value={ninfer.default_thinking_budget} disabled={!basic.enable_thinking} onChange={default_thinking_budget => patchNinfer({ default_thinking_budget: Math.max(0, default_thinking_budget) })}/>
+            </div>
+            <div className={page.formGridThree} style={{ marginTop: 14 }}>
+              <RetrievalFields value={ninfer} unit={KV_PAGE} supported={engineSupportsLrfu} onChange={patchNinfer}/>
+            </div>
+            {retrievalOverflow(alignTo(ninfer.sink_tokens, KV_PAGE) + alignTo(ninfer.recent_tokens, KV_PAGE), alignTo(ninfer.budget, KV_PAGE), '64-token 页')}
+            <div className={page.formGridThree} style={{ marginTop: 14 }}>
+              <Field label="SSD 分层目录"><Input value={ninfer.disk_path} placeholder="留空=只用 RAM" onChange={event => patchNinfer({ disk_path: event.target.value })}/></Field>
+              <NumberField label="SSD 配额 MiB" value={ninfer.disk_mib} disabled={!ninfer.disk_path.trim()} onChange={disk_mib => patchNinfer({ disk_mib: Math.max(0, disk_mib) })}/>
+              <Field label="分层说明"><span className={page.hint}>SSD 文件只在当前进程有效，不支持重启恢复或跨后端迁移。</span></Field>
+            </div>
+            <div className={page.formGridThree} style={{ marginTop: 14 }}>
               <Field label="投机解码"><Select value={ninfer.spec} onChange={event => patchNinfer({ spec: event.target.value })}><option value="none">关闭</option><option value="mtp">mtp</option><option value="dflash">dflash</option><option value="dflash2">dflash2</option></Select></Field>
               <NumberField label="草稿 Token" value={ninfer.draft_tokens} disabled={ninfer.spec === 'none'} onChange={draft_tokens => patchNinfer({ draft_tokens: Math.min(15, Math.max(1, draft_tokens)) })}/>
               <Field label="自适应 MTP"><Switch checked={ninfer.adaptive_mtp} disabled={ninfer.spec !== 'mtp'} onChange={adaptive_mtp => patchNinfer({ adaptive_mtp })} label="adaptive"/></Field>
+              <NumberField label="ngram 草稿" value={ninfer.ngram_draft_tokens} disabled={ninfer.spec === 'none'} onChange={ngram_draft_tokens => patchNinfer({ ngram_draft_tokens: Math.min(63, Math.max(0, ngram_draft_tokens)) })}/>
+              <NumberField label="ngram 最短匹配" value={ninfer.ngram_min_match} disabled={ninfer.spec === 'none' || ninfer.ngram_draft_tokens <= 0} onChange={ngram_min_match => patchNinfer({ ngram_min_match: Math.min(64, Math.max(4, ngram_min_match)) })}/>
+              <Field label="思考档位"><Select value={ninfer.reasoning_effort} disabled={!basic.enable_thinking} onChange={event => patchNinfer({ reasoning_effort: event.target.value })}><option value="minimal">minimal</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option></Select></Field>
               <Field label="模型名(--model-id)"><Input value={ninfer.model_id} placeholder="留空=工件元数据" onChange={event => patchNinfer({ model_id: event.target.value })}/></Field>
             </div>
-            <p className={page.hint}>显存账：主机池页数 + 设备池页数 ≥ 逻辑上下文页数（约 25 KiB 主机池/token）。8GB 卡参考：池 4032(63 页) + 预填块 256 + CUDA Graphs 关。检索打分随「检索窗口」自动开启；设备池下限 4032 已测，别再压。Top-K 引擎侧上限 20，超出会自动截断。</p>
-          </Panel>
+            <p className={page.hint}>B + R 是常驻显存的设备 KV，按 64-token 页向下取整；两者之和不能超过逻辑上下文。sink/recent 从 B 里划走，对齐后之和超过 B 引擎会拒启。主机预算与 SSD 是受管数据配额，不是进程总内存上限。Top-K 引擎侧上限 20，超出会自动截断。官方 16GB 配方是 B/R 36864/16384 + 主机 12288MiB，8GB 卡请按显存账往下压。</p>
+          </div></details>
         )}
 
-        <Panel title={isKvmem ? '采样与 MTP(实验)' : isNinfer ? '采样' : '采样与 MTP'}>
+        <details className={page.advanced}><summary>采样与投机解码<span>温度、概率与 MTP</span></summary><div className={page.advancedBody}>
           <div className={page.formGridThree}>
             <NumberField label="温度" value={sampling.temperature} step="0.05" onChange={temperature => patchSampling({ temperature })}/>
             <NumberField label="Top-K" value={sampling.top_k} onChange={top_k => patchSampling({ top_k })}/>
@@ -321,41 +353,83 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
             {!isKvmem && <NumberField label="P Split" value={mtp.p_split} step="0.01" disabled={!mtp.enabled} onChange={p_split => patchMtp({ p_split })}/>}
           </div>}
           {isKvmem && <p className={page.hint}>实验性:需要已合并 MTP 头的模型(见 KVMem prism.3 说明);最小草稿与 P 阈值仅 llama.cpp 引擎使用。</p>}
-        </Panel>
+        </div></details>
 
-        <Panel title="提示词与附加参数">
+        <details className={page.advanced}><summary>提示词与附加参数<span>系统提示词、模板与扩展参数</span></summary><div className={page.advancedBody}>
           <div className={page.formGrid}><Field label="系统提示词"><Textarea value={config.system_prompt} onChange={event => patch('system_prompt', event.target.value)}/></Field><Field label="附加参数"><Textarea value={config.extra_params} onChange={event => patch('extra_params', event.target.value)}/></Field></div>
           <Field label="聊天模板文件（可选，--chat-template-file）" className={page.wide}><div className={page.row}><Input value={config.chat_template_file} onChange={event => patch('chat_template_file', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'chat_template_file', mode: 'file' })}><FolderOpen size={16}/></Button></div></Field>
           <p className={page.hint}>编译命令已移至「维护」页的编译面板。</p>
-        </Panel>
+        </div></details>
       </div>
 
-      <Panel title="启动命令" icon={<RefreshCw size={15}/>} className={page.sticky} actions={<div className={page.row}><Button size="small" onClick={() => setImportOpen(true)}><ClipboardPaste size={14}/>从命令导入</Button><Button size="small" onClick={() => { void navigator.clipboard.writeText(command); toast('命令已复制') }}><Copy size={14}/>复制</Button></div>}>
-        <pre className={page.code}>{command}</pre>
-        {!!config.llama_cpp_dir.trim() && <p className={page.hint} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}><Badge tone={detectQuery.data?.found ? 'good' : 'bad'}>{detectQuery.data?.found ? '引擎二进制已找到' : '未找到引擎二进制'}</Badge>{detectQuery.data?.found && <span>{detectQuery.data.path}</span>}{detectQuery.isFetching && <span>检测中…</span>}</p>}
+      <Panel title="资源与启动命令" icon={<RefreshCw size={15}/>} className={page.sticky} actions={<div className={page.row}><Button size="small" onClick={() => setImportOpen(true)}><ClipboardPaste size={14}/>从命令导入</Button><Button size="small" onClick={() => { void navigator.clipboard.writeText(command); toast('命令已复制') }}><Copy size={14}/>复制</Button></div>}>
+        <ResourceUsage usage={usage}/>
+        <div className={page.commandLabel}>启动命令</div><pre className={page.code}>{command}</pre>
+        <p className={page.hint} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <Badge tone={detectQuery.data?.found ? 'good' : 'bad'}>{detectQuery.data?.found ? '引擎二进制已找到' : '未找到引擎二进制'}</Badge>
+          {detectQuery.data?.found && <span>{detectQuery.data.bundled ? '内置包：' : ''}{detectQuery.data.path}</span>}
+          {detectQuery.data?.found && <Badge tone={detectQuery.data.lrfu ? 'good' : 'warn'}>{detectQuery.data.lrfu ? '支持 LRFU 检索' : '此构建不支持 LRFU'}</Badge>}
+          {detectQuery.isFetching && <span>检测中…</span>}
+        </p>
         <p className={page.hint}>预览与 ProcessManager 使用相同的参数语义；保存配置后运行页会使用当前值。</p>
       </Panel>
     </div>
+    {confirmRemove && <ConfirmDialog title={`删除配置「${name}」？`} description="此档案将被永久删除，删除后会载入默认配置。需要保留时请先导出。" confirmLabel="删除配置" pending={operation === '删除'} onClose={() => setConfirmRemove(false)} onConfirm={() => { setConfirmRemove(false); void attempt('删除', remove) }}/>}
     {browse && (
       <FileBrowser mode={browse.mode} extension={browse.extension} initialPath={browseValue} onClose={() => setBrowse(null)} onSelect={value => { patch(browse.key, value); setBrowse(null) }}/>
     )}
-    {importOpen && createPortal(
-      <div className={page.overlay} onClick={() => setImportOpen(false)}>
+    {importOpen && <Modal title="从启动命令导入" onClose={() => setImportOpen(false)} className={page.importModal}>
         <Panel className={page.importDialog} title="从启动命令导入" actions={<Button size="small" onClick={() => void pasteFromClipboard()}><ClipboardPaste size={14}/>粘贴</Button>}>
-          <Textarea rows={7} className={page.importText} value={importText} autoFocus onChange={event => setImportText(event.target.value)} placeholder={'llama-server -m "E:\\models\\model.gguf" --host 127.0.0.1 --port 8081 -ngl 99 -c 32768 -fa on ...'} />
+          <Textarea aria-label="启动命令文本" rows={7} className={page.importText} value={importText} data-autofocus onChange={event => setImportText(event.target.value)} placeholder={'llama-server -m "E:\\models\\model.gguf" --host 127.0.0.1 --port 8081 -ngl 99 -c 32768 -fa on ...'} />
           <p className={page.hint}>已识别的字段会回填到左侧表单；无法识别的参数会原样放入「附加参数」，不会丢失。</p>
           <div className={page.row} style={{ justifyContent: 'flex-end', marginTop: 10 }}>
             <Button onClick={() => setImportOpen(false)}>取消</Button>
             <Button tone="primary" disabled={!importText.trim()} onClick={importCommand}>解析并应用</Button>
           </div>
         </Panel>
-      </div>,
-      document.body
-    )}
+      </Modal>}
   </>
 }
 
 function quote(value: string) { return /\s/.test(value) ? `"${value}"` : value }
+
+// The engines allocate KV in fixed units — llama-kvmem-server uses
+// --kvmem-block-tokens, NInfer uses 64-token pages — and round every token
+// count down to a whole unit, so the form and the preview must show what the
+// engine will actually receive.
+const KV_PAGE = 64
+function alignTo(value: number, unit: number) { const u = Math.max(1, unit); return Math.max(0, Math.floor(value / u) * u) }
+
+interface RetrievalBlock {
+  sink_tokens: number
+  recent_tokens: number
+  lrfu: boolean
+  lrfu_lambda: number
+  lrfu_top_frac: number
+  score_agg: string
+}
+
+// Both KVMem engines share one retrieval vocabulary (--kvmem-sink/recent,
+// --kvmem-lrfu*, --kvmem-score-agg), so one field set serves both panels.
+function RetrievalFields({ value, unit, supported, onChange }: { value: RetrievalBlock; unit: number; supported: boolean; onChange: (patch: Partial<RetrievalBlock>) => void }) {
+  return <>
+    <NumberField label={`常驻前缀 (${unit}对齐)`} value={value.sink_tokens} onChange={sink_tokens => onChange({ sink_tokens })}/>
+    <NumberField label="常驻最新段" value={value.recent_tokens} onChange={recent_tokens => onChange({ recent_tokens })}/>
+    <Field label="LRFU 历史加权"><Switch checked={value.lrfu} disabled={!supported} onChange={lrfu => onChange({ lrfu })} label={supported ? (value.lrfu ? '开' : '关') : '当前引擎不支持'}/></Field>
+    <NumberField label="衰减 λ" value={value.lrfu_lambda} step="0.05" disabled={!value.lrfu || !supported} onChange={lrfu_lambda => onChange({ lrfu_lambda })}/>
+    <NumberField label="命中比例" value={value.lrfu_top_frac} step="0.05" disabled={!value.lrfu || !supported} onChange={lrfu_top_frac => onChange({ lrfu_top_frac })}/>
+    <Field label="GQA 聚合"><Select disabled={!supported} value={value.score_agg} onChange={event => onChange({ score_agg: event.target.value })}><option value="mean">mean</option><option value="max">max (v0.18 配方)</option></Select></Field>
+  </>
+}
+
+// The engine refuses to start when the pinned windows do not fit in B, so
+// flag it here where the numbers can still be changed.
+function retrievalOverflow(pinned: number, budget: number, unitLabel: string) {
+  if (!pinned || pinned <= budget) return null
+  return <p role="alert" className={page.error}>常驻窗口合计 {pinned} token 已超过 GPU 预算 {budget}（按{unitLabel}向下对齐后），引擎会拒绝启动。</p>
+}
+
+
 function NumberField({ label, value, onChange, step = '1', disabled = false }: { label: string; value: number; onChange: (value: number) => void; step?: string; disabled?: boolean }) {
   return <Field label={label}><Input type="number" step={step} disabled={disabled} value={value} onChange={event => onChange(Number(event.target.value))}/></Field>
 }

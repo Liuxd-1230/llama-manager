@@ -422,11 +422,12 @@ def detect_kvmem_binary(llama_cpp_dir: str) -> str:
 
 
 def detect_ninfer_binary(llama_cpp_dir: str) -> str:
-    """Find ninfer-serve-<arch>.exe in a NInfer pack dir.
+    """Find the NInfer worker in an engine package dir.
 
-    Packs ship engine\\ninfer-serve-<arch>.exe (one binary per GPU arch);
-    prefer the sm_89 build, fall back to any arch that is present. The
-    glob cannot match the .old-<date> backups because they don't end in .exe.
+    KVMem v0.18.0+ ships one unified worker at `workers/ninfer/
+    ninfer-kvmem-server.exe`; the older standalone packs shipped
+    `engine/ninfer-serve-<arch>.exe` (one binary per GPU arch, prefer sm_89).
+    The glob cannot match the .old-<date> backups because they don't end in .exe.
     """
     d = Path(llama_cpp_dir)
     if not d.is_dir():
@@ -434,8 +435,9 @@ def detect_ninfer_binary(llama_cpp_dir: str) -> str:
 
     import sys
     suffix = ".exe" if sys.platform == "win32" else ""
-    for base in (d, d / "engine", d / "bin"):
-        exact = base / f"ninfer-serve-89{suffix}"
+    unified = f"ninfer-kvmem-server{suffix}"
+    for base in (d, d / "workers" / "ninfer", d / "engine", d / "bin"):
+        exact = base / unified
         if exact.exists():
             return str(exact)
     for pattern in ("ninfer-serve-89*", "ninfer-serve-*"):
@@ -445,3 +447,64 @@ def detect_ninfer_binary(llama_cpp_dir: str) -> str:
     for f in sorted(d.rglob("ninfer-serve-*" + suffix)):
         return str(f)
     return ""
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+BUNDLED_ENGINE_ROOT = PROJECT_ROOT / "engine"
+
+
+def bundled_package_dir() -> str:
+    """Newest engine package extracted under <project root>/engine/."""
+    if not BUNDLED_ENGINE_ROOT.is_dir():
+        return ""
+    best: tuple[tuple[int, ...], Path] | None = None
+    for version_file in BUNDLED_ENGINE_ROOT.glob("*/VERSION"):
+        raw = version_file.read_text(encoding="utf-8", errors="replace").strip()
+        key = tuple(int(part) if part.isdigit() else 0 for part in re.split(r"[.\-+]", raw)[:3])
+        if best is None or key > best[0]:
+            best = (key, version_file.parent)
+    return str(best[1]) if best else ""
+
+
+def resolve_engine_dir(llama_cpp_dir: str, engine: str = "") -> str:
+    """A profile left on the bundled release needs no directory of its own."""
+    explicit = (llama_cpp_dir or "").strip()
+    if explicit:
+        return explicit
+    return bundled_package_dir() if engine in ("kvmem", "ninfer") else ""
+
+
+_FLAG_CACHE: dict[tuple[str, int, int], set[str]] = {}
+
+
+def binary_flags(binary_path: str) -> set[str]:
+    """Long flags a worker advertises in --help, cached per file revision.
+
+    Launching a build that predates a flag kills the process on "unknown flag"
+    with only a log line to show for it, so the command builders check first
+    and raise something the user can act on.
+    """
+    path = Path(binary_path)
+    if not path.is_file():
+        return set()
+    stat = path.stat()
+    key = (str(path), stat.st_mtime_ns, stat.st_size)
+    cached = _FLAG_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    import subprocess
+    try:
+        done = subprocess.run(
+            [str(path), "--help"], capture_output=True, timeout=60, cwd=str(path.parent)
+        )
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    text = (done.stdout + done.stderr).decode("utf-8", errors="replace")
+    flags = set(re.findall(r"--[a-z][a-z0-9-]*", text))
+    if len(_FLAG_CACHE) > 16:
+        _FLAG_CACHE.clear()
+    _FLAG_CACHE[key] = flags
+    return flags
+
+

@@ -69,6 +69,27 @@ async function expectNoOverflow(page: Page) {
   expect(metrics.body).toBeLessThanOrEqual(metrics.viewport)
 }
 
+test('refresh waits until the completed answer has been persisted', async ({ page }) => {
+  await mockChat(page)
+  let releasePersistence!: () => void
+  let notifyPersistence!: () => void
+  const blocked = new Promise<void>(resolve => { releasePersistence = resolve })
+  const started = new Promise<void>(resolve => { notifyPersistence = resolve })
+  await page.route('**/api/conversations/*/turns/*', async route => {
+    notifyPersistence()
+    await blocked
+    await route.fulfill({ json: {} })
+  })
+  await page.goto('/#/chat')
+  await page.getByLabel('消息内容').fill('保存后刷新')
+  await page.getByRole('button', { name: '发送', exact: true }).click()
+  await started
+  const refresh = page.getByRole('button', { name: '刷新', exact: true })
+  await expect(refresh).toBeDisabled()
+  releasePersistence()
+  await expect(refresh).toBeEnabled()
+})
+
 async function mockChat(page: Page) {
   await page.route('**/api/chat/providers', route => route.fulfill({ json: { providers: [{ id: 'local', name: '本地 llama.cpp', kind: 'local', enabled: true }] } }))
   await page.route('**/api/search/settings', route => route.fulfill({ json: { provider: 'tavily', providers: [{ id: 'tavily', name: 'Tavily', env_var: 'TAVILY_API_KEY', configured: true, source: 'process' }] } }))

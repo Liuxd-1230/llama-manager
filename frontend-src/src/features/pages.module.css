@@ -1,25 +1,25 @@
-.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px }
-.gridThree { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px }
-.stack { display: grid; gap: 10px }
-.formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px }
-.formGridThree { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px }
+.gridThree { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px }
+.stack { display: grid; gap: 18px }
+.formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px }
+.formGridThree { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px }
 .wide { grid-column: 1 / -1 }
 .row { display: flex; align-items: center; gap: 8px; min-width: 0 }
 .row > :first-child { min-width: 0 }
-.wrap { display: flex; flex-wrap: wrap; gap: 10px }
+.wrap { display: flex; flex-wrap: wrap; gap: 18px }
 .muted { color: var(--text-3) }
-.hint { margin: 5px 0 0; color: var(--text-3); font-size: 11px }
+.hint { margin: 5px 0 0; color: var(--text-3); font-size: 12px }
 .code { margin: 0; white-space: pre-wrap; word-break: break-word; color: var(--log-text); background: var(--log-bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px; min-height: 160px; max-height: 420px; overflow: auto; font-size: 12px }
 .log { composes: code; min-height: 320px }
 .table { width: 100%; border-collapse: collapse; font-size: 12px }
 .table th, .table td { text-align: left; padding: 8px 9px; border-bottom: 1px solid var(--line) }
-.table th { color: var(--text-3); font-size: 10px; text-transform: uppercase }
+.table th { color: var(--text-3); font-size: 12px; text-transform: uppercase }
 .statusGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px }
-.metric { border-left: 2px solid var(--accent); background: var(--glass-soft); padding: 9px 10px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0 }
+.metric { border-bottom: 1px solid var(--line); background: var(--glass-soft); padding: 9px 10px; border-radius: var(--radius-sm) }
 .metric strong { display: block; font-size: 16px }
-.metric span { color: var(--text-3); font-size: 10px; text-transform: uppercase }
+.metric span { color: var(--text-3); font-size: 12px; text-transform: uppercase }
 .sticky { position: sticky; top: 0 }
-.splitMain { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, .65fr); align-items: start; gap: 10px }
+.splitMain { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(340px, .65fr); align-items: start; gap: 18px }
 .iframe { width: 100%; height: 520px; border: 0; border-radius: var(--radius-sm); background: var(--bg-elevated) }
 @media (max-width: 1180px) { .formGridThree { grid-template-columns: repeat(2, minmax(0, 1fr)) } .splitMain { grid-template-columns: 1fr } .sticky { position: static } }
 @media (max-width: 760px) {
@@ -31,3 +31,7 @@
 .overlay { position: fixed; z-index: 70; inset: 0; background: rgba(4, 8, 13, .42); backdrop-filter: blur(8px); display: grid; place-items: center; padding: 30px }
 .importDialog { width: min(720px, 92vw) }
 .importDialog textarea { min-height: 150px; font-family: ui-monospace, Consolas, monospace; font-size: 12px }
+
+.configBar { position:sticky;top:0;z-index:5;background:var(--glass-strong) }.advanced { border-top:1px solid var(--line);padding:6px 0 }.advanced summary { cursor:pointer;min-height:64px;display:flex;align-items:center;gap:12px;color:var(--text);font-weight:650;list-style:none }.advanced summary::before { content:"+";color:var(--accent);font-size:20px;font-weight:400 }.advanced[open] summary::before { content:"−" }.advanced summary span { font-size:12px;color:var(--text-3);font-weight:400;margin-left:auto;text-align:right }.advancedBody { padding:8px 0 24px }.commandLabel { margin:24px 0 12px;font-size:13px;font-weight:650 }.error { color:var(--red);font-size:13px;line-height:1.7 }.importModal { width:min(760px,100%);padding:0 }.importDialog { width:100%;border:0 }.hint { line-height:1.7 }.table { display:block;overflow-x:auto }.formGrid .row,.formGridThree .row { flex-wrap:nowrap }.formGrid .row input,.formGridThree .row input { flex:1;width:0 }.configBar .row { flex-wrap:wrap }.sticky { top:0 }.splitMain { gap:24px }.stack { gap:24px }
+@media(max-width:1180px) { .splitMain { grid-template-columns:minmax(0,1fr) }.sticky { position:static } }
+@media(max-width:680px) { .configBar { position:static }.advanced summary { flex-wrap:wrap;gap:6px;min-height:72px }.advanced summary span { width:100%;margin-left:26px;text-align:left }.gridThree { grid-template-columns:minmax(0,1fr) } }

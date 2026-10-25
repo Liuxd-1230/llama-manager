@@ -1,87 +1,34 @@
 :root {
   color-scheme: light;
-  --bg: #edf2f7;
-  --bg-elevated: #f7f9fc;
-  --glass: rgba(255, 255, 255, .58);
-  --glass-strong: rgba(255, 255, 255, .82);
-  --glass-soft: rgba(255, 255, 255, .35);
-  --glass-edge: rgba(255, 255, 255, .82);
-  --line: rgba(34, 48, 65, .12);
-  --line-strong: rgba(34, 48, 65, .2);
-  --text: #17202b;
-  --text-2: #3c4859;
-  --text-3: #61707f;
-  --accent: #ee6266;
-  --accent-hover: #df4f55;
-  --accent-soft: rgba(238, 98, 102, .13);
-  --blue: #3578e5;
-  --blue-soft: rgba(53, 120, 229, .13);
-  --green: #168c5b;
-  --green-soft: rgba(22, 140, 91, .13);
-  --yellow: #a66f00;
-  --yellow-soft: rgba(166, 111, 0, .13);
-  --red: #d9474f;
-  --red-soft: rgba(217, 71, 79, .13);
-  --input: rgba(255, 255, 255, .68);
-  --input-hover: rgba(255, 255, 255, .9);
-  --option-bg: #ffffff;
-  --option-fg: #17202b;
-  --log-bg: #111821;
-  --log-text: #dbe7f3;
-  --shadow-shell: 0 22px 70px rgba(45, 65, 88, .16), inset 0 1px rgba(255, 255, 255, .76);
-  --shadow-panel: 0 12px 32px rgba(45, 65, 88, .1), inset 0 1px rgba(255, 255, 255, .64);
-  --blur: blur(24px) saturate(1.35);
-  --radius: 8px;
-  --radius-sm: 6px;
-  --transition: 170ms ease;
-  --flow-1: rgba(97, 159, 232, .32);
-  --flow-2: rgba(238, 98, 102, .25);
-  --flow-3: rgba(40, 178, 137, .18);
-  --flow-4: rgba(153, 109, 224, .14);
+  --bg: #e9edf5; --bg-elevated: #f8f9fd;
+  --glass: rgba(255,255,255,.72); --glass-strong: rgba(255,255,255,.94); --glass-soft: rgba(255,255,255,.46); --glass-edge: rgba(255,255,255,.85);
+  --line: rgba(36,40,64,.12); --line-strong: rgba(36,40,64,.25);
+  --text: #222337; --text-2: #484b62; --text-3: #64677c;
+  --accent: #b3344c; --accent-fill: #f58f9e; --accent-hover: #f27d8e; --accent-fg: #32131e; --accent-soft: rgba(203,73,100,.10);
+  --blue: #3267c4; --blue-soft: rgba(50,103,196,.12); --green: #197247; --green-soft: rgba(25,114,71,.10); --yellow: #916000; --yellow-soft: rgba(145,96,0,.10); --red: #b83443; --red-soft: rgba(184,52,67,.10);
+  --input: rgba(255,255,255,.62); --input-hover: #fff; --option-bg: #fff; --option-fg: #222337;
+  --log-bg: #181b2c; --log-text: #e4e8f3;
+  --shadow-shell: 0 24px 70px rgba(45,40,83,.15), inset 0 1px 0 rgba(255,255,255,.75);
+  --shadow-panel: 0 6px 20px rgba(45,40,83,.06);
+  --blur: blur(24px) saturate(1.3); --radius: 16px; --radius-sm: 10px; --transition: 180ms cubic-bezier(.2,.8,.2,1);
+  --flow-1: rgba(124,145,224,.30); --flow-2: rgba(241,156,166,.35); --flow-3: rgba(168,188,232,.30); --flow-4: rgba(194,174,236,.25);
 }
-
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #090e14;
-  --bg-elevated: #101720;
-  --glass: rgba(23, 31, 42, .66);
-  --glass-strong: rgba(28, 37, 50, .86);
-  --glass-soft: rgba(255, 255, 255, .055);
-  --glass-edge: rgba(255, 255, 255, .12);
-  --line: rgba(255, 255, 255, .09);
-  --line-strong: rgba(255, 255, 255, .17);
-  --text: #edf3f8;
-  --text-2: #b8c4d0;
-  --text-3: #7c8998;
-  --accent: #ff7679;
-  --accent-hover: #ff898c;
-  --accent-soft: rgba(255, 118, 121, .13);
-  --blue: #73a9ff;
-  --blue-soft: rgba(115, 169, 255, .13);
-  --green: #55ca8d;
-  --green-soft: rgba(85, 202, 141, .12);
-  --yellow: #efc05c;
-  --yellow-soft: rgba(239, 192, 92, .12);
-  --red: #ff777e;
-  --red-soft: rgba(255, 119, 126, .13);
-  --input: rgba(255, 255, 255, .07);
-  --input-hover: rgba(255, 255, 255, .1);
-  --option-bg: #1b2531;
-  --option-fg: #edf3f8;
-  --log-bg: #060a0f;
-  --log-text: #d7e3ee;
-  --shadow-shell: 0 26px 80px rgba(0, 0, 0, .45), inset 0 1px rgba(255, 255, 255, .08);
-  --shadow-panel: 0 14px 38px rgba(0, 0, 0, .3), inset 0 1px rgba(255, 255, 255, .06);
-  --flow-1: rgba(67, 119, 219, .2);
-  --flow-2: rgba(228, 74, 94, .16);
-  --flow-3: rgba(40, 174, 137, .11);
-  --flow-4: rgba(143, 90, 219, .1);
+  --bg: #10111c; --bg-elevated: #181a29;
+  --glass: rgba(36,37,56,.72); --glass-strong: rgba(38,39,58,.95); --glass-soft: rgba(255,255,255,.045); --glass-edge: rgba(255,255,255,.13);
+  --line: rgba(255,255,255,.10); --line-strong: rgba(255,255,255,.24);
+  --text: #f0eff8; --text-2: #c3c3d5; --text-3: #a0a1b7;
+  --accent: #ffa1b0; --accent-fill: #ffa1b0; --accent-hover: #ffb5c1; --accent-fg: #32131e; --accent-soft: rgba(255,161,176,.10);
+  --blue: #9cbcff; --blue-soft: rgba(156,188,255,.12); --green: #78d9a4; --green-soft: rgba(120,217,164,.10); --yellow: #ebc978; --yellow-soft: rgba(235,201,120,.10); --red: #ffa2ac; --red-soft: rgba(255,162,172,.10);
+  --input: rgba(255,255,255,.055); --input-hover: rgba(255,255,255,.09); --option-bg: #26273a; --option-fg: #f0eff8;
+  --log-bg: #111320; --log-text: #e1e3ef;
+  --shadow-shell: 0 24px 70px rgba(3,3,14,.38), inset 0 1px 0 rgba(255,255,255,.10); --shadow-panel: 0 6px 20px rgba(3,3,14,.15);
+  --flow-1: rgba(90,91,185,.18); --flow-2: rgba(186,79,116,.17); --flow-3: rgba(76,99,173,.14); --flow-4: rgba(133,81,181,.15);
 }
-
-/* Accent color options (SettingsDrawer → 外观); default = coral, no override */
-:root[data-accent='violet'] { --accent: #8a5cf6; --accent-hover: #7b4be0; --accent-soft: rgba(138, 92, 246, .13); }
-:root[data-accent='ocean'] { --accent: #3578e5; --accent-hover: #2b66c4; --accent-soft: rgba(53, 120, 229, .13); }
-:root[data-accent='amber'] { --accent: #e08a3c; --accent-hover: #c97a2e; --accent-soft: rgba(224, 138, 60, .14); }
-:root[data-theme='dark'][data-accent='violet'] { --accent: #a98bff; --accent-hover: #b9a0ff; --accent-soft: rgba(169, 139, 255, .14); }
-:root[data-theme='dark'][data-accent='ocean'] { --accent: #73a9ff; --accent-hover: #8bbaff; --accent-soft: rgba(115, 169, 255, .13); }
-:root[data-theme='dark'][data-accent='amber'] { --accent: #f0a35c; --accent-hover: #f4b476; --accent-soft: rgba(240, 163, 92, .14); }
+:root[data-accent='violet'] { --accent: #7040c8; --accent-fill: #7040c8; --accent-hover: #6033b3; --accent-fg: #fff; --accent-soft: rgba(112,64,200,.10) }
+:root[data-accent='ocean'] { --accent: #285fb9; --accent-fill: #285fb9; --accent-hover: #21509d; --accent-fg: #fff; --accent-soft: rgba(40,95,185,.10) }
+:root[data-accent='amber'] { --accent: #945315; --accent-fill: #efb77a; --accent-hover: #eaa962; --accent-fg: #352110; --accent-soft: rgba(148,83,21,.10) }
+:root[data-theme='dark'][data-accent='violet'] { --accent: #c2a9ff; --accent-fill: #c2a9ff; --accent-hover: #d1bfff; --accent-fg: #261342 }
+:root[data-theme='dark'][data-accent='ocean'] { --accent: #9abfff; --accent-fill: #9abfff; --accent-hover: #b1ceff; --accent-fg: #122642 }
+:root[data-theme='dark'][data-accent='amber'] { --accent: #f0bf88; --accent-fill: #f0bf88; --accent-hover: #f7cea2; --accent-fg: #352110 }

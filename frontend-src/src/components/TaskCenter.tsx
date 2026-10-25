@@ -5,8 +5,11 @@ import { api } from '../api'
 import type { JobRecord } from '../types'
 import { Badge, Button } from './ui'
 import styles from './TaskCenter.module.css'
+import { createPortal } from 'react-dom'
+import { useModalFocus } from './Modal'
 
 export function TaskCenter({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const focusRef = useModalFocus<HTMLElement>(open, onClose)
   const queryClient = useQueryClient()
   const jobs = useQuery({ queryKey: ['jobs'], queryFn: () => api<JobRecord[]>('/api/jobs'), enabled: open, refetchInterval: open ? 3000 : false })
   const action = useMutation({ mutationFn: ({ id, name }: { id: string; name: 'cancel' | 'retry' }) => api<JobRecord>(`/api/jobs/${id}/${name}`, { method: 'POST' }), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }) })
@@ -14,7 +17,7 @@ export function TaskCenter({ open, onClose }: { open: boolean; onClose: () => vo
   // the panel over long-running evaluations otherwise.
   useWebSocket('/ws/jobs', () => { void queryClient.invalidateQueries({ queryKey: ['jobs'] }) })
   if (!open) return null
-  return <div className={styles.backdrop} onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}><aside className={styles.drawer}>
+  return createPortal(<div className={styles.backdrop} onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}><aside ref={focusRef} role="dialog" aria-modal="true" aria-label="任务中心" tabIndex={-1} className={styles.drawer}>
     <header><strong>任务中心</strong><Button iconOnly title="关闭" onClick={onClose}><X size={16}/></Button></header>
     <div className={styles.list}>{jobs.isLoading && <div className={styles.empty}>正在读取任务…</div>}{(jobs.data || []).map(job => <article key={job.id} className={styles.job}>
       <div className={styles.jobTop}><JobIcon status={job.status}/><div><strong>{job.kind}</strong><small>{new Date(job.created_at * 1000).toLocaleString()}</small></div><Badge tone={job.status === 'succeeded' ? 'good' : job.status === 'failed' ? 'bad' : job.status === 'running' ? 'warn' : 'neutral'}>{label(job.status)}</Badge></div>
@@ -22,7 +25,7 @@ export function TaskCenter({ open, onClose }: { open: boolean; onClose: () => vo
       {Object.keys(job.checkpoint || {}).length > 0 && <code>{JSON.stringify(job.checkpoint)}</code>}
       <div className={styles.actions}>{['queued', 'running'].includes(job.status) && <Button size="small" tone="danger" onClick={() => action.mutate({ id: job.id, name: 'cancel' })}><CircleStop size={13}/>取消</Button>}{['failed', 'cancelled', 'interrupted'].includes(job.status) && <Button size="small" onClick={() => action.mutate({ id: job.id, name: 'retry' })}><RotateCcw size={13}/>重试</Button>}</div>
     </article>)}{!jobs.isLoading && !jobs.data?.length && <div className={styles.empty}>暂无任务</div>}</div>
-  </aside></div>
+  </aside></div>, document.body)
 }
 
 function JobIcon({ status }: { status: JobRecord['status'] }) { return status === 'succeeded' ? <CheckCircle2 size={17}/> : status === 'failed' ? <XCircle size={17}/> : status === 'running' ? <RefreshCw className={styles.spin} size={17}/> : <Clock3 size={17}/> }

@@ -244,6 +244,53 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "Delete Turn",
+        "operationId": "delete_turn_api_conversations__conversation_id__turns__turn_id__delete",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "turn_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Turn Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/jobs": {
@@ -1203,6 +1250,44 @@
             "schema": {
               "type": "string",
               "title": "Dir"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/model-info": {
+      "get": {
+        "summary": "Model Info",
+        "description": "Size + metadata for one model file — feeds the live VRAM/RAM estimator.",
+        "operationId": "model_info_api_model_info_get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
             }
           }
         ],
@@ -2498,11 +2583,41 @@
             "type": "integer",
             "title": "Reasoning Budget",
             "default": 4096
+          },
+          "sink_tokens": {
+            "type": "integer",
+            "title": "Sink Tokens",
+            "default": 0
+          },
+          "recent_tokens": {
+            "type": "integer",
+            "title": "Recent Tokens",
+            "default": 0
+          },
+          "lrfu": {
+            "type": "boolean",
+            "title": "Lrfu",
+            "default": false
+          },
+          "lrfu_lambda": {
+            "type": "number",
+            "title": "Lrfu Lambda",
+            "default": 0.5
+          },
+          "lrfu_top_frac": {
+            "type": "number",
+            "title": "Lrfu Top Frac",
+            "default": 0.9
+          },
+          "score_agg": {
+            "type": "string",
+            "title": "Score Agg",
+            "default": "mean"
           }
         },
         "type": "object",
         "title": "KvmemSettings",
-        "description": "KVMem engine (llama-kvmem-server) — KV cache virtualization parameters.\n\nNote: workspace (-c) is the logical KV workspace, NOT the VRAM cap;\nVRAM is driven by budget + gen_reserve."
+        "description": "KVMem engine (llama-kvmem-server) — KV cache virtualization parameters.\n\nNote: workspace (-c) is the logical KV workspace, NOT the VRAM cap;\nVRAM is driven by budget + gen_reserve.\n\nsink/recent exist since v0.16; lrfu/score_agg need a v0.17+ build and are\ngated by the binary capability probe, so the defaults keep older packages\nlaunching unchanged."
       },
       "MTPSettings": {
         "properties": {
@@ -2545,17 +2660,22 @@
           "max_context": {
             "type": "integer",
             "title": "Max Context",
-            "default": 262144
+            "default": 204800
           },
-          "kv_capacity": {
+          "budget": {
             "type": "integer",
-            "title": "Kv Capacity",
-            "default": 4032
+            "title": "Budget",
+            "default": 8192
+          },
+          "gen_reserve": {
+            "type": "integer",
+            "title": "Gen Reserve",
+            "default": 8192
           },
           "host_kv_mib": {
             "type": "integer",
             "title": "Host Kv Mib",
-            "default": 16384
+            "default": 4096
           },
           "kv_dtype": {
             "type": "string",
@@ -2580,7 +2700,17 @@
           "adaptive_mtp": {
             "type": "boolean",
             "title": "Adaptive Mtp",
-            "default": false
+            "default": true
+          },
+          "ngram_draft_tokens": {
+            "type": "integer",
+            "title": "Ngram Draft Tokens",
+            "default": 31
+          },
+          "ngram_min_match": {
+            "type": "integer",
+            "title": "Ngram Min Match",
+            "default": 12
           },
           "max_concurrency": {
             "type": "integer",
@@ -2590,27 +2720,67 @@
           "default_max_tokens": {
             "type": "integer",
             "title": "Default Max Tokens",
-            "default": 32768
+            "default": 16384
           },
           "cuda_graph": {
             "type": "boolean",
             "title": "Cuda Graph",
             "default": false
           },
-          "kv_window": {
+          "sink_tokens": {
             "type": "integer",
-            "title": "Kv Window",
-            "default": 16384
+            "title": "Sink Tokens",
+            "default": 4096
           },
-          "kv_retrieve": {
+          "recent_tokens": {
             "type": "integer",
-            "title": "Kv Retrieve",
-            "default": 8192
+            "title": "Recent Tokens",
+            "default": 1024
           },
-          "ptq1_fast": {
+          "sessions": {
+            "type": "integer",
+            "title": "Sessions",
+            "default": 1
+          },
+          "lrfu": {
             "type": "boolean",
-            "title": "Ptq1 Fast",
+            "title": "Lrfu",
             "default": true
+          },
+          "lrfu_lambda": {
+            "type": "number",
+            "title": "Lrfu Lambda",
+            "default": 0.5
+          },
+          "lrfu_top_frac": {
+            "type": "number",
+            "title": "Lrfu Top Frac",
+            "default": 0.9
+          },
+          "score_agg": {
+            "type": "string",
+            "title": "Score Agg",
+            "default": "max"
+          },
+          "fast_prefill": {
+            "type": "boolean",
+            "title": "Fast Prefill",
+            "default": false
+          },
+          "disk_path": {
+            "type": "string",
+            "title": "Disk Path",
+            "default": ""
+          },
+          "disk_mib": {
+            "type": "integer",
+            "title": "Disk Mib",
+            "default": 4096
+          },
+          "default_thinking_budget": {
+            "type": "integer",
+            "title": "Default Thinking Budget",
+            "default": 0
           },
           "reasoning_effort": {
             "type": "string",
@@ -2625,7 +2795,7 @@
         },
         "type": "object",
         "title": "NinferSettings",
-        "description": "NInfer engine (ninfer-serve-<arch>.exe) — .ninfer artifacts with the\nKVMem-style ring retrieval and MTP/dflash speculation.\n\nDefaults mirror the 8 GB launcher (start-ptq1-mtp-8gb.bat): device pool\n4032 tokens (63 pages), chunk 256, CUDA Graphs off."
+        "description": "NInfer engine (ninfer-kvmem-server, KVMem v0.18.0+) — .ninfer artifacts\nwith KVMem RAM/SSD tiering, LRFU retrieval and MTP/ngram speculation.\n\nRetrieval sizing: B (--kvmem-budget) + R (--kvmem-gen-reserve) are the\ndevice-resident tokens and drive VRAM; H (--kvmem-host-mib) is the pinned\nhost payload quota. sink + recent must fit inside B after rounding to whole\n64-token pages, and R must cover the draft widths. Defaults here are the\n8 GB laptop safe set, not the release recipe's 16 GB table."
       },
       "SamplingSettings": {
         "properties": {

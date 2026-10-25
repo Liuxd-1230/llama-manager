@@ -17,3 +17,5 @@ frontend-src/vite.config.d.ts
 .codex-*.log
 .claude/
 temp/
+engine/
+.impeccable/

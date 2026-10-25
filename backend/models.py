@@ -63,6 +63,10 @@ class KvmemSettings(BaseModel):
 
     Note: workspace (-c) is the logical KV workspace, NOT the VRAM cap;
     VRAM is driven by budget + gen_reserve.
+
+    sink/recent exist since v0.16; lrfu/score_agg need a v0.17+ build and are
+    gated by the binary capability probe, so the defaults keep older packages
+    launching unchanged.
     """
     workspace: int = 131072  # logical KV workspace tokens (-c)
     budget: int = 24576  # GPU-resident history tokens (--kvmem-budget)
@@ -75,31 +79,52 @@ class KvmemSettings(BaseModel):
     mtp_state: str = "snapshots"  # --kvmem-mtp-state; "replay" needs a v0.17+ build (prism.3 prebuilt only supports snapshots)
     enable_thinking: bool = False  # --enable-thinking
     reasoning_budget: int = 4096  # --reasoning-budget
+    sink_tokens: int = 0  # always-kept prefix (--kvmem-sink-tokens); 0 = engine default of one block
+    recent_tokens: int = 0  # always-kept newest suffix (--kvmem-recent-tokens); 0 = engine default
+    lrfu: bool = False  # --kvmem-lrfu: rank blocks by decayed retrieval history
+    lrfu_lambda: float = 0.5  # --kvmem-lrfu-lambda: history decay [0,1]
+    lrfu_top_frac: float = 0.9  # --kvmem-lrfu-top-frac: hit fraction (0,1], NOT a KV keep ratio
+    score_agg: str = "mean"  # --kvmem-score-agg: mean | max across GQA heads
 
 
 class NinferSettings(BaseModel):
-    """NInfer engine (ninfer-serve-<arch>.exe) — .ninfer artifacts with the
-    KVMem-style ring retrieval and MTP/dflash speculation.
+    """NInfer engine (ninfer-kvmem-server, KVMem v0.18.0+) — .ninfer artifacts
+    with KVMem RAM/SSD tiering, LRFU retrieval and MTP/ngram speculation.
 
-    Defaults mirror the 8 GB launcher (start-ptq1-mtp-8gb.bat): device pool
-    4032 tokens (63 pages), chunk 256, CUDA Graphs off.
+    Retrieval sizing: B (--kvmem-budget) + R (--kvmem-gen-reserve) are the
+    device-resident tokens and drive VRAM; H (--kvmem-host-mib) is the pinned
+    host payload quota. sink + recent must fit inside B after rounding to whole
+    64-token pages, and R must cover the draft widths. Defaults here are the
+    8 GB laptop safe set, not the release recipe's 16 GB table.
     """
-    max_context: int = 262144  # logical context ceiling per request (--max-context)
-    kv_capacity: int = 4032  # device KV pool tokens (--kv-capacity, 64 = 1 page); 0 = auto
-    host_kv_mib: int = 16384  # pinned host KV pool (--host-kv-mib)
+    max_context: int = 204800  # logical context ceiling per request (--max-context)
+    budget: int = 8192  # selected history B, aligned to 64 (--kvmem-budget)
+    gen_reserve: int = 8192  # append workspace R, aligned to 64 (--kvmem-gen-reserve)
+    host_kv_mib: int = 4096  # pinned host KV payload budget H (--kvmem-host-mib)
     kv_dtype: str = "k8v4"  # --kv-dtype (delivery dtype; small-pool verdicts are k8v4-only)
     prefill_chunk: int = 256  # tokens per prefill chunk, multiple of 128 (0 = engine default)
     spec: str = "mtp"  # --spec: none | mtp | dflash | dflash2
-    draft_tokens: int = 4  # --draft-tokens 1..15 (dflash2 wants 12)
-    adaptive_mtp: bool = False  # --adaptive-mtp
+    draft_tokens: int = 4  # --draft-tokens 1..15
+    adaptive_mtp: bool = True  # --adaptive-mtp: verify 3..--draft-tokens per round
+    ngram_draft_tokens: int = 31  # --ngram-draft-tokens 1..63 (0 = off; needs --spec)
+    ngram_min_match: int = 12  # --ngram-min-match 4..64
     max_concurrency: int = 1  # requests decoded together, 1..8
-    default_max_tokens: int = 32768  # output limit when a request sets none
+    default_max_tokens: int = 16384  # output limit when a request sets none
     cuda_graph: bool = False  # False emits --no-cuda-graph (needed on 8 GB)
-    kv_window: int = 16384  # ring window env NINFER_KV_WINDOW; 0 = don't configure the ring
-    kv_retrieve: int = 8192  # NINFER_KV_RETRIEVE
-    ptq1_fast: bool = True  # NINFER_TERNARY_PTQ1_FAST
+    sink_tokens: int = 4096  # always-kept prefix (--kvmem-sink-tokens); must fit in budget
+    recent_tokens: int = 1024  # always-kept newest suffix (--kvmem-recent-tokens); min 64
+    sessions: int = 1  # retained host histories (--kvmem-sessions), 1..16
+    lrfu: bool = True  # --kvmem-lrfu
+    lrfu_lambda: float = 0.5  # --kvmem-lrfu-lambda [0,1]
+    lrfu_top_frac: float = 0.9  # --kvmem-lrfu-top-frac (0,1]
+    score_agg: str = "max"  # --kvmem-score-agg: mean | max across GQA heads
+    fast_prefill: bool = False  # --fast-prefill-kernel (int8/rk* KV only)
+    disk_path: str = ""  # --kvmem-disk-path: RAM/SSD tier spill dir, empty = off
+    disk_mib: int = 4096  # --kvmem-disk-mib shared SSD payload quota
+    default_thinking_budget: int = 0  # --default-thinking-budget, 0 = engine default
     reasoning_effort: str = "medium"  # --default-reasoning-effort when thinking is on
     model_id: str = ""  # --model-id override; empty = artifact metadata name
+
 
 
 ENGINES = ("llama.cpp", "kvmem", "ninfer")

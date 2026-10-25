@@ -62,22 +62,39 @@ export interface AppConfig {
     mtp_state: string
     enable_thinking: boolean
     reasoning_budget: number
+    sink_tokens: number
+    recent_tokens: number
+    lrfu: boolean
+    lrfu_lambda: number
+    lrfu_top_frac: number
+    score_agg: string
   }
   ninfer: {
     max_context: number
-    kv_capacity: number
+    budget: number
+    gen_reserve: number
     host_kv_mib: number
     kv_dtype: string
     prefill_chunk: number
     spec: string
     draft_tokens: number
     adaptive_mtp: boolean
+    ngram_draft_tokens: number
+    ngram_min_match: number
     max_concurrency: number
     default_max_tokens: number
     cuda_graph: boolean
-    kv_window: number
-    kv_retrieve: number
-    ptq1_fast: boolean
+    sink_tokens: number
+    recent_tokens: number
+    sessions: number
+    lrfu: boolean
+    lrfu_lambda: number
+    lrfu_top_frac: number
+    score_agg: string
+    fast_prefill: boolean
+    disk_path: string
+    disk_mib: number
+    default_thinking_budget: number
     reasoning_effort: string
     model_id: string
   }
@@ -163,14 +180,17 @@ export const defaultConfig: AppConfig = {
   engine: 'llama.cpp',
   chat_template_file: '',
   mmproj_gpu: false,
-  kvmem: { workspace: 131072, budget: 24576, gen_reserve: 10240, block_tokens: 128, batch: 512, ubatch: 128, kv_dtype: 'q8_0', query_policy: 'user', mtp_state: 'snapshots', enable_thinking: false, reasoning_budget: 4096 },
+  kvmem: { workspace: 131072, budget: 24576, gen_reserve: 10240, block_tokens: 128, batch: 512, ubatch: 128, kv_dtype: 'q8_0', query_policy: 'user', mtp_state: 'snapshots', enable_thinking: false, reasoning_budget: 4096, sink_tokens: 0, recent_tokens: 0, lrfu: false, lrfu_lambda: .5, lrfu_top_frac: .9, score_agg: 'mean' },
   ninfer: {
-    max_context: 262144, kv_capacity: 4032, host_kv_mib: 16384, kv_dtype: 'k8v4',
-    prefill_chunk: 256, spec: 'mtp', draft_tokens: 4, adaptive_mtp: false,
-    max_concurrency: 1, default_max_tokens: 32768, cuda_graph: false,
-    kv_window: 16384, kv_retrieve: 8192, ptq1_fast: true,
+    max_context: 204800, budget: 8192, gen_reserve: 8192, host_kv_mib: 4096,
+    kv_dtype: 'k8v4', prefill_chunk: 256, spec: 'mtp', draft_tokens: 4, adaptive_mtp: true,
+    ngram_draft_tokens: 31, ngram_min_match: 12, max_concurrency: 1, default_max_tokens: 16384,
+    cuda_graph: false, sink_tokens: 4096, recent_tokens: 1024, sessions: 1,
+    lrfu: true, lrfu_lambda: .5, lrfu_top_frac: .9, score_agg: 'max',
+    fast_prefill: false, disk_path: '', disk_mib: 4096, default_thinking_budget: 0,
     reasoning_effort: 'medium', model_id: '',
   },
+
   system_prompt: '', extra_params: '',
   server: { host: '127.0.0.1', port: 8080, mode: 'local' },
   compile: { command: 'cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release -j12' },

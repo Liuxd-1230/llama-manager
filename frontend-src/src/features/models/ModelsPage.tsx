@@ -1,4 +1,4 @@
-import { Copy, ExternalLink, PackageOpen, Pencil, Pin, Play, Plus, Square, Trash2 } from 'lucide-react'
+import { Copy, ExternalLink, PackageOpen, Pencil, Pin, Play, Plus, Search, Square, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -6,6 +6,7 @@ import { api } from '../../api'
 import { Badge, Button, ConfirmButton, Input, Panel } from '../../components/ui'
 import type { AppConfig } from '../../types'
 import { estimateUsage } from '../../utils/vram'
+import { ResourceUsage } from '../../components/ResourceUsage'
 import page from '../pages.module.css'
 import styles from './models.module.css'
 
@@ -33,9 +34,17 @@ type Profile = {
   chat_template_file?: string
   host: string
   port: number
-  kvmem?: { workspace: number; budget: number; gen_reserve: number; kv_dtype: string; enable_thinking?: boolean }
-  ninfer?: { max_context: number; kv_capacity: number; host_kv_mib: number; kv_dtype: string; spec: string; draft_tokens: number; kv_window: number }
+  kvmem?: { workspace: number; budget: number; gen_reserve: number; kv_dtype: string; enable_thinking?: boolean; sink_tokens?: number; recent_tokens?: number; lrfu?: boolean; score_agg?: string }
+  ninfer?: { max_context: number; budget: number; gen_reserve: number; host_kv_mib: number; kv_dtype: string; spec: string; draft_tokens: number; sink_tokens?: number; recent_tokens?: number; lrfu?: boolean; score_agg?: string; prefill_chunk?: number; cuda_graph?: boolean }
 }
+
+// Retrieval is what separates the tiered engines from a plain context window,
+// so every card states how it ranks and what it pins.
+function retrievalBadge(lrfu?: boolean, scoreAgg?: string) {
+  if (!lrfu && !scoreAgg) return { label: '检索 关' }
+  return { label: `检索 ${lrfu ? 'LRFU' : '分数'}${scoreAgg === 'max' ? '·max' : ''}`, active: true }
+}
+
 
 function errorMessage(reason: unknown) { return reason instanceof Error ? reason.message : String(reason) }
 
@@ -49,6 +58,9 @@ export function ModelsPage({ config, dirty, server, toast }: {
   const queryClient = useQueryClient()
   const profilesQuery = useQuery({ queryKey: ['profiles'], queryFn: () => api<{ profiles: Profile[] }>('/api/profiles') })
   const profiles = profilesQuery.data?.profiles || []
+  const [search, setSearch] = useState('')
+  const [engineFilter, setEngineFilter] = useState('all')
+  const visibleProfiles = profiles.filter(profile => `${profile.name} ${profile.model_name}`.toLowerCase().includes(search.toLowerCase()) && (engineFilter === 'all' || (profile.engine || 'llama.cpp') === engineFilter)).sort((a, b) => Number(b.is_running || b.is_current) - Number(a.is_running || a.is_current))
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [busy, setBusy] = useState('')
@@ -135,17 +147,21 @@ export function ModelsPage({ config, dirty, server, toast }: {
   }
 
   return <>
-    <div className={page.row} style={{ justifyContent: 'space-between', marginBottom: 12 }}>
-      <p className={page.hint}>模型档案 = 模型文件 + 启动参数 + 采样 + 提示词{dirty ? ' · 当前有未保存的配置修改' : ''}</p>
+    <div className={styles.libraryToolbar}>
+      <div className={styles.search}><Search size={17}/><Input aria-label="搜索档案" placeholder="搜索模型或档案…" value={search} onChange={event => setSearch(event.target.value)}/></div>
+      <select className={styles.filter} aria-label="筛选推理引擎" value={engineFilter} onChange={event => setEngineFilter(event.target.value)}><option value="all">全部引擎</option><option value="llama.cpp">llama.cpp</option><option value="kvmem">KVMem</option><option value="ninfer">NInfer</option></select>
+      <span className={styles.count}>{visibleProfiles.length} 个档案</span>
       {creating
-        ? <div className={styles.createRow}><Input placeholder="档案名称" value={newName} onChange={event => setNewName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && newName.trim()) void create() }} autoFocus /><Button tone="primary" disabled={!newName.trim()} onClick={() => void create()}>确定</Button><Button onClick={() => { setCreating(false); setNewName('') }}>取消</Button></div>
+        ? <div className={styles.createRow}><Input aria-label="新档案名称" placeholder="档案名称" value={newName} onChange={event => setNewName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && newName.trim()) void create() }} autoFocus /><Button tone="primary" disabled={!newName.trim()} onClick={() => void create()}>确定</Button><Button onClick={() => { setCreating(false); setNewName('') }}>取消</Button></div>
         : <Button tone="primary" onClick={() => setCreating(true)}><Plus size={15}/>新建档案</Button>}
     </div>
+    {dirty && <p className={page.hint}>当前有未保存的配置修改，切换档案前请保存。</p>}
     {profilesQuery.isError && <Panel><p className={page.hint}>加载档案失败：{errorMessage(profilesQuery.error)}　<Button size="small" onClick={() => void profilesQuery.refetch()}>重试</Button></p></Panel>}
     {profilesQuery.isPending && !profilesQuery.isError && <div className={styles.grid}>{[0, 1, 2].map(i => <div key={i} className={styles.skeletonCard}><span/><span/><span/></div>)}</div>}
     {profilesQuery.isSuccess && profiles.length === 0 && <Panel><p className={page.hint}><PackageOpen size={14} style={{ verticalAlign: -2 }}/> 还没有档案。在「配置」页填写模型与参数后保存，或点击右上角「新建档案」。</p></Panel>}
+    {profilesQuery.isSuccess && profiles.length > 0 && visibleProfiles.length === 0 && <div className={styles.noResults}>没有匹配的档案。<Button size="small" onClick={() => { setSearch(''); setEngineFilter('all') }}>清除筛选</Button></div>}
     {profilesQuery.isSuccess && profiles.length > 0 && <div className={styles.grid}>
-      {profiles.map(profile => <ProfileCard key={profile.name} profile={profile} busy={busy === profile.name} stopping={busy === '__stop__'} serverRunning={serverRunning} dirty={dirty} onLaunch={() => void launch(profile)} onStop={() => void stop()} onEdit={() => void edit(profile)} onSetCurrent={() => void setCurrent(profile)} onDuplicate={() => void duplicate(profile)} onRemove={() => void remove(profile)} />)}
+      {visibleProfiles.map(profile => <ProfileCard key={profile.name} profile={profile} busy={busy === profile.name} stopping={busy === '__stop__'} serverRunning={serverRunning} dirty={dirty} onLaunch={() => void launch(profile)} onStop={() => void stop()} onEdit={() => void edit(profile).catch(reason => toast(`载入失败：${errorMessage(reason)}`))} onSetCurrent={() => void setCurrent(profile)} onDuplicate={() => void duplicate(profile)} onRemove={() => void remove(profile)} />)}
     </div>}
   </>
 }
@@ -172,7 +188,7 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
     engine: profile.engine || 'llama.cpp', modelSizeMb: profile.model_size_mb,
     ctxSize: profile.ctx_size, kvCacheQuant: profile.kv_cache_quant_k || profile.kv_cache_quant_v || 'q8_0',
     kvmem: { budget: profile.kvmem?.budget ?? 0, gen_reserve: profile.kvmem?.gen_reserve ?? 0, kv_dtype: profile.kvmem?.kv_dtype ?? 'q8_0' },
-    ninfer: { kv_capacity: profile.ninfer?.kv_capacity ?? 0, prefill_chunk: 256, cuda_graph: false, host_kv_mib: 16384 },
+    ninfer: { budget: profile.ninfer?.budget ?? 0, gen_reserve: profile.ninfer?.gen_reserve ?? 0, prefill_chunk: profile.ninfer?.prefill_chunk ?? 256, cuda_graph: profile.ninfer?.cuda_graph ?? false, host_kv_mib: profile.ninfer?.host_kv_mib ?? 4096 },
     nCpuMoe: (profile.engine || 'llama.cpp') === 'llama.cpp' ? (profile.n_cpu_moe ?? 0) : 0,
     geom: {
       kv_bytes_per_token: typeof meta.kv_bytes_per_token === 'number' ? meta.kv_bytes_per_token : undefined,
@@ -187,12 +203,13 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
     ...(isKvmem ? [{ label: 'KVMem', active: true }] : []),
     ...(isNinfer ? [{ label: 'NInfer', active: true }] : []),
     { label: `ctx ${isKvmem ? fmtK(profile.kvmem?.workspace ?? profile.ctx_size) : isNinfer ? fmtK(profile.ninfer?.max_context ?? 0) : fmtK(profile.ctx_size)}`, active: true },
-    ...(isKvmem ? [{ label: `预算 ${fmtK(profile.kvmem?.budget ?? 0)}` }, { label: `预留 ${fmtK(profile.kvmem?.gen_reserve ?? 0)}` }, ...(profile.kvmem?.kv_dtype ? [{ label: `KV ${profile.kvmem.kv_dtype}` }] : [])] : []),
+    ...(isKvmem ? [{ label: `预算 ${fmtK(profile.kvmem?.budget ?? 0)}` }, { label: `预留 ${fmtK(profile.kvmem?.gen_reserve ?? 0)}` }, ...(profile.kvmem?.kv_dtype ? [{ label: `KV ${profile.kvmem.kv_dtype}` }] : []), retrievalBadge(profile.kvmem?.lrfu, profile.kvmem?.score_agg)] : []),
     ...(isNinfer && profile.ninfer ? [
-      { label: `池 ${fmtK(profile.ninfer.kv_capacity)}` },
+      { label: `预算 ${fmtK(profile.ninfer.budget)}` },
+      { label: `预留 ${fmtK(profile.ninfer.gen_reserve)}` },
       { label: `主机 ${Math.round(profile.ninfer.host_kv_mib / 1024)}G` },
       ...(profile.ninfer.kv_dtype ? [{ label: `KV ${profile.ninfer.kv_dtype}` }] : []),
-      ...(profile.ninfer.kv_window > 0 ? [{ label: '检索', active: true }] : []),
+      retrievalBadge(profile.ninfer.lrfu, profile.ninfer.score_agg),
       ...(profile.ninfer.spec !== 'none' ? [{ label: `${profile.ninfer.spec}×${profile.ninfer.draft_tokens}`, active: true }] : []),
     ] : []),
     ...(!isNinfer ? [profile.fit_enabled ? { label: 'GPU 自动适配' } : { label: `ngl ${profile.ngl}` }] : []),
@@ -213,28 +230,35 @@ function ProfileCard({ profile, busy, stopping, serverRunning, dirty, onLaunch, 
   ].filter(Boolean)
   const needsSwitch = serverRunning && !profile.is_running
   const fileMissing = !profile.model_exists && !!profile.model_path
-  return (
-    <Panel className={profile.is_running ? styles.cardRunning : ''} title={<span className={styles.titleRow}><span className={styles.titleName}>{profile.name}</span>{profile.is_running && <Badge tone="good">运行中</Badge>}{profile.is_current && !profile.is_running && <Badge>当前</Badge>}</span>} actions={
-      <div className={page.row}>
+  const featured = profile.is_current || profile.is_running
+  const context = isKvmem ? profile.kvmem?.workspace ?? profile.ctx_size : isNinfer ? profile.ninfer?.max_context ?? profile.ctx_size : profile.ctx_size
+  const engineLabel = isNinfer ? 'NInfer' : isKvmem ? 'KVMem' : 'llama.cpp'
+  return <article aria-label={`档案 ${profile.name}`} className={`${styles.card} ${featured ? styles.featured : ''}`} data-running={profile.is_running}>
+    <header className={styles.cardHeader}>
+      <div className={styles.titleRow}><h2 className={styles.titleName} title={profile.name}>{profile.name}</h2>{profile.is_running && <Badge tone="good">运行中</Badge>}{profile.is_current && <Badge>当前</Badge>}</div>
+      <div className={styles.cardTools}>
         <ConfirmButton size="small" iconOnly confirm={dirty} confirmLabel="丢弃?" title="编辑参数" onConfirm={onEdit}><Pencil size={14}/></ConfirmButton>
         <Button size="small" iconOnly title="复制档案" disabled={busy} onClick={onDuplicate}><Copy size={14}/></Button>
         {!profile.is_current && <ConfirmButton size="small" iconOnly confirm={dirty} confirmLabel="丢弃?" title="设为当前档案（不启动）" onConfirm={onSetCurrent}><Pin size={14}/></ConfirmButton>}
         <ConfirmButton size="small" iconOnly tone="danger" disabled={profile.is_running || profile.name === 'default'} confirmLabel="确认?" title="删除档案" onConfirm={onRemove}><Trash2 size={14}/></ConfirmButton>
       </div>
-    }>
-      <p className={styles.metaLine} title={profile.model_path}>
-        {profile.model_name ? <>{profile.model_name}{sizeLabel && ` · ${sizeLabel}`}</> : '未选择模型文件'}
-      </p>
-      {parts.length > 0 && <p className={styles.metaLine}>{parts.join(' · ')}</p>}
-      <div className={styles.chips}>
-        {fileMissing && <span className={`${styles.chip} ${styles.chipMissing}`}>文件缺失</span>}
-        {chips.map(chip => <span key={chip.label} className={`${styles.chip} ${chip.active ? styles.chipActive : ''}`}>{chip.label}</span>)}
+    </header>
+    <div className={styles.cardBody}>
+      <div className={styles.identity}>
+        <p className={styles.metaLine} title={profile.model_path}>{profile.model_name || '未选择模型文件'}</p>
+        <div className={styles.facts}><span><b>{engineLabel}</b>推理引擎</span><span><b>{fmtK(context)}</b>上下文</span><span><b>{sizeLabel || '—'}</b>模型文件</span></div>
+        {fileMissing && <p className={styles.missing}>文件缺失</p>}
+        {parts.length > 0 && <p className={styles.geometry}>{parts.join(' · ')}</p>}
       </div>
-      <div className={styles.actions}>
+      {profile.model_exists && profile.model_size_mb > 0 ? <ResourceUsage usage={usage} compact/> : <p className={styles.resourceUnknown}>选择有效模型后可查看资源估算</p>}
+    </div>
+    <footer className={styles.actions}>
+      <details className={styles.details}><summary>参数详情</summary><div className={styles.chips}>{chips.map(chip => <span key={chip.label} className={styles.chip}>{chip.label}</span>)}</div></details>
+      <div className={styles.launch}>
         {profile.is_running
-          ? <div className={page.row}><Button tone="danger" size="small" disabled={stopping} onClick={onStop}><Square size={14}/>{stopping ? '停止中…' : '停止'}</Button><Button size="small" onClick={() => window.open(profile.engine === 'ninfer' ? `/static/engine-webui.html?base=${encodeURIComponent(`http://${profile.host === '0.0.0.0' ? location.hostname : profile.host}:${profile.port}`)}` : `http://${profile.host === '0.0.0.0' ? location.hostname : profile.host}:${profile.port}/`, '_blank')}><ExternalLink size={14}/>WebUI</Button></div>
+          ? <><Button tone="danger" size="small" disabled={stopping} onClick={onStop}><Square size={14}/>{stopping ? '停止中…' : '停止'}</Button><Button size="small" onClick={() => window.open(profile.engine === 'ninfer' ? `/static/engine-webui.html?base=${encodeURIComponent(`http://${profile.host === '0.0.0.0' ? location.hostname : profile.host}:${profile.port}`)}` : `http://${profile.host === '0.0.0.0' ? location.hostname : profile.host}:${profile.port}/`, '_blank')}><ExternalLink size={14}/>WebUI</Button></>
           : <ConfirmButton tone="primary" size="small" confirm={needsSwitch || dirty} confirmLabel={dirty ? '未保存修改将丢弃，再点确认' : '会停止当前服务，再点确认'} disabled={busy || fileMissing} title={fileMissing ? '模型文件不存在' : undefined} onConfirm={onLaunch}>{busy ? <><Play size={14}/>启动中…</> : needsSwitch ? <><Play size={14}/>切换到此档案</> : <><Play size={14}/>启动</>}</ConfirmButton>}
       </div>
-    </Panel>
-  )
+    </footer>
+  </article>
 }

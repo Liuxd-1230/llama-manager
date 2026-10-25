@@ -49,7 +49,7 @@ function Shell() {
   const main = useRef<HTMLElement>(null)
   const reduced = useReducedMotion()
   const location = useLocation()
-  const toast = useCallback((text: string) => { setToastText(text); window.setTimeout(() => setToastText(current => current === text ? '' : current), 2600) }, [])
+  const toast = useCallback((text: string) => { setToastText(text); window.setTimeout(() => setToastText(current => current === text ? '' : current), 5000) }, [])
   const setTheme = (next: Theme) => { setThemeState(next); localStorage.setItem('theme', next) }
   const setAccent = (next: Accent) => { setAccentState(next); localStorage.setItem('accent', next) }
   useEffect(() => { document.documentElement.dataset.theme = theme }, [theme])
@@ -87,7 +87,7 @@ function Shell() {
         <div className={styles.brand}><span className={styles.brandMark}><Zap size={18}/></span><div><div className={styles.brandText}>llama.cpp Manager</div><div className={styles.brandSub}>本地推理控制台</div></div></div>
         <div className={styles.topMeta}><span className={styles.serverAddress}>{ENGINE_LABELS[config.engine] || config.engine} · {config.server.host}:{config.server.port}</span>{dirty && <button type="button" className={styles.dirtyButton} title="有未保存的配置修改，点击前往配置页" onClick={() => navigate('/config')}><Badge tone="warn">未保存</Badge></button>}<Badge tone={server.state === 'running' ? 'good' : 'neutral'}><Gauge size={12}/>{server.state === 'running' ? `运行中 · ${server.pid || ''}` : '已停止'}</Badge><Button iconOnly title="任务中心" onClick={() => setTasksOpen(true)}><ListTodo size={16}/></Button><Button iconOnly title="切换主题" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>{theme === 'light' ? <Moon size={16}/> : <Sun size={16}/>}</Button></div>
       </header>
-      <aside className={styles.sidebar}><nav className={styles.nav}>{nav.map(item => <NavLink key={item.id} to={`/${item.id}`} className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`}><item.icon size={16}/><span>{item.label}</span></NavLink>)}</nav><div className={styles.sidebarBottom}><Button className={styles.settingsButton} onClick={() => setSettingsOpen(true)}><Settings size={16}/>设置</Button></div></aside>
+      <aside className={styles.sidebar}><nav className={styles.nav}>{nav.map(item => <NavLink key={item.id} to={`/${item.id}`} aria-label={item.label} title={item.label} className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`}><item.icon size={16}/><span>{item.label}</span></NavLink>)}</nav><div className={styles.sidebarBottom}><Button className={styles.settingsButton} onClick={() => setSettingsOpen(true)}><Settings size={16}/>设置</Button></div></aside>
       <main className={styles.main} ref={main} onScroll={event => setScrolled(event.currentTarget.scrollTop > 16)}>
         <Suspense fallback={<div className={styles.page}>正在加载工作区…</div>}><Routes>
           <Route path="/" element={<Navigate to="/models" replace/>}/>
@@ -112,7 +112,7 @@ function Shell() {
     </div>
     <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} onProvidersChanged={() => setProviderRefresh(value => value + 1)} toast={toast}/>
     {tasksOpen && <TaskCenter open onClose={() => setTasksOpen(false)}/>}
-    {toastText && <motion.div className={uiStyles.toast} initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>{toastText}</motion.div>}
+    {toastText && <motion.div role="status" aria-live="polite" className={uiStyles.toast} initial={reduced ? false : { y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: reduced ? 0 : .18 }}>{toastText}</motion.div>}
   </div>
 }
 
@@ -129,5 +129,5 @@ export function resolveInitialAccent(): Accent {
 const ENGINE_LABELS: Record<string, string> = { 'llama.cpp': 'llama.cpp', kvmem: 'KVMem', ninfer: 'NInfer' }
 
 function Page({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
-  return <motion.section className={styles.page} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .18 }}><header className={styles.pageHeader}><div><h1>{title}</h1><p>{description}</p></div></header>{children}</motion.section>
+  return <section className={`${styles.page} ${title === '对话' ? styles.chatPage : ''}`}><header className={styles.pageHeader}><div><h1>{title}</h1><p>{description}</p></div></header>{children}</section>
 }

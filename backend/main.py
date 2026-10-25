@@ -1200,16 +1200,27 @@ def _profile_summary(name: str, profile: AppConfig) -> dict:
             "gen_reserve": kvmem.gen_reserve,
             "kv_dtype": kvmem.kv_dtype,
             "enable_thinking": kvmem.enable_thinking,
+            "sink_tokens": kvmem.sink_tokens,
+            "recent_tokens": kvmem.recent_tokens,
+            "lrfu": kvmem.lrfu,
+            "score_agg": kvmem.score_agg,
         },
         "ninfer": {
             "max_context": ninfer.max_context,
-            "kv_capacity": ninfer.kv_capacity,
+            "budget": ninfer.budget,
+            "gen_reserve": ninfer.gen_reserve,
+            "prefill_chunk": ninfer.prefill_chunk,
+            "cuda_graph": ninfer.cuda_graph,
             "host_kv_mib": ninfer.host_kv_mib,
             "kv_dtype": ninfer.kv_dtype,
             "spec": ninfer.spec,
             "draft_tokens": ninfer.draft_tokens,
-            "kv_window": ninfer.kv_window,
+            "sink_tokens": ninfer.sink_tokens,
+            "recent_tokens": ninfer.recent_tokens,
+            "lrfu": ninfer.lrfu,
+            "score_agg": ninfer.score_agg,
         },
+
         "ngl": basic.ngl if basic.ngl_enabled else 0,
         "fit_enabled": basic.fit_enabled,
         "n_cpu_moe": basic.n_cpu_moe,
@@ -1336,13 +1347,23 @@ def model_info(path: str):
 
 @app.get("/api/detect-server")
 def detect_server(llama_cpp_dir: str, engine: str = "llama.cpp"):
+    resolved = cfg.resolve_engine_dir(llama_cpp_dir, engine)
     if engine == "kvmem":
-        path = cfg.detect_kvmem_binary(llama_cpp_dir)
+        path = cfg.detect_kvmem_binary(resolved)
     elif engine == "ninfer":
-        path = cfg.detect_ninfer_binary(llama_cpp_dir)
+        path = cfg.detect_ninfer_binary(resolved)
     else:
-        path = cfg.detect_server_binary(llama_cpp_dir)
-    return {"path": path, "found": bool(path)}
+        path = cfg.detect_server_binary(resolved)
+    return {
+        "path": path,
+        "found": bool(path),
+        "dir": resolved,
+        "bundled": not (llama_cpp_dir or "").strip(),
+        # Lets the form grey out parameters this build predates instead of
+        # letting the launch die on "unknown flag".
+        "lrfu": "--kvmem-lrfu" in cfg.binary_flags(path) if path else False,
+    }
+
 
 
 # ── Server control endpoints ──────────────────────────────────

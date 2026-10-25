@@ -5,6 +5,7 @@ import { Badge, Button, Field, Input, Panel, Textarea } from '../../components/u
 import { useInterval, useWebSocket } from '../../hooks'
 import type { AppConfig } from '../../types'
 import page from '../pages.module.css'
+import { ConfirmDialog } from '../../components/Modal'
 
 interface MirrorCandidate { id: string; name: string; prefix: string; ok: boolean; latency_ms: number | null }
 
@@ -15,6 +16,10 @@ function LogTerminal({ text, empty }: { text: string; empty: string }) {
 }
 
 export function MaintenancePage({ config, setConfig, toast }: { config: AppConfig; setConfig: (config: AppConfig) => void; toast: (text: string) => void }) {
+  const [confirmReset, setConfirmReset] = useState(false)
+  const [pending, setPending] = useState('')
+  const [error, setError] = useState('')
+  const attempt = async (label: string, action: () => Promise<unknown>) => { setPending(label); setError(''); try { await action(); return true } catch (reason) { setError(`${label}失败：${reason instanceof Error ? reason.message : String(reason)}。请检查目录或网络后重试。`); setDownloading(false); setCompiling(false); return false } finally { setPending('') } }
   const [downloadDir, setDownloadDir] = useState('')
   const [downloadLogs, setDownloadLogs] = useState<string[]>([])
   const [compileLogs, setCompileLogs] = useState<string[]>([])
@@ -50,15 +55,17 @@ export function MaintenancePage({ config, setConfig, toast }: { config: AppConfi
   const compile = async () => { setCompiling(true); await api('/api/config', { method: 'POST', body: JSON.stringify(config) }); await api('/api/update/compile', { method: 'POST' }); toast('编译已启动') }
   const stopCompile = async () => { await api('/api/update/compile/stop', { method: 'POST' }); setCompiling(false) }
   return <div className={page.stack}>
+    {error && <p role="alert" className={page.error}>{error}</p>}
+    {confirmReset && <ConfirmDialog title="重置 llama.cpp 源码？" description={`目录：${config.llama_cpp_dir || '尚未设置'}。此操作会丢弃该目录中已跟踪文件的本地修改，并重置到拉取的版本。请先备份需要保留的修改。`} confirmLabel="丢弃修改并重置" pending={pending === '重置'} onClose={() => setConfirmReset(false)} onConfirm={() => { void attempt('重置', () => pull(true)).then(success => { if (success) setConfirmReset(false) }) }}/>}
     {config.engine === 'kvmem' && <p className={page.hint} style={{ margin: 0 }}>当前档案使用 KVMem 引擎（预编译包，非 git 仓库）：检查更新、拉取和编译不适用，仅「下载 llama.cpp」可用。</p>}
     <div className={page.grid}>
       <Panel title="下载 llama.cpp" icon={<Download size={15}/>}>
         <Field label="目标目录"><Input value={downloadDir} onChange={event => setDownloadDir(event.target.value)} placeholder="D:\\workspace\\llama.cpp"/></Field>
-        <div className={page.row} style={{ marginTop: 12 }}><Button tone="primary" disabled={downloading} onClick={() => void download()}><Download size={15}/>下载</Button><Button tone="danger" disabled={!downloading} onClick={() => void stopDownload()}><Square size={15}/>停止</Button></div>
+        <div className={page.row} style={{ marginTop: 12 }}><Button tone="primary" disabled={downloading} onClick={() => void attempt('下载', () => download())}><Download size={15}/>下载</Button><Button tone="danger" disabled={!downloading} onClick={() => void attempt('停止下载', () => stopDownload())}><Square size={15}/>停止</Button></div>
         <pre className={page.code}>{downloadLogs.join('\n') || '等待下载任务…'}</pre>
       </Panel>
       <Panel title="更新源码" icon={<RefreshCw size={15}/>}>
-        <p>{updateInfo}</p><div className={page.wrap}><Button onClick={() => void check()}><RefreshCw size={15}/>检查更新</Button><Button tone="primary" onClick={() => void pull(false)}><Download size={15}/>拉取更新</Button><Button tone="danger" onClick={() => void pull(true)}><AlertTriangle size={15}/>强制重置</Button></div>
+        <p>{updateInfo}</p><div className={page.wrap}><Button disabled={!!pending} onClick={() => void attempt('检查更新', () => check())}><RefreshCw size={15}/>检查更新</Button><Button tone="primary" disabled={!!pending} onClick={() => void attempt('拉取更新', () => pull(false))}><Download size={15}/>拉取更新</Button><Button tone="danger" disabled={!!pending || !config.llama_cpp_dir} onClick={() => setConfirmReset(true)}><AlertTriangle size={15}/>强制重置</Button></div>
         <p className={page.hint}>强制重置会覆盖 llama.cpp 目录中的本地修改。</p>
         <div className={page.row} style={{ marginTop: 10 }}><Button size="small" onClick={() => void probeMirrors()} disabled={probing}><Globe size={14}/>{probing ? '探测中…' : '探测 GitHub 镜像'}</Button><span className={page.hint}>{mirror === '' ? '当前：GitHub 直连' : '当前：自定义镜像前缀'}</span></div>
         {mirrors.length > 0 && <div className={page.wrap} style={{ marginTop: 8 }}>{mirrors.map(item => <Button key={item.id} size="small" tone={mirror === item.prefix ? 'primary' : 'default'} onClick={() => selectMirror(item.prefix)}><Globe size={13}/>{item.name}{item.ok ? ` · ${item.latency_ms}ms` : ' · 不可用'}</Button>)}</div>}
@@ -66,7 +73,7 @@ export function MaintenancePage({ config, setConfig, toast }: { config: AppConfi
         <LogTerminal text={pullOutput} empty="等待拉取输出…" />
       </Panel>
     </div>
-    <Panel title="编译" icon={<Hammer size={15}/>} actions={<div className={page.row}><Button tone="success" disabled={compiling} onClick={() => void compile()}><Hammer size={15}/>开始编译</Button><Button tone="danger" disabled={!compiling} onClick={() => void stopCompile()}><Square size={15}/>停止</Button></div>}>
+    <Panel title="编译" icon={<Hammer size={15}/>} actions={<div className={page.row}><Button tone="success" disabled={compiling} onClick={() => void attempt('编译', () => compile())}><Hammer size={15}/>开始编译</Button><Button tone="danger" disabled={!compiling} onClick={() => void attempt('停止编译', () => stopCompile())}><Square size={15}/>停止</Button></div>}>
       <Field label="编译命令"><Textarea value={config.compile.command} onChange={event => setConfig({ ...config, compile: { ...config.compile, command: event.target.value } })}/></Field>
       <p className={page.hint}>在当前档案的引擎目录内执行；「开始编译」会先自动保存当前配置。仅对 git 源码检出有意义，预编译包无需编译。</p>
       <LogTerminal text={compileLogs.join('\n')} empty="等待编译任务…" />

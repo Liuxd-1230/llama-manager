@@ -52,7 +52,8 @@ export interface paths {
         /** Save Turn */
         put: operations["save_turn_api_conversations__conversation_id__turns__turn_id__put"];
         post?: never;
-        delete?: never;
+        /** Delete Turn */
+        delete: operations["delete_turn_api_conversations__conversation_id__turns__turn_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -482,6 +483,26 @@ export interface paths {
         };
         /** Scan Models */
         get: operations["scan_models_api_scan_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/model-info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Model Info
+         * @description Size + metadata for one model file — feeds the live VRAM/RAM estimator.
+         */
+        get: operations["model_info_api_model_info_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1282,6 +1303,10 @@ export interface components {
          *
          *     Note: workspace (-c) is the logical KV workspace, NOT the VRAM cap;
          *     VRAM is driven by budget + gen_reserve.
+         *
+         *     sink/recent exist since v0.16; lrfu/score_agg need a v0.17+ build and are
+         *     gated by the binary capability probe, so the defaults keep older packages
+         *     launching unchanged.
          */
         KvmemSettings: {
             /**
@@ -1339,6 +1364,36 @@ export interface components {
              * @default 4096
              */
             reasoning_budget: number;
+            /**
+             * Sink Tokens
+             * @default 0
+             */
+            sink_tokens: number;
+            /**
+             * Recent Tokens
+             * @default 0
+             */
+            recent_tokens: number;
+            /**
+             * Lrfu
+             * @default false
+             */
+            lrfu: boolean;
+            /**
+             * Lrfu Lambda
+             * @default 0.5
+             */
+            lrfu_lambda: number;
+            /**
+             * Lrfu Top Frac
+             * @default 0.9
+             */
+            lrfu_top_frac: number;
+            /**
+             * Score Agg
+             * @default mean
+             */
+            score_agg: string;
         };
         /** MTPSettings */
         MTPSettings: {
@@ -1375,26 +1430,34 @@ export interface components {
         };
         /**
          * NinferSettings
-         * @description NInfer engine (ninfer-serve-<arch>.exe) — .ninfer artifacts with the
-         *     KVMem-style ring retrieval and MTP/dflash speculation.
+         * @description NInfer engine (ninfer-kvmem-server, KVMem v0.18.0+) — .ninfer artifacts
+         *     with KVMem RAM/SSD tiering, LRFU retrieval and MTP/ngram speculation.
          *
-         *     Defaults mirror the 8 GB launcher (start-ptq1-mtp-8gb.bat): device pool
-         *     4032 tokens (63 pages), chunk 256, CUDA Graphs off.
+         *     Retrieval sizing: B (--kvmem-budget) + R (--kvmem-gen-reserve) are the
+         *     device-resident tokens and drive VRAM; H (--kvmem-host-mib) is the pinned
+         *     host payload quota. sink + recent must fit inside B after rounding to whole
+         *     64-token pages, and R must cover the draft widths. Defaults here are the
+         *     8 GB laptop safe set, not the release recipe's 16 GB table.
          */
         NinferSettings: {
             /**
              * Max Context
-             * @default 262144
+             * @default 204800
              */
             max_context: number;
             /**
-             * Kv Capacity
-             * @default 4032
+             * Budget
+             * @default 8192
              */
-            kv_capacity: number;
+            budget: number;
+            /**
+             * Gen Reserve
+             * @default 8192
+             */
+            gen_reserve: number;
             /**
              * Host Kv Mib
-             * @default 16384
+             * @default 4096
              */
             host_kv_mib: number;
             /**
@@ -1419,9 +1482,19 @@ export interface components {
             draft_tokens: number;
             /**
              * Adaptive Mtp
-             * @default false
+             * @default true
              */
             adaptive_mtp: boolean;
+            /**
+             * Ngram Draft Tokens
+             * @default 31
+             */
+            ngram_draft_tokens: number;
+            /**
+             * Ngram Min Match
+             * @default 12
+             */
+            ngram_min_match: number;
             /**
              * Max Concurrency
              * @default 1
@@ -1429,7 +1502,7 @@ export interface components {
             max_concurrency: number;
             /**
              * Default Max Tokens
-             * @default 32768
+             * @default 16384
              */
             default_max_tokens: number;
             /**
@@ -1438,20 +1511,60 @@ export interface components {
              */
             cuda_graph: boolean;
             /**
-             * Kv Window
-             * @default 16384
+             * Sink Tokens
+             * @default 4096
              */
-            kv_window: number;
+            sink_tokens: number;
             /**
-             * Kv Retrieve
-             * @default 8192
+             * Recent Tokens
+             * @default 1024
              */
-            kv_retrieve: number;
+            recent_tokens: number;
             /**
-             * Ptq1 Fast
+             * Sessions
+             * @default 1
+             */
+            sessions: number;
+            /**
+             * Lrfu
              * @default true
              */
-            ptq1_fast: boolean;
+            lrfu: boolean;
+            /**
+             * Lrfu Lambda
+             * @default 0.5
+             */
+            lrfu_lambda: number;
+            /**
+             * Lrfu Top Frac
+             * @default 0.9
+             */
+            lrfu_top_frac: number;
+            /**
+             * Score Agg
+             * @default max
+             */
+            score_agg: string;
+            /**
+             * Fast Prefill
+             * @default false
+             */
+            fast_prefill: boolean;
+            /**
+             * Disk Path
+             * @default
+             */
+            disk_path: string;
+            /**
+             * Disk Mib
+             * @default 4096
+             */
+            disk_mib: number;
+            /**
+             * Default Thinking Budget
+             * @default 0
+             */
+            default_thinking_budget: number;
             /**
              * Reasoning Effort
              * @default medium
@@ -1738,6 +1851,38 @@ export interface operations {
                 "application/json": components["schemas"]["TurnWrite"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_turn_api_conversations__conversation_id__turns__turn_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -2589,6 +2734,37 @@ export interface operations {
         parameters: {
             query: {
                 dir: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    model_info_api_model_info_get: {
+        parameters: {
+            query: {
+                path: string;
             };
             header?: never;
             path?: never;

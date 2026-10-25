@@ -11,7 +11,7 @@
 .turn { display: contents }
 .user { align-self: flex-end; max-width: min(76%, 820px); padding: 10px 13px; border-radius: var(--radius); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent); white-space: pre-wrap }
 .assistant { align-self: flex-start; width: min(88%, 980px); min-width: 0 }
-.assistantBody { border-left: 2px solid var(--line-strong); padding: 2px 0 2px 14px }
+.assistantBody { border-left: 1px solid var(--line-strong); padding: 2px 0 2px 14px }
 .assistant[data-streaming='true'] .assistantBody { border-left-color: var(--accent) }
 .reasoning, .tools, .codeBlock { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--glass-soft); margin: 0 0 9px; overflow: hidden }
 .reasoning summary, .tools summary, .codeBlock summary { min-height: 34px; padding: 0 9px; display: flex; align-items: center; gap: 7px; cursor: pointer; color: var(--text-2); font-size: 12px; user-select: none }
@@ -31,7 +31,7 @@
 .markdown { min-width: 0; overflow-wrap: anywhere }
 .markdown > :first-child { margin-top: 0 }.markdown > :last-child { margin-bottom: 0 }
 .markdown p { margin: 0 0 10px }.markdown h1 { font-size: 20px }.markdown h2 { font-size: 17px }.markdown h3 { font-size: 15px }
-.markdown ul, .markdown ol { padding-left: 20px }.markdown blockquote { margin: 10px 0; padding-left: 10px; border-left: 2px solid var(--accent); color: var(--text-2) }
+.markdown ul, .markdown ol { padding-left: 20px }.markdown blockquote { margin: 10px 0; padding-left: 10px; border-left: 1px solid var(--accent); color: var(--text-2) }
 .markdown table { width: 100%; border-collapse: collapse }.markdown th, .markdown td { border: 1px solid var(--line); padding: 6px 8px; text-align: left }
 .markdown :not(pre) > code { padding: 2px 5px; border-radius: 4px; background: var(--glass-soft); color: var(--accent) }
 .codeBlock summary { justify-content: space-between }.codeBlock summary button { border: 0; background: transparent; color: var(--text-3); display: grid; place-items: center; cursor: pointer }
@@ -70,3 +70,6 @@
 .ctxMeter { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-3); white-space: nowrap; padding-left: 10px; border-left: 1px solid var(--line) }
 .ctxMeter .ctxBar { width: 70px; height: 6px; border-radius: 4px; background: var(--line); overflow: hidden; display: inline-block }
 .ctxMeter .ctxBar > span { display: block; height: 100%; border-radius: 4px; transition: width .3s ease, background .3s ease }
+
+.toolbar select { max-width:100% }.toolGroup { min-width:0; max-width:100%; flex-wrap:wrap }.toolGroup > select { flex:1 1 140px }.composer { padding:14px 18px }.composeRow textarea { min-height:52px }.chat { box-shadow:none }.messages { padding:24px }.empty p { color:var(--text);font-size:22px;font-weight:650;margin:18px 0 8px }.empty small { font-size:13px }.empty svg { color:var(--accent) }
+@media(max-width:680px) { .toolbar { padding:10px;gap:10px }.toolGroup { border-right:0;padding-right:0;flex:1 1 100%;gap:8px }.toolbar select { min-width:0;flex:1 1 100px;max-width:100% }.messages { padding:14px }.composer { padding:12px }.composeRow { grid-template-columns:auto minmax(0,1fr);gap:8px }.composeRow textarea { min-height:72px }.composeRow > button:last-child { grid-column:2;justify-self:end }.genStats { white-space:normal }.actions { flex-wrap:wrap } }

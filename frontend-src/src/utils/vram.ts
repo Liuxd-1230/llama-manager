@@ -52,7 +52,8 @@ export interface VramInput {
   kvCacheQuant: string
   nCpuMoe?: number
   kvmem: { budget: number; gen_reserve: number; kv_dtype: string; host_kv_mib?: number }
-  ninfer: { kv_capacity: number; prefill_chunk: number; cuda_graph: boolean; host_kv_mib: number }
+  ninfer: { budget: number; gen_reserve: number; prefill_chunk: number; cuda_graph: boolean; host_kv_mib: number }
+
   geom?: ModelGeom
 }
 
@@ -100,10 +101,10 @@ export function estimateUsage(input: VramInput): UsageEstimate {
     parts.push({ label: '缓冲(实测)', gb: Math.max(0, KVMEM_BASE_GB - gpuWeights) })
     ramParts.push({ label: '运行时', gb: 0.6 })
   } else if (input.engine === 'ninfer') {
-    if (input.ninfer.kv_capacity > 0) kvTokens('KV 池', input.ninfer.kv_capacity)
+    kvTokens('KV(预算+预留)', input.ninfer.budget + input.ninfer.gen_reserve)
     parts.push({ label: '工作区', gb: input.ninfer.prefill_chunk > 0 ? Math.max(0.15, 0.436 * (input.ninfer.prefill_chunk / 256)) : 0.44 })
     if (input.ninfer.cuda_graph) parts.push({ label: 'CUDA Graphs', gb: 0.853 })
-    ramParts.push({ label: '主机 KV 池(钉住)', gb: input.ninfer.host_kv_mib / 1024 })
+    ramParts.push({ label: '主机 KV 预算(钉住)', gb: input.ninfer.host_kv_mib / 1024 })
     ramParts.push({ label: '运行时+状态', gb: 1.2 })
   } else {
     kvTokens(`KV(全量 ${Math.round(input.ctxSize / 1024)}K)`, input.ctxSize)
@@ -129,7 +130,7 @@ export function estimateFromConfig(config: AppConfig, modelSizeMb = 0, geom?: Mo
     kvCacheQuant: config.basic.kv_cache_quant_k || config.basic.kv_cache_quant_v || 'q8_0',
     nCpuMoe: config.engine === 'llama.cpp' ? config.basic.n_cpu_moe : 0,
     kvmem: { budget: config.kvmem.budget, gen_reserve: config.kvmem.gen_reserve, kv_dtype: config.kvmem.kv_dtype },
-    ninfer: { kv_capacity: config.ninfer.kv_capacity, prefill_chunk: config.ninfer.prefill_chunk, cuda_graph: config.ninfer.cuda_graph, host_kv_mib: config.ninfer.host_kv_mib },
+    ninfer: { budget: config.ninfer.budget, gen_reserve: config.ninfer.gen_reserve, prefill_chunk: config.ninfer.prefill_chunk, cuda_graph: config.ninfer.cuda_graph, host_kv_mib: config.ninfer.host_kv_mib },
     geom,
   })
 }

@@ -27,30 +27,28 @@ export function applyLaunchCommand(base: AppConfig, text: string): CommandImport
   const unknown: string[] = []
   const warnings: string[] = []
 
-  // .bat launchers: pull NINFER_* env assignments out of `set "VAR=value"`
-  // lines, then strip bat boilerplate (^ continuations, REM/@echo/set/pause).
-  let batEnv: Record<string, string> = {}
-  let clean = text
-  if (/NINFER_[A-Z0-9_]+\s*=/.test(text)) {
-    batEnv = Object.fromEntries(
-      [...text.matchAll(/NINFER_([A-Z0-9_]+)\s*=\s*"?([^"\r\n]*)"?"?/g)].map(match => [match[1], match[2].trim()])
-    )
-    clean = text
-      .split(/\r?\n/)
-      .filter(line => !/^\s*(@|rem\b|::|set|if\b|not\b|pause|echo)/i.test(line.trim()))
-      .join(' ')
-  }
-  clean = clean.replace(/\^\s*\r?\n?/g, ' ')
+  // .bat launchers: drop the boilerplate lines and join the ^-continuations so
+  // the token parser only ever sees the worker invocation itself.
+  const clean = text
+    .split(/\r?\n/)
+    .filter(line => !/^\s*(@|rem\b|::|set\s|if\b|not\b|pause|echo)/i.test(line.trim()))
+    .join(' ')
+    .replace(/\^\s*/g, ' ')
   const tokens = tokenizeCommand(clean)
 
   const binaryToken = (tokens[0] || '').toLowerCase()
   let engine: AppConfig['engine'] | undefined
-  if (binaryToken.includes('kvmem-server')) engine = 'kvmem'
-  else if (binaryToken.includes('ninfer-serve')) engine = 'ninfer'
+  // The v0.18.0 unified worker is named ninfer-kvmem-server: it carries both
+  // "ninfer" and "kvmem-server", and it is the NInfer engine.
+  if (binaryToken.includes('ninfer-kvmem-server') || binaryToken.includes('ninfer-serve')) engine = 'ninfer'
+  else if (binaryToken.includes('kvmem-server')) engine = 'kvmem'
   else if (binaryToken.includes('llama-server')) engine = 'llama.cpp'
+  // Flag sniffing is only a fallback, and --kvmem-* belongs to both engines,
+  // so the ninfer-only flags are checked first.
+  if (!engine && tokens.some(token => ['--spec', '--max-context', '--no-cuda-graph', '--default-reasoning-effort', '--kvmem-host-mib'].includes(token.toLowerCase()))) engine = 'ninfer'
   if (!engine && tokens.some(token => token.startsWith('--kvmem-'))) engine = 'kvmem'
-  if (!engine && tokens.some(token => ['--spec', '--kv-capacity', '--host-kv-mib', '--max-context', '--no-cuda-graph'].includes(token.toLowerCase()))) engine = 'ninfer'
   if (engine) config.engine = engine
+
   const isKvmem = config.engine === 'kvmem'
   const isNinfer = config.engine === 'ninfer'
 
@@ -58,12 +56,8 @@ export function applyLaunchCommand(base: AppConfig, text: string): CommandImport
   if (isNinfer) {
     const positional = tokens.slice(1).find(token => !token.startsWith('-'))
     if (positional) { config.model_path = positional; applied += 1 }
-    const window = Number(batEnv.KV_WINDOW)
-    if (batEnv.KV_WINDOW && Number.isFinite(window) && window > 0) { config.ninfer.kv_window = window; applied += 1 }
-    const retrieve = Number(batEnv.KV_RETRIEVE)
-    if (batEnv.KV_RETRIEVE && Number.isFinite(retrieve) && retrieve > 0) { config.ninfer.kv_retrieve = retrieve; applied += 1 }
-    if (batEnv.TERNARY_PTQ1_FAST) { config.ninfer.ptq1_fast = batEnv.TERNARY_PTQ1_FAST !== '0'; applied += 1 }
   }
+
 
   const integer = (value: string, flag: string): number | null => {
     const parsed = Number(value)
@@ -128,9 +122,22 @@ export function applyLaunchCommand(base: AppConfig, text: string): CommandImport
       case 'b': case 'batch-size': use(value => { const n = integer(value, flag); if (n !== null) { if (isKvmem) config.kvmem.batch = n; else config.basic.batch_size = n } }); break
       case 'ub': case 'ubatch-size': use(value => { const n = integer(value, flag); if (n !== null) { if (isKvmem) config.kvmem.ubatch = n; else config.basic.ubatch_size = n } }); break
       case 'cache-ram': case 'cram': use(value => { const n = integer(value, flag); if (n !== null) config.basic.cache_ram = n }); break
-      case 'kvmem-budget': use(value => { const n = integer(value, flag); if (n !== null) config.kvmem.budget = n }); break
-      case 'kvmem-gen-reserve': use(value => { const n = integer(value, flag); if (n !== null) config.kvmem.gen_reserve = n }); break
+      case 'kvmem-budget': use(value => { const n = integer(value, flag); if (n !== null) { if (isNinfer) config.ninfer.budget = n; else config.kvmem.budget = n } }); break
+      case 'kvmem-gen-reserve': use(value => { const n = integer(value, flag); if (n !== null) { if (isNinfer) config.ninfer.gen_reserve = n; else config.kvmem.gen_reserve = n } }); break
       case 'kvmem-block-tokens': use(value => { const n = integer(value, flag); if (n !== null) config.kvmem.block_tokens = n }); break
+      // Retrieval: the same --kvmem- vocabulary drives both engines, so each
+      // flag lands on whichever block the detected engine owns.
+      case 'kvmem-sink-tokens': use(value => { const n = integer(value, flag); if (n !== null) { if (isNinfer) config.ninfer.sink_tokens = n; else config.kvmem.sink_tokens = n } }); break
+      case 'kvmem-recent-tokens': use(value => { const n = integer(value, flag); if (n !== null) { if (isNinfer) config.ninfer.recent_tokens = n; else config.kvmem.recent_tokens = n } }); break
+      case 'kvmem-sessions': use(value => { const n = integer(value, flag); if (n !== null) config.ninfer.sessions = Math.min(16, Math.max(1, n)) }); break
+      case 'kvmem-lrfu': config[isNinfer ? 'ninfer' : 'kvmem'].lrfu = true; applied += 1; break
+      case 'kvmem-lrfu-lambda': use(value => { const n = Number(value); if (Number.isFinite(n)) { const block = isNinfer ? config.ninfer : config.kvmem; block.lrfu = true; block.lrfu_lambda = n } }); break
+      case 'kvmem-lrfu-top-frac': use(value => { const n = Number(value); if (Number.isFinite(n)) { const block = isNinfer ? config.ninfer : config.kvmem; block.lrfu = true; block.lrfu_top_frac = n } }); break
+      case 'kvmem-score-agg': use(value => { const mode = value === 'max' ? 'max' : 'mean'; if (isNinfer) config.ninfer.score_agg = mode; else config.kvmem.score_agg = mode }); break
+      case 'kvmem-host-mib': use(value => { const n = integer(value, flag); if (n !== null) config.ninfer.host_kv_mib = Math.max(0, n) }); break
+      case 'kvmem-disk-path': use(value => { config.ninfer.disk_path = value }); break
+      case 'kvmem-disk-mib': use(value => { const n = integer(value, flag); if (n !== null) config.ninfer.disk_mib = Math.max(0, n) }); break
+
       case 'n': {
         if (!isKvmem) {
           // llama.cpp's -n (predict) has no config field — keep it verbatim.
@@ -177,16 +184,20 @@ export function applyLaunchCommand(base: AppConfig, text: string): CommandImport
       case 'enable-thinking': config.basic.enable_thinking = true; if (isKvmem) config.kvmem.enable_thinking = true; applied += 1; break
       // NInfer flags
       case 'max-context': use(value => { const n = integer(value, flag); if (n !== null) config.ninfer.max_context = n }); break
-      case 'kv-capacity': use(value => { const n = integer(value, flag); if (n !== null) config.ninfer.kv_capacity = Math.max(0, n) }); break
-      case 'host-kv-mib': use(value => { const n = integer(value, flag); if (n !== null) config.ninfer.host_kv_mib = Math.max(0, n) }); break
       case 'prefill-chunk': use(value => { const n = integer(value, flag); if (n !== null) config.ninfer.prefill_chunk = Math.max(0, n) }); break
       case 'max-concurrency': use(value => { const n = integer(value, flag); if (n !== null) config.ninfer.max_concurrency = Math.min(8, Math.max(1, n)) }); break
       case 'default-max-tokens': use(value => { const n = integer(value, flag); if (n !== null) config.ninfer.default_max_tokens = Math.max(0, n) }); break
       case 'no-cuda-graph': config.ninfer.cuda_graph = false; applied += 1; break
+      case 'cuda-graph': config.ninfer.cuda_graph = true; applied += 1; break
       case 'spec': use(value => { config.ninfer.spec = ['mtp', 'dflash', 'dflash2'].includes(value) ? value : 'none' }); break
       case 'draft-tokens': use(value => { const n = integer(value, flag); if (n !== null) config.ninfer.draft_tokens = Math.min(15, Math.max(1, n)) }); break
       case 'adaptive-mtp': config.ninfer.adaptive_mtp = true; applied += 1; break
+      case 'ngram-draft-tokens': use(value => { const n = integer(value, flag); if (n !== null) config.ninfer.ngram_draft_tokens = Math.min(63, Math.max(0, n)) }); break
+      case 'ngram-min-match': use(value => { const n = integer(value, flag); if (n !== null) config.ninfer.ngram_min_match = Math.min(64, Math.max(4, n)) }); break
+      case 'fast-prefill-kernel': config.ninfer.fast_prefill = true; applied += 1; break
+      case 'default-thinking-budget': use(value => { const n = integer(value, flag); if (n !== null) config.ninfer.default_thinking_budget = Math.max(0, n) }); break
       case 'model-id': use(value => { config.ninfer.model_id = value }); break
+
       case 'default-reasoning-effort': use(value => {
         if (value === 'none') config.basic.enable_thinking = false
         else { config.basic.enable_thinking = true; config.ninfer.reasoning_effort = value }
