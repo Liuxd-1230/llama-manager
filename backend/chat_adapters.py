@@ -11,6 +11,10 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
+
+from . import provider_manager as providers
+from .models import AppConfig
 
 
 # ── DSML fallback parsing ─────────────────────────────────────
@@ -150,3 +154,274 @@ async def normalize_v2_stream(source, candidate_id: str):
                 yield _v2_event("content_delta", delta=delta.get("content"))
     yield _v2_event("done", candidate_id=candidate_id, finish_reason="stop")
     yield "data: [DONE]\n\n"
+
+
+# ── Request building ──────────────────────────────────────────
+
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+DEFAULT_BASE_URLS = {
+    "deepseek": "https://api.deepseek.com",
+    "openai_chat": "https://api.openai.com/v1",
+    "openai_responses": "https://api.openai.com/v1",
+    "anthropic": "https://api.anthropic.com/v1",
+    "openai_compatible": "",
+}
+
+
+def _chat_completions_url(base_url: str) -> str:
+    base = (base_url or DEEPSEEK_BASE_URL).rstrip("/")
+    if base.endswith("/chat/completions"):
+        return base
+    return f"{base}/chat/completions"
+
+
+def local_base_url(config: AppConfig) -> str:
+    """Loopback URL for the managed llama-server. A client connection to
+    0.0.0.0 is invalid on Windows (WinError 10049), so map it back."""
+    host = config.server.host if config.server.host not in ("", "0.0.0.0") else "127.0.0.1"
+    return f"http://{host}:{config.server.port}"
+
+
+def _provider_api_key(provider: providers.ProviderConfig) -> str:
+    return providers.resolve_api_key(provider)
+
+
+def provider_headers(provider: providers.ProviderConfig) -> dict[str, str]:
+    api_key = _provider_api_key(provider)
+    if not api_key:
+        raise RuntimeError(f"{provider.name} API key is not set")
+    if provider.kind == "anthropic":
+        return {
+            "Content-Type": "application/json",
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+        }
+    return {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+
+
+def _provider_base_url(provider: providers.ProviderConfig) -> str:
+    base = provider.base_url or DEFAULT_BASE_URLS.get(provider.kind, "")
+    if provider.kind == "deepseek" and base.rstrip("/") == "https://api.deepseek.com":
+        return "https://api.deepseek.com"
+    return base.rstrip("/")
+
+
+def provider_models_url(provider: providers.ProviderConfig) -> str:
+    base = _provider_base_url(provider)
+    if not base:
+        raise RuntimeError("Base URL is required")
+    return f"{base}/models"
+
+
+# ── Web tool guidance / missed-search detection ───────────────
+
+def messages_with_web_tool_guidance(messages: list[dict], enabled: bool) -> list[dict]:
+    if not enabled:
+        return messages
+    guidance = (
+        "Web Search is available as the `web_search` tool. For news, latest events, this week, "
+        "current, recent, time-sensitive, uncertain, unknown, or external facts, call `web_search` before answering. "
+        "Use the search result URLs in the final answer when relevant. If you choose not to call "
+        "the tool, answer only when the request does not need current web information. "
+        "Do not write DSML, XML, JSON, or pseudo tool-call tags in the visible answer or reasoning; "
+        "use native tool_calls only."
+    )
+    return [{"role": "system", "content": guidance}, *messages]
+
+
+_MISSED_WEB_SEARCH_PATTERN = re.compile(
+    r"(无法|不能|没法)(联网|连接互联网|访问互联网|浏览网页|获取(最新|实时))"
+    r"|(don't|do not|cannot|can't)\s+(have\s+|be able to\s+)?(access|browse)\s+(the\s+)?(internet|web|online)"
+    r"|beyond my (knowledge )?cutoff|knowledge cutoff",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_missed_web_search(content: str) -> bool:
+    """Only refusal-to-browse intent sentences count; bare nouns like
+    知识库 or real-time appear in perfectly valid answers."""
+    return bool(_MISSED_WEB_SEARCH_PATTERN.search(str(content or "")))
+
+
+def _force_web_search_tool_choice(payload: dict) -> dict:
+    forced = dict(payload)
+    forced["tool_choice"] = {"type": "function", "function": {"name": "web_search"}}
+    return forced
+
+
+def _web_search_tool_schema() -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the public web when current or external information is needed. Return concise source summaries.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query in the user's language."},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 5, "description": "Number of search results."},
+                },
+                "required": ["query"],
+            },
+        },
+    }
+
+
+def _anthropic_web_search_tool_schema() -> dict:
+    fn = _web_search_tool_schema()["function"]
+    return {"name": fn["name"], "description": fn["description"], "input_schema": fn["parameters"]}
+
+
+def _local_chat_payload(data: dict, config: AppConfig, messages: list[dict]) -> dict:
+    sampling = config.sampling
+    web_tool = bool(data.get("web_search_tool") or data.get("web_search") is True)
+    if config.engine == "ninfer":
+        # NInfer accepts the standard OpenAI fields; anything beyond
+        # temperature/top_p is governed server-side (--top-k, --min-p...),
+        # and the thinking toggle maps onto the per-request reasoning effort.
+        # It validates the model id against the loaded artifact, so the field
+        # is only sent when the caller actually picked one — omitting it means
+        # "the loaded model", while "default" would 404.
+        payload = {
+            "messages": messages,
+            "stream": data.get("stream", True),
+            "temperature": sampling.temperature,
+            "top_p": sampling.top_p,
+        }
+        model = data.get("model")
+        if model and model != "default":
+            payload["model"] = model
+        if data.get("thinking_enabled") is not None:
+            # The chat page sends its own effort selector value; honor it when
+            # valid, otherwise fall back to the profile's configured effort.
+            effort = str(data.get("reasoning_effort") or "")
+            if data.get("thinking_enabled"):
+                payload["reasoning_effort"] = effort if effort in {"minimal", "low", "medium", "high", "xhigh", "max"} else config.ninfer.reasoning_effort
+            else:
+                payload["reasoning_effort"] = "none"
+        if web_tool:
+            payload["tools"] = [_web_search_tool_schema()]
+            payload["tool_choice"] = "auto"
+        return payload
+    payload = {
+        "model": data.get("model") or "default",
+        "messages": messages,
+        "stream": data.get("stream", True),
+        "temperature": sampling.temperature,
+        "top_k": sampling.top_k,
+        "top_p": sampling.top_p,
+    }
+    # Explicit per-request override for local engines. Safe to send unconditionally:
+    # --jinja servers honor enable_thinking; servers on the legacy formatting path
+    # (no --jinja) parse and ignore the kwarg.
+    if data.get("thinking_enabled") is not None:
+        payload["chat_template_kwargs"] = {"enable_thinking": bool(data.get("thinking_enabled"))}
+    if sampling.min_p_enabled:
+        payload["min_p"] = sampling.min_p
+    if sampling.repeat_penalty_enabled:
+        payload["repeat_penalty"] = sampling.repeat_penalty
+    if sampling.presence_penalty_enabled:
+        payload["presence_penalty"] = sampling.presence_penalty
+    if web_tool:
+        payload["tools"] = [_web_search_tool_schema()]
+        payload["tool_choice"] = "auto"
+    return payload
+
+
+def _deepseek_chat_payload(data: dict, messages: list[dict]) -> dict:
+    thinking_enabled = bool(data.get("thinking_enabled"))
+    effort = data.get("reasoning_effort") if data.get("reasoning_effort") in {"high", "max"} else "high"
+    payload = {
+        "model": data.get("model") or "deepseek-v4-flash",
+        "messages": messages,
+        "stream": data.get("stream", True),
+        "thinking": {"type": "enabled" if thinking_enabled else "disabled"},
+    }
+    if thinking_enabled:
+        payload["reasoning_effort"] = effort
+    return payload
+
+
+def _external_chat_request(provider: providers.ProviderConfig, data: dict, messages: list[dict]) -> tuple[str, dict]:
+    base = _provider_base_url(provider)
+    model = data.get("model") or provider.default_model
+    web_tool = bool(data.get("web_search_tool") or data.get("web_search") is True)
+    if provider.kind == "openai_responses":
+        payload = {
+            "model": model,
+            "input": [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in messages],
+            "stream": data.get("stream", True),
+        }
+        if web_tool:
+            payload["tools"] = [{
+                "type": "function",
+                "name": "web_search",
+                "description": _web_search_tool_schema()["function"]["description"],
+                "parameters": _web_search_tool_schema()["function"]["parameters"],
+            }]
+        return f"{base}/responses", payload
+    if provider.kind == "anthropic":
+        system = "\n\n".join(m.get("content", "") for m in messages if m.get("role") == "system")
+        chat_messages = [
+            {"role": "assistant" if m.get("role") == "assistant" else "user", "content": m.get("content", "")}
+            for m in messages
+            if m.get("role") != "system"
+        ]
+        payload = {
+            "model": model,
+            "messages": chat_messages,
+            "max_tokens": int(data.get("max_tokens") or 4096),
+            "stream": data.get("stream", True),
+        }
+        if system:
+            payload["system"] = system
+        if web_tool:
+            payload["tools"] = [_anthropic_web_search_tool_schema()]
+        return f"{base}/messages", payload
+    if provider.kind == "deepseek":
+        payload = _deepseek_chat_payload(data, messages)
+        if web_tool:
+            payload["tools"] = [_web_search_tool_schema()]
+            payload["tool_choice"] = "auto"
+        return _chat_completions_url(base), payload
+    payload = {
+        "model": model,
+        "messages": messages,
+        "stream": data.get("stream", True),
+    }
+    if web_tool:
+        payload["tools"] = [_web_search_tool_schema()]
+        payload["tool_choice"] = "auto"
+    return _chat_completions_url(base), payload
+
+
+@dataclass
+class ChatRequest:
+    """Protocol-level request for one chat turn: everything the tool loops
+    need to talk to a provider, plus the kind that selects a loop."""
+
+    provider_kind: str
+    target: str
+    headers: dict[str, str]
+    payload: dict
+
+
+def build_chat_request(*, provider_config: providers.ProviderConfig | None = None, config: AppConfig | None = None, data: dict, messages: list[dict]) -> ChatRequest:
+    """Resolve endpoint URL, headers, native payload and provider kind.
+
+    provider_config=None means the managed local engine (llama.cpp / KVMem /
+    NInfer all speak the openai_chat family), which requires `config` to find
+    the server address. Raises RuntimeError when a provider has no usable API
+    key, ValueError when a local request arrives without config."""
+    if provider_config is not None:
+        headers = provider_headers(provider_config)
+        target, payload = _external_chat_request(provider_config, data, messages)
+        kind = provider_config.kind
+    else:
+        if config is None:
+            raise ValueError("config is required for local engine chat requests")
+        target = f"{local_base_url(config)}/v1/chat/completions"
+        headers = {"Content-Type": "application/json"}
+        payload = _local_chat_payload(data, config, messages)
+        kind = "openai_chat"
+    return ChatRequest(provider_kind=kind, target=target, headers=headers, payload=payload)

@@ -30,13 +30,20 @@ from .moss_server import db as moss_db
 from .moss_server.api import router as moss_api_router
 from .moss_server.skills import load_skills as moss_load_skills, router as moss_skills_router
 # Interim bridge while the chat adapter layer migrates into chat_adapters;
-# shrinks to the three-function public interface in later slices.
+# shrinks to the deep interface as slices land.
 from .chat_adapters import (
     _openai_chunk,
+    _force_web_search_tool_choice,
+    _looks_like_missed_web_search,
     _tool_event_chunk,
+    build_chat_request,
+    local_base_url,
+    messages_with_web_tool_guidance,
     normalize_non_stream_response as _normalize_non_stream_response,
     normalize_v2_stream as _normalize_v2_stream,
     parse_dsml_tool_calls as _parse_dsml_tool_calls,
+    provider_headers,
+    provider_models_url,
     strip_dsml_tool_blocks as _strip_dsml_tool_blocks,
 )
 
@@ -85,14 +92,6 @@ async def validation_error(request: Request, exc: ValueError):
 
 
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
-DEEPSEEK_BASE_URL = "https://api.deepseek.com"
-DEFAULT_BASE_URLS = {
-    "deepseek": "https://api.deepseek.com",
-    "openai_chat": "https://api.openai.com/v1",
-    "openai_responses": "https://api.openai.com/v1",
-    "anthropic": "https://api.anthropic.com/v1",
-    "openai_compatible": "",
-}
 
 
 def _remote_api_enabled() -> bool:
@@ -101,53 +100,6 @@ def _remote_api_enabled() -> bool:
 
 def _is_local_host(host: str | None) -> bool:
     return host in {"127.0.0.1", "::1", "localhost", "testclient"} or (host or "").startswith("127.")
-
-
-def _chat_completions_url(base_url: str) -> str:
-    base = (base_url or DEEPSEEK_BASE_URL).rstrip("/")
-    if base.endswith("/chat/completions"):
-        return base
-    return f"{base}/chat/completions"
-
-
-def _local_base_url(config: AppConfig) -> str:
-    """Loopback URL for the managed llama-server. A client connection to
-    0.0.0.0 is invalid on Windows (WinError 10049), so map it back."""
-    host = config.server.host if config.server.host not in ("", "0.0.0.0") else "127.0.0.1"
-    return f"http://{host}:{config.server.port}"
-
-
-def _provider_api_key(provider: providers.ProviderConfig) -> str:
-    return providers.resolve_api_key(provider)
-
-
-def _provider_headers(provider: providers.ProviderConfig) -> dict[str, str]:
-    api_key = _provider_api_key(provider)
-    if not api_key:
-        raise RuntimeError(f"{provider.name} API key is not set")
-    if provider.kind == "anthropic":
-        return {
-            "Content-Type": "application/json",
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-        }
-    return {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
-
-
-def _provider_base_url(provider: providers.ProviderConfig) -> str:
-    base = provider.base_url or DEFAULT_BASE_URLS.get(provider.kind, "")
-    if provider.kind == "deepseek" and base.rstrip("/") == "https://api.deepseek.com":
-        return "https://api.deepseek.com"
-    return base.rstrip("/")
-
-
-def _provider_models_url(provider: providers.ProviderConfig) -> str:
-    base = _provider_base_url(provider)
-    if not base:
-        raise RuntimeError("Base URL is required")
-    if provider.kind == "anthropic":
-        return f"{base}/models"
-    return f"{base}/models"
 
 
 async def _search_web(query: str, limit: int = 4) -> list[dict[str, str]]:
@@ -185,133 +137,6 @@ async def _messages_with_search_context(messages: list[dict], enabled: bool) -> 
     return [{"role": "system", "content": search_text}, *messages]
 
 
-def _messages_with_web_tool_guidance(messages: list[dict], enabled: bool) -> list[dict]:
-    if not enabled:
-        return messages
-    guidance = (
-        "Web Search is available as the `web_search` tool. For news, latest events, this week, "
-        "current, recent, time-sensitive, uncertain, unknown, or external facts, call `web_search` before answering. "
-        "Use the search result URLs in the final answer when relevant. If you choose not to call "
-        "the tool, answer only when the request does not need current web information. "
-        "Do not write DSML, XML, JSON, or pseudo tool-call tags in the visible answer or reasoning; "
-        "use native tool_calls only."
-    )
-    return [{"role": "system", "content": guidance}, *messages]
-
-
-_MISSED_WEB_SEARCH_PATTERN = re.compile(
-    r"(无法|不能|没法)(联网|连接互联网|访问互联网|浏览网页|获取(最新|实时))"
-    r"|(don't|do not|cannot|can't)\s+(have\s+|be able to\s+)?(access|browse)\s+(the\s+)?(internet|web|online)"
-    r"|beyond my (knowledge )?cutoff|knowledge cutoff",
-    re.IGNORECASE,
-)
-
-
-def _looks_like_missed_web_search(content: str) -> bool:
-    """Only refusal-to-browse intent sentences count; bare nouns like
-    知识库 or real-time appear in perfectly valid answers."""
-    return bool(_MISSED_WEB_SEARCH_PATTERN.search(str(content or "")))
-
-
-def _force_web_search_tool_choice(payload: dict) -> dict:
-    forced = dict(payload)
-    forced["tool_choice"] = {"type": "function", "function": {"name": "web_search"}}
-    return forced
-
-
-def _local_chat_payload(data: dict, config: AppConfig, messages: list[dict]) -> dict:
-    sampling = config.sampling
-    web_tool = bool(data.get("web_search_tool") or data.get("web_search") is True)
-    if config.engine == "ninfer":
-        # NInfer accepts the standard OpenAI fields; anything beyond
-        # temperature/top_p is governed server-side (--top-k, --min-p...),
-        # and the thinking toggle maps onto the per-request reasoning effort.
-        # It validates the model id against the loaded artifact, so the field
-        # is only sent when the caller actually picked one — omitting it means
-        # "the loaded model", while "default" would 404.
-        payload = {
-            "messages": messages,
-            "stream": data.get("stream", True),
-            "temperature": sampling.temperature,
-            "top_p": sampling.top_p,
-        }
-        model = data.get("model")
-        if model and model != "default":
-            payload["model"] = model
-        if data.get("thinking_enabled") is not None:
-            # The chat page sends its own effort selector value; honor it when
-            # valid, otherwise fall back to the profile's configured effort.
-            effort = str(data.get("reasoning_effort") or "")
-            if data.get("thinking_enabled"):
-                payload["reasoning_effort"] = effort if effort in {"minimal", "low", "medium", "high", "xhigh", "max"} else config.ninfer.reasoning_effort
-            else:
-                payload["reasoning_effort"] = "none"
-        if web_tool:
-            payload["tools"] = [_web_search_tool_schema()]
-            payload["tool_choice"] = "auto"
-        return payload
-    payload = {
-        "model": data.get("model") or "default",
-        "messages": messages,
-        "stream": data.get("stream", True),
-        "temperature": sampling.temperature,
-        "top_k": sampling.top_k,
-        "top_p": sampling.top_p,
-    }
-    # Explicit per-request override for local engines. Safe to send unconditionally:
-    # --jinja servers honor enable_thinking; servers on the legacy formatting path
-    # (no --jinja) parse and ignore the kwarg.
-    if data.get("thinking_enabled") is not None:
-        payload["chat_template_kwargs"] = {"enable_thinking": bool(data.get("thinking_enabled"))}
-    if sampling.min_p_enabled:
-        payload["min_p"] = sampling.min_p
-    if sampling.repeat_penalty_enabled:
-        payload["repeat_penalty"] = sampling.repeat_penalty
-    if sampling.presence_penalty_enabled:
-        payload["presence_penalty"] = sampling.presence_penalty
-    if web_tool:
-        payload["tools"] = [_web_search_tool_schema()]
-        payload["tool_choice"] = "auto"
-    return payload
-
-
-def _deepseek_chat_payload(data: dict, messages: list[dict]) -> dict:
-    thinking_enabled = bool(data.get("thinking_enabled"))
-    effort = data.get("reasoning_effort") if data.get("reasoning_effort") in {"high", "max"} else "high"
-    payload = {
-        "model": data.get("model") or "deepseek-v4-flash",
-        "messages": messages,
-        "stream": data.get("stream", True),
-        "thinking": {"type": "enabled" if thinking_enabled else "disabled"},
-    }
-    if thinking_enabled:
-        payload["reasoning_effort"] = effort
-    return payload
-
-
-def _web_search_tool_schema() -> dict:
-    return {
-        "type": "function",
-        "function": {
-            "name": "web_search",
-            "description": "Search the public web when current or external information is needed. Return concise source summaries.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Search query in the user's language."},
-                    "limit": {"type": "integer", "minimum": 1, "maximum": 5, "description": "Number of search results."},
-                },
-                "required": ["query"],
-            },
-        },
-    }
-
-
-def _anthropic_web_search_tool_schema() -> dict:
-    fn = _web_search_tool_schema()["function"]
-    return {"name": fn["name"], "description": fn["description"], "input_schema": fn["parameters"]}
-
-
 async def _run_web_search_tool(arguments: dict) -> str:
     query = " ".join(str(arguments.get("query", "")).split())
     limit = int(arguments.get("limit") or 4)
@@ -324,59 +149,6 @@ async def _run_web_search_tool(arguments: dict) -> str:
         if item.get("snippet"):
             lines.append(f"Summary: {item['snippet']}")
     return "\n\n".join(lines)
-
-
-def _external_chat_request(provider: providers.ProviderConfig, data: dict, messages: list[dict]) -> tuple[str, dict]:
-    base = _provider_base_url(provider)
-    model = data.get("model") or provider.default_model
-    web_tool = bool(data.get("web_search_tool") or data.get("web_search") is True)
-    if provider.kind == "openai_responses":
-        payload = {
-            "model": model,
-            "input": [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in messages],
-            "stream": data.get("stream", True),
-        }
-        if web_tool:
-            payload["tools"] = [{
-                "type": "function",
-                "name": "web_search",
-                "description": _web_search_tool_schema()["function"]["description"],
-                "parameters": _web_search_tool_schema()["function"]["parameters"],
-            }]
-        return f"{base}/responses", payload
-    if provider.kind == "anthropic":
-        system = "\n\n".join(m.get("content", "") for m in messages if m.get("role") == "system")
-        chat_messages = [
-            {"role": "assistant" if m.get("role") == "assistant" else "user", "content": m.get("content", "")}
-            for m in messages
-            if m.get("role") != "system"
-        ]
-        payload = {
-            "model": model,
-            "messages": chat_messages,
-            "max_tokens": int(data.get("max_tokens") or 4096),
-            "stream": data.get("stream", True),
-        }
-        if system:
-            payload["system"] = system
-        if web_tool:
-            payload["tools"] = [_anthropic_web_search_tool_schema()]
-        return f"{base}/messages", payload
-    if provider.kind == "deepseek":
-        payload = _deepseek_chat_payload(data, messages)
-        if web_tool:
-            payload["tools"] = [_web_search_tool_schema()]
-            payload["tool_choice"] = "auto"
-        return _chat_completions_url(base), payload
-    payload = {
-        "model": model,
-        "messages": messages,
-        "stream": data.get("stream", True),
-    }
-    if web_tool:
-        payload["tools"] = [_web_search_tool_schema()]
-        payload["tool_choice"] = "auto"
-    return _chat_completions_url(base), payload
 
 
 def _tool_summary(text: str, limit: int = 700) -> str:
@@ -1230,7 +1002,7 @@ async def server_health():
     """Check if llama-server is accepting requests."""
     import httpx
     config = cfg.get_config()
-    url = f"{_local_base_url(config)}/health"
+    url = f"{local_base_url(config)}/health"
     try:
         async with httpx.AsyncClient(timeout=3) as client:
             resp = await client.get(url)
@@ -1381,7 +1153,7 @@ async def chat_proxy(request: Request):
     messages = raw_messages
     use_web_tool = bool(data.get("web_search_tool") or data.get("web_search") is True)
     messages = await _messages_with_search_context(messages, bool(data.get("search_summary")))
-    messages = _messages_with_web_tool_guidance(messages, use_web_tool)
+    messages = messages_with_web_tool_guidance(messages, use_web_tool)
     stream = bool(data.get("stream", True))
     event_format = data.get("event_format") or "legacy"
     conversation_id = str(data.get("conversation_id") or uuid.uuid4().hex)
@@ -1397,20 +1169,14 @@ async def chat_proxy(request: Request):
     if provider_id == "deepseek-api" and not provider_config:
         provider_config = providers.get_provider("deepseek")
 
-    if provider_config:
-        if not provider_config.enabled:
-            return JSONResponse(status_code=409, content={"error": f"Provider is disabled: {provider_config.name}"})
-        try:
-            headers = _provider_headers(provider_config)
-        except RuntimeError as exc:
-            return JSONResponse(status_code=409, content={"error": str(exc)})
-        target, payload = _external_chat_request(provider_config, data, messages)
-        provider_kind = provider_config.kind
-    else:
-        target = f"{_local_base_url(config)}/v1/chat/completions"
-        headers = {"Content-Type": "application/json"}
-        payload = _local_chat_payload(data, config, messages)
-        provider_kind = "openai_chat"
+    if provider_config and not provider_config.enabled:
+        return JSONResponse(status_code=409, content={"error": f"Provider is disabled: {provider_config.name}"})
+    try:
+        chat_request = build_chat_request(provider_config=provider_config, config=config, data=data, messages=messages)
+    except RuntimeError as exc:
+        return JSONResponse(status_code=409, content={"error": str(exc)})
+    provider_kind = chat_request.provider_kind
+    payload = chat_request.payload
 
     model = str(payload.get("model") or data.get("model") or "default")
     latest_user = next((dict(message) for message in reversed(raw_messages) if message.get("role") == "user"), None)
@@ -1457,11 +1223,11 @@ async def chat_proxy(request: Request):
 
     if stream:
         if provider_kind in {"deepseek", "openai_chat", "openai_compatible"}:
-            source = _stream_chat_with_tools(target, headers, payload, on_complete=save_context)
+            source = _stream_chat_with_tools(chat_request.target, chat_request.headers, payload, on_complete=save_context)
         elif provider_kind == "anthropic":
-            source = _stream_anthropic_with_tools(target, headers, payload, on_complete=save_context)
+            source = _stream_anthropic_with_tools(chat_request.target, chat_request.headers, payload, on_complete=save_context)
         else:
-            source = _stream_responses_with_tools(target, headers, payload, on_complete=save_context)
+            source = _stream_responses_with_tools(chat_request.target, chat_request.headers, payload, on_complete=save_context)
         if event_format == "v2":
             source = _normalize_v2_stream(source, candidate_id)
         return StreamingResponse(source, media_type="text/event-stream")
@@ -1469,14 +1235,14 @@ async def chat_proxy(request: Request):
     if use_web_tool:
         try:
             if provider_kind in {"deepseek", "openai_chat", "openai_compatible"}:
-                payload = await _complete_with_chat_tools(target, headers, payload)
+                payload = await _complete_with_chat_tools(chat_request.target, chat_request.headers, payload)
             elif provider_kind == "anthropic":
-                raw_payload = await _complete_with_anthropic_tools(target, headers, payload)
+                raw_payload = await _complete_with_anthropic_tools(chat_request.target, chat_request.headers, payload)
                 state = raw_payload.pop("_context_state", {})
                 payload = _normalize_non_stream_response(provider_kind, raw_payload)
                 payload["_context_state"] = state
             else:
-                raw_payload = await _complete_with_responses_tools(target, headers, payload)
+                raw_payload = await _complete_with_responses_tools(chat_request.target, chat_request.headers, payload)
                 state = raw_payload.pop("_context_state", {})
                 payload = _normalize_non_stream_response(provider_kind, raw_payload)
                 payload["_context_state"] = state
@@ -1484,7 +1250,7 @@ async def chat_proxy(request: Request):
             return JSONResponse(status_code=400, content={"error": str(exc)})
     else:
         async with httpx.AsyncClient(timeout=300) as client:
-            resp = await client.post(target, content=body, headers=headers)
+            resp = await client.post(chat_request.target, content=body, headers=chat_request.headers)
         if resp.status_code >= 400:
             return JSONResponse(status_code=resp.status_code, content={"error": resp.text})
         raw_payload = resp.json()
@@ -1535,7 +1301,7 @@ async def list_models(provider: str = "local"):
     if provider_config:
         return {"data": [{"id": model} for model in provider_config.models]}
     config = cfg.get_config()
-    target = f"{_local_base_url(config)}/v1/models"
+    target = f"{local_base_url(config)}/v1/models"
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(target)
@@ -1584,8 +1350,8 @@ async def fetch_provider_models(provider_id: str):
     if not provider:
         return JSONResponse(status_code=404, content={"error": "Provider not found"})
     try:
-        headers = _provider_headers(provider)
-        target = _provider_models_url(provider)
+        headers = provider_headers(provider)
+        target = provider_models_url(provider)
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(target, headers=headers)
         if resp.status_code >= 400:
