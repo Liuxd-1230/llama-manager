@@ -61,3 +61,17 @@ Config round-trip: UI form → `cfgFromUI()` → POST `/api/config` → `config_
 - Config names are sanitized to prevent path traversal (strips special characters).
 - Process management targets Windows (`taskkill`, drive letter enumeration). Not cross-platform.
 - The chat proxy at `/api/chat` forwards to llama-server's OpenAI-compatible `/v1/chat/completions` endpoint, supporting both streaming and non-streaming.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked on GitHub (`Liuxd-1230/llama-manager`) via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default label vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.
