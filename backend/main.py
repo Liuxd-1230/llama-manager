@@ -28,32 +28,16 @@ from .routers.conversations import router as conversations_router
 from .moss_server import db as moss_db
 from .moss_server.api import router as moss_api_router
 from .moss_server.skills import load_skills as moss_load_skills, router as moss_skills_router
-# Interim bridge while the chat adapter layer migrates into chat_adapters;
-# shrinks to the deep interface as slices land.
+# Chat protocol knowledge lives in chat_adapters; the route orchestrates.
 from .chat_adapters import (
-    _complete_with_anthropic_tools,
-    _complete_with_chat_tools,
-    _complete_with_responses_tools,
-    _execute_chat_tool_calls,
-    _force_web_search_tool_choice,
-    _looks_like_missed_web_search,
-    _merge_tool_call_delta,
-    _openai_chunk,
-    _run_web_search_tool,
-    _stream_anthropic_with_tools,
-    _stream_chat_with_tools,
-    _stream_responses_with_tools,
-    _tool_event_chunk,
-    _tool_summary,
+    UpstreamError,
     build_chat_request,
+    complete_chat_completion,
     local_base_url,
     messages_with_web_tool_guidance,
-    normalize_non_stream_response as _normalize_non_stream_response,
-    normalize_v2_stream as _normalize_v2_stream,
-    parse_dsml_tool_calls as _parse_dsml_tool_calls,
     provider_headers,
     provider_models_url,
-    strip_dsml_tool_blocks as _strip_dsml_tool_blocks,
+    stream_chat_completion,
 )
 
 
@@ -622,7 +606,6 @@ async def chat_proxy(request: Request):
         chat_request = build_chat_request(provider_config=provider_config, config=config, data=data, messages=messages)
     except RuntimeError as exc:
         return JSONResponse(status_code=409, content={"error": str(exc)})
-    provider_kind = chat_request.provider_kind
     payload = chat_request.payload
 
     model = str(payload.get("model") or data.get("model") or "default")
@@ -664,74 +647,25 @@ async def chat_proxy(request: Request):
         )
 
     try:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        # Reject unserializable payloads eagerly so the tools path and the
+        # no-tools path fail with the same 400 contract.
+        json.dumps(payload, ensure_ascii=False)
     except TypeError as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
 
     if stream:
-        if provider_kind in {"deepseek", "openai_chat", "openai_compatible"}:
-            source = _stream_chat_with_tools(chat_request.target, chat_request.headers, payload, on_complete=save_context)
-        elif provider_kind == "anthropic":
-            source = _stream_anthropic_with_tools(chat_request.target, chat_request.headers, payload, on_complete=save_context)
-        else:
-            source = _stream_responses_with_tools(chat_request.target, chat_request.headers, payload, on_complete=save_context)
-        if event_format == "v2":
-            source = _normalize_v2_stream(source, candidate_id)
+        source = stream_chat_completion(chat_request, candidate_id=candidate_id, event_format=event_format, on_context=save_context)
         return StreamingResponse(source, media_type="text/event-stream")
 
-    if use_web_tool:
-        try:
-            if provider_kind in {"deepseek", "openai_chat", "openai_compatible"}:
-                payload = await _complete_with_chat_tools(chat_request.target, chat_request.headers, payload)
-            elif provider_kind == "anthropic":
-                raw_payload = await _complete_with_anthropic_tools(chat_request.target, chat_request.headers, payload)
-                state = raw_payload.pop("_context_state", {})
-                payload = _normalize_non_stream_response(provider_kind, raw_payload)
-                payload["_context_state"] = state
-            else:
-                raw_payload = await _complete_with_responses_tools(chat_request.target, chat_request.headers, payload)
-                state = raw_payload.pop("_context_state", {})
-                payload = _normalize_non_stream_response(provider_kind, raw_payload)
-                payload["_context_state"] = state
-        except Exception as exc:
-            return JSONResponse(status_code=400, content={"error": str(exc)})
-    else:
-        async with httpx.AsyncClient(timeout=300) as client:
-            resp = await client.post(chat_request.target, content=body, headers=chat_request.headers)
-        if resp.status_code >= 400:
-            return JSONResponse(status_code=resp.status_code, content={"error": resp.text})
-        raw_payload = resp.json()
-        if provider_kind in {"deepseek", "openai_chat", "openai_compatible"}:
-            payload = raw_payload
-            message = payload.get("choices", [{}])[0].get("message", {})
-            state = {"kind": "chat_messages", "messages": [*payload.get("messages", []), message]}
-            # The request payload, not the provider response, owns the prior messages.
-            state["messages"] = [*json.loads(body.decode("utf-8")).get("messages", []), message]
-        elif provider_kind == "anthropic":
-            payload = _normalize_non_stream_response(provider_kind, raw_payload)
-            state = {
-                "kind": "anthropic_messages",
-                "messages": [*json.loads(body.decode("utf-8")).get("messages", []), {"role": "assistant", "content": raw_payload.get("content", [])}],
-            }
-        else:
-            payload = _normalize_non_stream_response(provider_kind, raw_payload)
-            state = {"kind": "responses", "previous_response_id": raw_payload.get("id")}
-        payload["_context_state"] = state
-
-    context_state = payload.pop("_context_state", {})
-    if context_state:
-        save_context(context_state)
-    message = payload.get("choices", [{}])[0].get("message", {})
+    try:
+        result = await complete_chat_completion(chat_request, candidate_id=candidate_id, event_format=event_format, on_context=save_context)
+    except UpstreamError as exc:
+        return JSONResponse(status_code=exc.status_code, content={"error": exc.text})
+    except Exception as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
     if event_format == "v2":
-        return {
-            "candidate_id": candidate_id,
-            "content": message.get("content") or "",
-            "reasoning": message.get("reasoning_content") or "",
-            "tool_events": payload.get("tool_events") or [],
-            "finish_reason": payload.get("choices", [{}])[0].get("finish_reason") or "stop",
-        }
-    payload["candidate_id"] = candidate_id
-    return JSONResponse(content=payload)
+        return result
+    return JSONResponse(content=result)
 
 
 @app.delete("/api/chat/conversations/{conversation_id}")
