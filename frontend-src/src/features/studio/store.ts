@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { useStoreWithEqualityFn } from "zustand/traditional";
-import { api, desktopApi, putKeepalive, runAgent, type AgentEvent } from "./api";
+import { api, putKeepalive, runAgent, type AgentEvent } from "./api";
 import {
   alignGroupDepth, bodyOf, bringIntoView, cameraMoved, clampCamera, compileView, dragInView, estimateBodies, itemFromView, moveTargets, projectLayout, rebaseCamera,
   type CamHold, type MoveResult, type MoveScope,
@@ -168,19 +168,6 @@ export const useStore = create<State>(() => ({
 
 const set = useStore.setState;
 const get = useStore.getState;
-
-// 把“有没有未保存的改动”同步给桌面壳：没有时关窗口直接退出，不再等网页回应
-let lastDirty: boolean | null = null;
-function syncDirty(force = false) {
-  const dirty = get().saveState !== "saved";
-  if (!force && dirty === lastDirty) return;
-  const d = desktopApi();
-  if (!d?.set_dirty) return;
-  lastDirty = dirty;
-  void d.set_dirty(dirty).catch(() => { lastDirty = null; });
-}
-useStore.subscribe((st, prev) => { if (st.saveState !== prev.saveState) syncDirty(); });
-if (typeof window !== "undefined") window.addEventListener("pywebviewready", () => syncDirty(true));
 
 /**
  * 编辑区组件用：订阅整个状态，但忽略 Agent 流式输出、提示条、排队这些高频字段。

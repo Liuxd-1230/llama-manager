@@ -6,7 +6,7 @@ import {
   Box, ClipboardCopy, Download, Eye, EyeOff, FilePlus2, ImageUp, Loader2, Plus, RefreshCw, Sparkles, Trash2, Type, Upload, User,
 } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { api, desktopApi } from "../api";
+import { api } from "../api";
 import { BOX_COLORS, clone, snap16 } from "../lib/doc";
 import { normalizeLayout } from "../lib/doc";
 import { addPage, replaceCurrentDoc, setUi, toast, useStore } from "../store";
@@ -262,12 +262,6 @@ async function exportAnnotated(img: Prepared, items: RevItem[], showLabels: bool
   });
   const dataUrl = c.toDataURL("image/png");
   const filename = `${img.name}-标注.png`;
-  const d = desktopApi();
-  if (d?.save_png) {
-    const path = await d.save_png(filename, dataUrl);
-    if (path) toast("已保存标注图：" + path, "ok");
-    return;
-  }
   const a = document.createElement("a");
   a.href = dataUrl;
   a.download = filename;

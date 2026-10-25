@@ -7,7 +7,7 @@ import {
   LocateFixed, Magnet, Maximize2, Minimize2, Move, Move3d, Redo2, Rotate3d, RotateCcw, ScanSearch, Square, Undo2, Wand2, X,
 } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { desktopApi } from "../api";
+
 import {
   CAMERA_LIMITS, CAMERA_PRESETS, CUBE_FACES, autoFrame, bodyOf, cameraMoved, cameraPhraseZh, clampCamera, dragInView, dragOnPlan, equivFocal, faceNormal,
   framingZoom, measureItems, moveTargets, planView, projectLayout, sceneData, solveFraming, subjectItem, wrapDeg, type AutoFrameMode, type FrameGoal,
@@ -383,12 +383,8 @@ export function DirectorView() {
   };
 
   const toggleWindowFs = async () => {
-    const d = desktopApi();
     try {
-      if (d?.toggle_fullscreen) {
-        await d.toggle_fullscreen();
-        setFs((v) => !v);
-      } else if (document.fullscreenElement) {
+      if (document.fullscreenElement) {
         await document.exitFullscreen();
         setFs(false);
       } else {

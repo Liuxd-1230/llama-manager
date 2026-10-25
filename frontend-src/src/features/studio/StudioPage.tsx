@@ -138,12 +138,6 @@ function useShortcuts() {
     window.addEventListener("beforeunload", onExit);
     window.addEventListener("pagehide", onExit);
     document.addEventListener("visibilitychange", onHide);
-    // 桌面壳关闭窗口前会调用它，等待保存完成
-    (window as any).__mossFlush = () => {
-      (window as any).__mossSaved = false;
-      flushSave().finally(() => { (window as any).__mossSaved = true; });
-      return true;
-    };
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("beforeunload", onExit);

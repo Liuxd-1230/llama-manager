@@ -1,9 +1,9 @@
 import {
-  Archive, ArrowDown, ArrowUp, Bot, Check, Copy, FilePlus2, FolderOpen, History, ImageUp, KeyRound, Loader2, Plug,
+  Archive, ArrowDown, ArrowUp, Bot, Check, Copy, FilePlus2, History, ImageUp, KeyRound, Loader2, Plug,
   Plus, RotateCcw, Search, Settings, Sparkles, Trash2, Upload, User, X, Zap,
 } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
-import { api, desktopApi } from "../api";
+import { api } from "../api";
 import { ReverseModal } from "./ReverseModal";
 import { confirmDialog, promptDialog } from "../dialog";
 import { boxColor, clone, emptyDoc, normalizeDoc, normalizeLayout, snap16 } from "../lib/doc";
@@ -46,11 +46,8 @@ function SettingsModal() {
   const [models, setModels] = useState<string[]>([]);
   const [test, setTest] = useState<{ ok: boolean; message: string; stream_ok?: boolean; tools_ok?: boolean } | null>(null);
   const [busy, setBusy] = useState("");
-  const [dataDir, setDataDir] = useState("");
   useEffect(() => {
     void api.settings().then(setS);
-    const d = desktopApi();
-    if (d?.data_dir) void d.data_dir().then(setDataDir).catch(() => undefined);
   }, []);
   if (!s) return null;
   const up = (p: Partial<AppSettings>) => setS({ ...s, ...p });
@@ -76,7 +73,6 @@ function SettingsModal() {
   return (
     <Modal title="设置" icon={<Settings size={16} />} onClose={() => setUi({ modal: null })}
       foot={<>
-        {dataDir && <button type="button" className="btn btn-sm btn-ghost" onClick={() => void desktopApi()?.open_data_dir()} title={dataDir}><FolderOpen size={13} />数据目录</button>}
         <div className="spacer" />
         <button type="button" className="btn" onClick={() => setUi({ modal: null })}>取消</button>
         <button type="button" className="btn btn-primary" disabled={!!busy} onClick={() => void save()}>{busy === "save" && <Loader2 size={13} className="spin" />}保存</button>

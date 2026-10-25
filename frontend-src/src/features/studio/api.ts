@@ -1,15 +1,8 @@
+import { ApiError } from "../../api";
 import type {
   AppSettings, ArchiveItem, Attachment, CompileResult, Doc, Message, Page, Revision, Series, Session,
   Skill, SkillKind, SkillsState,
 } from "./types";
-
-export class ApiError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
 
 async function parseError(r: Response, path: string): Promise<ApiError> {
   let msg = `${r.status} ${r.statusText}`;
@@ -19,7 +12,7 @@ async function parseError(r: Response, path: string): Promise<ApiError> {
   } catch {
     /* ignore */
   }
-  return new ApiError(r.status, `${msg} @ ${path}`);
+  return new ApiError(`${msg} @ ${path}`, r.status);
 }
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -179,10 +172,4 @@ export async function runAgent(sid: string, body: RunBody, onEvent: (e: AgentEve
       }
     }
   }
-}
-
-// 桌面壳（pywebview）提供的原生能力；浏览器里不存在
-export function desktopApi(): Record<string, (...a: any[]) => Promise<any>> | null {
-  const w = window as any;
-  return w.pywebview?.api ?? null;
 }
