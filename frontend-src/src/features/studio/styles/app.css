@@ -127,7 +127,7 @@
 .page-tab.on {
   color: var(--ink);
   font-weight: 600;
-  background: linear-gradient(#fdfcfa, #f3f0ea);
+  background: var(--panel);
   box-shadow: var(--sh-key), 0 0 0 1px rgba(64, 52, 40, 0.12);
 }
 .page-tab.on svg {
@@ -381,7 +381,7 @@ fieldset.insp:disabled {
   position: relative;
   height: 14px;
   border-radius: 7px;
-  background: #ebe7e0;
+  background: var(--panel-2);
   box-shadow: inset 0 1px 2px rgba(64, 48, 30, 0.2), 0 1px 0 rgba(255, 255, 255, 0.8);
   cursor: ew-resize;
   touch-action: none;
@@ -411,7 +411,7 @@ fieldset.insp:disabled {
   height: 16px;
   margin: -8px 0 0 -6px;
   border-radius: 4px;
-  background: linear-gradient(#ffffff, #eeeae3);
+  background: var(--panel);
   box-shadow: 0 1px 2px rgba(40, 30, 20, 0.35), 0 0 0 0.5px rgba(40, 30, 20, 0.25), 0 1px 0 rgba(255, 255, 255, 1) inset;
   pointer-events: none;
 }
@@ -499,7 +499,7 @@ fieldset.insp:disabled {
   min-height: 0;
   border-radius: var(--r-l);
   background:
-    radial-gradient(circle at 1px 1px, rgba(64, 52, 40, 0.13) 1px, transparent 1.3px) 0 0 / 18px 18px,
+    radial-gradient(circle at 1px 1px, rgba(235, 225, 205, 0.10) 1px, transparent 1.3px) 0 0 / 18px 18px,
     linear-gradient(#d9d4cb, #dcd7ce);
   box-shadow: inset 0 2px 6px rgba(64, 48, 30, 0.18), inset 0 0 0 1px rgba(64, 52, 40, 0.1), 0 1px 0 rgba(255, 255, 255, 0.7);
   overflow: auto;
@@ -1042,7 +1042,7 @@ fieldset.insp:disabled {
   background: rgba(64, 52, 40, 0.06);
 }
 .session-tab.on {
-  background: linear-gradient(#fefdfb, #f3f0ea);
+  background: var(--panel);
   color: var(--ink);
   font-weight: 600;
   box-shadow: var(--sh-key), 0 0 0 1px rgba(64, 52, 40, 0.11);
@@ -1565,7 +1565,7 @@ fieldset.insp:disabled {
   border: 0;
   padding: 7px 9px;
   border-radius: 8px;
-  background: linear-gradient(#fefdfb, #f4f1eb);
+  background: var(--panel);
   box-shadow: var(--sh-key), 0 0 0 1px rgba(64, 52, 40, 0.12);
   font-size: 12.5px;
   cursor: pointer;
@@ -1652,7 +1652,7 @@ fieldset.insp:disabled {
   flex: none;
   font-size: 11.5px;
   color: var(--ink-2);
-  background: linear-gradient(#fefdfb, #f2efe9);
+  background: var(--panel);
   box-shadow: var(--sh-key), 0 0 0 1px rgba(64, 52, 40, 0.12);
   cursor: pointer;
 }
@@ -2867,15 +2867,15 @@ fieldset.insp:disabled {
 /* ---------- 交给 Agent 补全 ---------- */
 .btn-agent {
   color: var(--accent-ink);
-  background: linear-gradient(#f3f6fe, #e6edfc);
+  background: var(--accent);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 1px 2px rgba(28, 58, 140, 0.12);
 }
 .btn-agent:hover {
-  background: linear-gradient(#f7f9ff, #dfe8fc);
+  background: var(--accent-2);
   color: var(--accent-2);
 }
 .btn-agent:active {
-  background: linear-gradient(#dbe4fa, #e8eefc);
+  background: var(--accent-2);
   box-shadow: inset 0 1px 2.5px color-mix(in srgb, var(--accent) 25%, transparent), 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .assist-split {
@@ -2960,7 +2960,7 @@ fieldset.insp:disabled {
   margin-bottom: 8px;
   color: var(--accent-ink);
   font-weight: 600;
-  background: linear-gradient(#f5f8ff, #eaf0fd);
+  background: var(--accent-soft);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 1px 2px rgba(28, 58, 140, 0.1);
 }
 
