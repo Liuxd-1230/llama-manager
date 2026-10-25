@@ -70,6 +70,9 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false, 
   useEffect(() => { setThinking(defaultThinking) }, [defaultThinking])
   const provider = providers.find(item => item.id === providerId)
   const models = useMemo(() => providerId === 'local' ? [] : [...new Set([provider?.default_model, ...(provider?.models || [])].filter(Boolean) as string[])], [provider, providerId])
+  // Clearing on switch closes the window where a stale model from the previous
+  // provider could be sent before the sync effect lands.
+  const switchProvider = (id: string) => { setProviderId(id); setModel('') }
   useEffect(() => {
     if (providerId !== 'local') { setModel(models.includes(model) ? model : (provider?.default_model || models[0] || '')); return }
     api<{ data?: Array<{ id: string }> }>('/api/chat/models').then(result => { const ids = (result.data || []).map(item => item.id); setModel(current => ids.includes(current) ? current : (ids[0] || 'default')) }).catch(() => setModel('default'))
@@ -298,7 +301,7 @@ export function ChatPage({ toast, providerRefresh = 0, defaultThinking = false, 
           <ChevronDown size={14} className={styles.capsuleChevron}/>
         </button>
         {panelOpen && <div className={styles.modelPanel} role="dialog" aria-label="模型与推理设置">
-          <label className={styles.panelField}><span>模型厂商</span><Select aria-label="模型厂商" value={providerId} onChange={event => setProviderId(event.target.value)}>{providers.map(item => <option key={item.id} value={item.id}>{item.name}{item.api_key_set === false ? ' · 未配置' : ''}</option>)}</Select></label>
+          <label className={styles.panelField}><span>模型厂商</span><Select aria-label="模型厂商" value={providerId} onChange={event => switchProvider(event.target.value)}>{providers.map(item => <option key={item.id} value={item.id}>{item.name}{item.api_key_set === false ? ' · 未配置' : ''}</option>)}</Select></label>
           <label className={styles.panelField}><span>对话模型</span><Select aria-label="对话模型" value={model} onChange={event => setModel(event.target.value)}>{(models.length ? models : [model || 'default']).map(item => <option key={item}>{item}</option>)}</Select></label>
           <label className={styles.panelField}><span>推理强度</span><Select aria-label="推理强度" value={effort} disabled={!canThink} onChange={event => setEffort(event.target.value)}>{effortOptions.map(value => <option key={value} value={value}>{value === 'none' ? 'Off' : value[0].toUpperCase() + value.slice(1)}</option>)}</Select></label>
         </div>}

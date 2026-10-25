@@ -57,9 +57,11 @@ export function RunPage({ config, toast }: { config: AppConfig; toast: (text: st
     // The POST just made the server state match this buffer — refresh the
     // cache so the topbar dirty badge does not linger as a false positive.
     await queryClient.invalidateQueries({ queryKey: ['config'] })
-    await api('/api/server/start', { method: 'POST' }); toast('服务器正在启动'); await refresh()
+    try {
+      await api('/api/server/start', { method: 'POST' }); toast('服务器正在启动'); await refresh()
+    } catch (reason) { toast(`启动失败：${reason instanceof Error ? reason.message : String(reason)}`); await refresh() }
   }
-  const stop = async () => { await api('/api/server/stop', { method: 'POST' }); toast('服务器已停止'); await refresh() }
+  const stop = async () => { try { await api('/api/server/stop', { method: 'POST' }); toast('服务器已停止'); await refresh() } catch (reason) { toast(`停止失败：${reason instanceof Error ? reason.message : String(reason)}`) } }
   const clear = async () => { await api('/api/server/logs/clear', { method: 'POST' }); setLogs([]) }
 
   return <div className={styles.shell}>
