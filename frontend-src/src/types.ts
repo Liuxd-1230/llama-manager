@@ -107,7 +107,7 @@ export interface AppConfig {
 export interface Provider {
   id: string
   name: string
-  kind: 'local' | 'openai_chat' | 'openai_responses' | 'anthropic' | 'openai_compatible'
+  kind: 'local' | 'openai_chat' | 'openai_responses' | 'anthropic'
   engine?: string
   base_url?: string
   default_model?: string

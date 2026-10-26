@@ -10,12 +10,11 @@ import { Button, ConfirmButton, Field, Input, Select, Switch } from './ui'
 import styles from './SettingsDrawer.module.css'
 
 type Tab = 'providers' | 'search' | 'appearance' | 'studio'
-const KIND_ZH: Record<string, string> = { openai_chat: 'OpenAI Chat', openai_responses: 'OpenAI Responses', anthropic: 'Anthropic 官方', openai_compatible: 'OpenAI 兼容' }
+const KIND_ZH: Record<string, string> = { openai_chat: 'OpenAI Chat', openai_responses: 'OpenAI Responses', anthropic: 'Anthropic 官方' }
 const defaults: Record<string, Partial<Provider>> = {
   openai_chat: { name: 'OpenAI Chat', base_url: 'https://api.openai.com/v1', default_model: 'gpt-4.1-mini' },
   openai_responses: { name: 'OpenAI Responses', base_url: 'https://api.openai.com/v1', default_model: 'gpt-4.1-mini' },
   anthropic: { name: 'Anthropic', base_url: 'https://api.anthropic.com/v1', default_model: 'claude-sonnet-4-5' },
-  openai_compatible: { name: '兼容 API', base_url: '', default_model: '' },
 }
 
 export function SettingsDrawer({ open, onClose, tab, onTabChange, theme, setTheme, accent, setAccent, onProvidersChanged, toast }: { open: boolean; onClose: () => void; tab: Tab; onTabChange: (tab: Tab) => void; theme: Theme; setTheme: (theme: Theme) => void; accent: Accent; setAccent: (accent: Accent) => void; onProvidersChanged: () => void; toast: (text: string) => void }) {
@@ -64,7 +63,7 @@ export function SettingsDrawer({ open, onClose, tab, onTabChange, theme, setThem
   }
   useEffect(() => { if (open) { void attempt(load); void loadMoss().catch(() => setMoss(null)) } }, [open])
   const select = (provider: Provider) => { setSelectedId(provider.id); setDraft({ ...provider }) }
-  const create = () => { const id = uid('provider').slice(0, 20); const value: Provider = { id, kind: 'openai_compatible', name: '兼容 API', base_url: '', default_model: '', models: [], enabled: true }; setProviders(items => [...items, value]); setSelectedId(id); setDraft(value) }
+  const create = () => { const id = uid('provider').slice(0, 20); const value: Provider = { id, kind: 'openai_chat', name: '新提供商', base_url: '', default_model: '', models: [], enabled: true }; setProviders(items => [...items, value]); setSelectedId(id); setDraft(value) }
   const changeKind = (kind: Provider['kind']) => { if (!draft || kind === 'local') return; setDraft({ ...draft, kind, ...defaults[kind] }) }
   const save = async () => { if (!draft) return; const saved = await api<Provider>('/api/chat/providers', { method: 'POST', body: JSON.stringify(draft) }); toast('厂商配置已保存'); setSelectedId(saved.id); await load(); onProvidersChanged() }
   const remove = async () => { if (!draft || draft.id === 'deepseek') return toast('默认 DeepSeek 不能删除'); await api(`/api/chat/providers/${encodeURIComponent(draft.id)}`, { method: 'DELETE' }); toast('厂商已删除'); setSelectedId('deepseek'); await load(); onProvidersChanged() }
@@ -79,8 +78,8 @@ export function SettingsDrawer({ open, onClose, tab, onTabChange, theme, setThem
         {activeTab === 'providers' && <div className={styles.providers}>
           <div className={styles.providerList}>{providers.map(provider => <button key={provider.id} className={`${styles.providerItem} ${selectedId === provider.id ? styles.providerActive : ''}`} onClick={() => select(provider)}><span>{provider.name}</span><small>{KIND_ZH[provider.kind] || provider.kind} · {provider.api_key_set ? '已配置' : '缺少 Key'}</small></button>)}<Button size="small" onClick={create}><Plus size={14}/>新增</Button></div>
           {draft && <div className={styles.form}>
-            <div className={styles.grid}><Field label="名称"><Input value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })}/></Field><Field label="类型"><Select value={draft.kind} onChange={event => changeKind(event.target.value as Provider['kind'])}><option value="openai_chat">OpenAI Chat</option><option value="openai_responses">OpenAI Responses</option><option value="anthropic">Anthropic</option><option value="openai_compatible">OpenAI 兼容</option></Select></Field><Field label="Base URL" className={styles.wide}><Input value={draft.base_url || ''} onChange={event => setDraft({ ...draft, base_url: event.target.value })}/></Field><Field label="默认模型"><Input value={draft.default_model || ''} onChange={event => setDraft({ ...draft, default_model: event.target.value, models: [...new Set([event.target.value, ...(draft.models || [])].filter(Boolean))] })}/></Field><Field label="启用"><Switch checked={draft.enabled !== false} onChange={enabled => setDraft({ ...draft, enabled })} label="允许对话"/></Field></div>
-          <p style={{ margin: '10px 0 0', color: 'var(--text-3)', fontSize: 12, lineHeight: 1.7 }}>协议即接口规范：DeepSeek / Anthropic 走各自官方接口；OpenAI Chat 覆盖绝大多数 OpenAI 兼容服务（含本地引擎代理）；「兼容 API」用于任意自定义 OpenAI 兼容地址。密钥通过上方提示的环境变量配置，写入 ~/llama-manager/.env。</p>
+            <div className={styles.grid}><Field label="名称"><Input value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })}/></Field><Field label="类型"><Select value={draft.kind} onChange={event => changeKind(event.target.value as Provider['kind'])}><option value="openai_chat">OpenAI Chat</option><option value="openai_responses">OpenAI Responses</option><option value="anthropic">Anthropic</option></Select></Field><Field label="Base URL" className={styles.wide}><Input value={draft.base_url || ''} onChange={event => setDraft({ ...draft, base_url: event.target.value })}/></Field><Field label="默认模型"><Input value={draft.default_model || ''} onChange={event => setDraft({ ...draft, default_model: event.target.value, models: [...new Set([event.target.value, ...(draft.models || [])].filter(Boolean))] })}/></Field><Field label="启用"><Switch checked={draft.enabled !== false} onChange={enabled => setDraft({ ...draft, enabled })} label="允许对话"/></Field></div>
+          <p style={{ margin: '10px 0 0', color: 'var(--text-3)', fontSize: 12, lineHeight: 1.7 }}>类型就是 API 协议：Anthropic 走 Claude 官方接口；OpenAI Chat 是通用协议，绝大多数服务（DeepSeek、LM Studio、vLLM、各类中转网关）都兼容它 —— 选它再填上你的 Base URL 即可，地址必填、不会回落到任何默认服务。OpenAI Responses 是 OpenAI 的新版接口。密钥通过环境变量配置，写入 ~/llama-manager/.env。</p>
             <div className={styles.status}><KeyRound size={14}/> {draft.migration_error || (draft.api_key_set ? `已通过 ${draft.api_key_env} 配置` : `请在 ~/llama-manager/.env 中设置 ${draft.api_key_env || '对应环境变量'}`)}</div>
             <div><Button tone="primary" onClick={() => void attempt(save)}><Save size={14}/>保存</Button> <Button onClick={() => void attempt(fetchModels)}><RefreshCw size={14}/>拉取模型</Button> <ConfirmButton tone="danger" confirmLabel="确认删除厂商？" onConfirm={() => void attempt(remove)}><Trash2 size={14}/>删除</ConfirmButton></div>
           </div>}

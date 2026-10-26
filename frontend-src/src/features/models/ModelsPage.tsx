@@ -1,5 +1,5 @@
 import { Copy, ExternalLink, PackageOpen, Pencil, Pin, Play, Plus, Search, Square, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../api'
@@ -66,7 +66,13 @@ export function ModelsPage({ config, dirty, server, toast }: {
   const [busy, setBusy] = useState('')
   const serverRunning = server.state === 'running'
 
-  useEffect(() => { void queryClient.invalidateQueries({ queryKey: ['profiles'] }) }, [queryClient, server.state, server.profile])
+  // Skip the first run: the mount fetch is already in flight, and
+  // invalidateQueries cancels+restarts it by default (doubling a slow load).
+  const firstInvalidate = useRef(true)
+  useEffect(() => {
+    if (firstInvalidate.current) { firstInvalidate.current = false; return }
+    void queryClient.invalidateQueries({ queryKey: ['profiles'] }, { cancelRefetch: false })
+  }, [queryClient, server.state, server.profile])
 
   const afterServerAction = async () => {
     await Promise.all([

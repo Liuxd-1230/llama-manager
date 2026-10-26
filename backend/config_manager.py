@@ -222,14 +222,18 @@ def _parse_gguf_header(path: Path) -> dict:
         for index in range(kv_count):
             key = read_string()
             value_type, = struct.unpack("<I", fh.read(4))
+            # Everything we want lives in the front matter, before the tokenizer
+            # block. Those arrays hold hundreds of thousands of strings (248k
+            # tokens + 247k merges for one 27B model), so reading them costs ~1M
+            # syscalls per parse. Stop as soon as the geometry is complete, or
+            # at the first tokenizer key once the basics are in hand — MoE
+            # expert counts always precede the tokenizer section.
+            if key.startswith("tokenizer.") and "layers" in meta and "kv_heads" in meta:
+                break
             if record(key, read_value(value_type)):
-                # All wanted keys sit in the front matter; expert keys only exist
-                # for MoE models and KV geometry may trail the basics, so keep
-                # scanning unless everything is in (the tokenizer arrays that
-                # follow are read-and-skipped either way).
                 if ("name" in meta and "architecture" in meta and "layers" in meta
                         and "context_length" in meta and "kv_heads" in meta
-                        and ("experts" in meta or index >= 128)):
+                        and ("experts" in meta or index >= 32)):
                     break
     _finalize_gguf_meta(meta)
     return meta

@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from .env_manager import APP_DATA_DIR, env_source, env_value, set_user_env
 
 
-ProviderKind = Literal["openai_chat", "openai_responses", "anthropic", "openai_compatible"]
+ProviderKind = Literal["openai_chat", "openai_responses", "anthropic"]
 SECRETS_DIR = APP_DATA_DIR / "secrets"
 PROVIDERS_PATH = SECRETS_DIR / "providers.json"
 # The builtin DeepSeek preset reads DEEPSEEK_API_KEY first; see provider_env_names.
@@ -28,7 +28,7 @@ _MIGRATION_ERRORS: set[str] = set()
 class ProviderConfig(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
     name: str = "DeepSeek"
-    kind: ProviderKind = "deepseek"
+    kind: ProviderKind = "openai_chat"
     base_url: str = "https://api.deepseek.com"
     default_model: str = "deepseek-chat"
     models: list[str] = Field(default_factory=list)
@@ -105,7 +105,10 @@ def _migrate_kinds(items: list[dict]) -> list[dict]:
     # openai_chat preset; DeepSeek-only extras key off the base URL instead.
     changed = False
     for item in items:
-        if item.get("kind") == "deepseek":
+        # Both retired labels map onto openai_chat: "deepseek" (a former kind)
+        # and "openai_compatible" (never a distinct protocol, only a preset with
+        # an empty default base URL). Their saved base_url is preserved.
+        if item.get("kind") in ("deepseek", "openai_compatible"):
             item["kind"] = "openai_chat"
             changed = True
     if changed:
@@ -119,7 +122,9 @@ def _read_raw() -> list[dict]:
     payload = json.loads(PROVIDERS_PATH.read_text(encoding="utf-8"))
     if not isinstance(payload, list):
         raise ValueError("providers.json must contain a list")
-    return _migrate_kinds(_migrate_legacy_keys(payload))
+    # Kinds first: the legacy-key migration constructs ProviderConfig, which
+    # would reject a retired literal before it ever gets rewritten.
+    return _migrate_legacy_keys(_migrate_kinds(payload))
 
 
 def _public(provider: ProviderConfig) -> dict:

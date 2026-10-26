@@ -81,7 +81,6 @@ DEFAULT_BASE_URLS = {
     "openai_chat": "https://api.openai.com/v1",
     "openai_responses": "https://api.openai.com/v1",
     "anthropic": "https://api.anthropic.com/v1",
-    "openai_compatible": "",
 }
 
 
@@ -94,7 +93,9 @@ def _is_local_host(host: str | None) -> bool:
 
 
 def _chat_completions_url(base_url: str) -> str:
-    base = (base_url or DEEPSEEK_BASE_URL).rstrip("/")
+    if not base_url:
+        raise RuntimeError("未配置 Base URL，无法确定聊天接口地址")
+    base = base_url.rstrip("/")
     if base.endswith("/chat/completions"):
         return base
     return f"{base}/chat/completions"
@@ -126,6 +127,8 @@ def _provider_headers(provider: providers.ProviderConfig) -> dict[str, str]:
 
 def _provider_base_url(provider: providers.ProviderConfig) -> str:
     base = provider.base_url or DEFAULT_BASE_URLS.get(provider.kind, "")
+    if not base:
+        raise RuntimeError(f"提供商 {provider.name} 未填写 Base URL")
     if base.rstrip("/") == "https://api.deepseek.com":
         # DeepSeek serves /chat/completions both bare and under /v1.
         return "https://api.deepseek.com"
@@ -427,29 +430,8 @@ def _tool_event_chunk(event: dict) -> str:
     return "data: " + json.dumps({"tool_event": event}, ensure_ascii=False) + "\n\n"
 
 
-def _normalize_external_sse(provider_kind: str, payload: dict) -> str:
-    if provider_kind in {"openai_chat", "openai_compatible"}:
-        return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
-    if provider_kind == "openai_responses":
-        event_type = payload.get("type", "")
-        if event_type in {"response.output_text.delta", "response.refusal.delta"}:
-            return _openai_chunk(content=payload.get("delta", ""))
-        if event_type in {"response.reasoning_summary_text.delta", "response.reasoning_text.delta"}:
-            return _openai_chunk(reasoning=payload.get("delta", ""))
-        return ""
-    if provider_kind == "anthropic":
-        if payload.get("type") != "content_block_delta":
-            return ""
-        delta = payload.get("delta", {})
-        if delta.get("type") == "text_delta":
-            return _openai_chunk(content=delta.get("text", ""))
-        if delta.get("type") in {"thinking_delta", "signature_delta"}:
-            return _openai_chunk(reasoning=delta.get("thinking", "") or delta.get("signature", ""))
-    return ""
-
-
 def _normalize_non_stream_response(provider_kind: str, payload: dict) -> dict:
-    if provider_kind in {"openai_chat", "openai_compatible"}:
+    if provider_kind in {"openai_chat"}:
         return payload
     content = ""
     reasoning = ""
@@ -1637,7 +1619,7 @@ async def chat_proxy(request: Request):
         return JSONResponse(status_code=400, content={"error": str(exc)})
 
     if stream:
-        if provider_kind in {"openai_chat", "openai_compatible"}:
+        if provider_kind in {"openai_chat"}:
             source = _stream_chat_with_tools(target, headers, payload, on_complete=save_context)
         elif provider_kind == "anthropic":
             source = _stream_anthropic_with_tools(target, headers, payload, on_complete=save_context)
@@ -1649,7 +1631,7 @@ async def chat_proxy(request: Request):
 
     if use_web_tool:
         try:
-            if provider_kind in {"openai_chat", "openai_compatible"}:
+            if provider_kind in {"openai_chat"}:
                 payload = await _complete_with_chat_tools(target, headers, payload)
             elif provider_kind == "anthropic":
                 raw_payload = await _complete_with_anthropic_tools(target, headers, payload)
@@ -1669,7 +1651,7 @@ async def chat_proxy(request: Request):
         if resp.status_code >= 400:
             return JSONResponse(status_code=resp.status_code, content={"error": resp.text})
         raw_payload = resp.json()
-        if provider_kind in {"openai_chat", "openai_compatible"}:
+        if provider_kind in {"openai_chat"}:
             payload = raw_payload
             message = payload.get("choices", [{}])[0].get("message", {})
             state = {"kind": "chat_messages", "messages": [*payload.get("messages", []), message]}

@@ -82,7 +82,12 @@ function Shell() {
   }
   const host = hostQuery.data
   const gib = (mib: number) => (mib / 1024).toFixed(1)
-  const resourceTitle = host ? `显存 ${host.gpu ? `${gib(host.gpu.used_mib)} / ${gib(host.gpu.total_mib)} GB` : '不可用'} · 内存 ${host.ram ? `${gib(host.ram.used_mib)} / ${gib(host.ram.total_mib)} GB` : '不可用'}` : '正在读取主机占用…'
+  // A 404 here means the backend predates /api/host/resources; say so instead of
+  // leaving the capsule on a placeholder that looks like a slow load forever.
+  const hostError = hostQuery.isError ? (hostQuery.error instanceof Error ? hostQuery.error.message : String(hostQuery.error)) : ''
+  const resourceTitle = host
+    ? `显存 ${host.gpu ? `${gib(host.gpu.used_mib)} / ${gib(host.gpu.total_mib)} GB` : '不可用'} · 内存 ${host.ram ? `${gib(host.ram.used_mib)} / ${gib(host.ram.total_mib)} GB` : '不可用'}`
+    : hostError ? `无法读取主机占用：${hostError}（后端可能未重启）` : '正在读取主机占用…'
   const savedConfig = useRef('')
   useEffect(() => {
     if (!configQuery.data) return
@@ -111,9 +116,10 @@ function Shell() {
     <div className={styles.layout}>
       <header className={`${styles.topbar} ${scrolled ? styles.topbarScrolled : ''}`}>
         <div className={styles.brand}><span className={styles.brandMark}><Zap size={18}/></span><div><div className={styles.brandText}>llama.cpp Manager</div><div className={styles.brandSub}>本地推理控制台</div></div></div>
-        <div className={styles.topMeta}><span className={styles.serverAddress}>{ENGINE_LABELS[config.engine] || config.engine} · {config.server.host}:{config.server.port}</span>{dirty && <button type="button" className={styles.dirtyButton} title="有未保存的配置修改，点击前往配置页" onClick={() => navigate('/config')}><Badge tone="warn">未保存</Badge></button>}<Badge tone={server.state === 'running' ? 'good' : 'neutral'}><Gauge size={12}/>{server.state === 'running' ? `运行中 · ${server.pid || ''}` : '已停止'}</Badge><span className={styles.resources} title={resourceTitle}>
+        <div className={styles.topMeta}><span className={styles.serverAddress}>{ENGINE_LABELS[config.engine] || config.engine} · {config.server.host}:{config.server.port}</span>{dirty && <button type="button" className={styles.dirtyButton} title="有未保存的配置修改，点击前往配置页" onClick={() => navigate('/config')}><Badge tone="warn">未保存</Badge></button>}<Badge tone={server.state === 'running' ? 'good' : 'neutral'}><Gauge size={12}/>{server.state === 'running' ? `运行中 · ${server.pid || ''}` : '已停止'}</Badge><span className={styles.resources} title={resourceTitle} data-error={hostError ? true : undefined}>
           {host?.gpu && <span className={styles.resourceItem} data-kind="gpu">显存 <b>{gib(host.gpu.used_mib)}</b>/{gib(host.gpu.total_mib)}G</span>}
           {host?.ram && <span className={styles.resourceItem} data-kind="ram">内存 <b>{gib(host.ram.used_mib)}</b>/{gib(host.ram.total_mib)}G</span>}
+          {!host && <span className={styles.resourceItem}>{hostError ? '占用不可用' : '读取中…'}</span>}
         </span>
         {server.state === 'running'
           ? <Button iconOnly title="暂停：停止本地引擎，释放显存" disabled={suspending} onClick={() => void suspend()}><Pause size={15}/></Button>

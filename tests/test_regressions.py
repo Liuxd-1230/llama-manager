@@ -185,6 +185,89 @@ def _gguf_kv_string_array(key: str, values) -> bytes:
     return _gguf_string(key) + struct.pack("<I", 9) + struct.pack("<I", 8) + struct.pack("<Q", len(values)) + b"".join(_gguf_string(v) for v in values)
 
 
+class GgufEarlyExitTests(unittest.TestCase):
+    """Tokenizer arrays hold hundreds of thousands of strings; parsing must stop
+    before them once the geometry is known (was: 1M reads per 27B model)."""
+
+    def _write(self, tmpdir, with_experts: bool):
+        import os
+        kv = 7
+        blob = b"GGUF" + struct.pack("<I", 3) + struct.pack("<Q", 0) + struct.pack("<Q", kv)
+        blob += _gguf_kv_string("general.architecture", "llama")
+        blob += _gguf_kv_string("general.name", "Test")
+        blob += _gguf_kv_u32("llama.block_count", 48)
+        if with_experts:
+            blob += _gguf_kv_u32("llama.expert_count", 8)
+        blob += _gguf_kv_u32("llama.context_length", 8192)
+        blob += _gguf_kv_u32("llama.attention.head_count_kv", 8)
+        blob += _gguf_kv_u32("llama.embedding_length", 5120)
+        # tokenizer block that must never be read
+        blob += _gguf_kv_string_array("tokenizer.ggml.tokens", ["a", "b", "c"])
+        path = os.path.join(tmpdir, "model.gguf")
+        with open(path, "wb") as fh:
+            fh.write(blob)
+        return path
+
+    def test_stops_at_tokenizer_block(self):
+        from backend.config_manager import read_gguf_metadata
+        with TemporaryDirectory() as tmpdir:
+            path = self._write(tmpdir, with_experts=True)
+            meta = read_gguf_metadata(path)
+        self.assertEqual(meta["layers"], 48)
+        self.assertEqual(meta["kv_heads"], 8)
+        self.assertEqual(meta["experts"], 8)
+        self.assertEqual(meta["context_length"], 8192)
+
+    def test_stops_before_tokenizer_arrays(self):
+        """The parser must not walk tokenizer.ggml.tokens (248k strings on a 27B).
+
+        Measured by file position: after parsing, the stream must not have
+        advanced past the tokenizer key that we deliberately place last.
+        """
+        from backend import config_manager as cm
+        with TemporaryDirectory() as tmpdir:
+            path = self._write(tmpdir, with_experts=False)
+            with open(path, "rb") as fh:
+                blob = fh.read()
+            tokenizer_at = blob.index(b"tokenizer.ggml.tokens")
+            # Reading the key itself is unavoidable (that is how we decide to
+            # stop); the array payload after it must stay untouched.
+            array_payload_at = blob.index(b"tokenizer.ggml.tokens") + len(b"tokenizer.ggml.tokens") + 8 + 4
+            consumed = {"pos": 0}
+            real = cm._parse_gguf_header
+
+            def spy(p):
+                meta = real(p)
+                return meta
+
+            class Tracking:
+                def __init__(self, handle):
+                    self.handle = handle
+
+                def read(self, n=-1):
+                    data = self.handle.read(n)
+                    consumed["pos"] += len(data) if isinstance(data, bytes) else 0
+                    return data
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc):
+                    self.handle.close()
+                    return False
+
+                def __getattr__(self, name):
+                    return getattr(self.handle, name)
+
+            from pathlib import Path as _P
+            real_open = _P.open
+            with patch.object(_P, "open", lambda self, *a, **k: Tracking(real_open(self, *a, **k)), create=True):
+                meta = real(_P(path))
+        self.assertEqual(meta["layers"], 48)
+        self.assertLess(consumed["pos"], array_payload_at,
+                        "parser read into the tokenizer array payload")
+
+
 class ModelMetadataCacheTests(unittest.TestCase):
     def test_header_is_parsed_once_per_file_stamp(self):
         import os
@@ -824,7 +907,7 @@ class ChatProxyRegressionTests(unittest.TestCase):
         self.assertIn("native tool_calls", messages[0]["content"])
 
     def test_chat_completion_provider_gets_web_tool(self):
-        provider = providers.ProviderConfig(id="compat", name="Compat", kind="openai_compatible", base_url="https://example.com/v1", default_model="m")
+        provider = providers.ProviderConfig(id="compat", name="Compat", kind="openai_chat", base_url="https://example.com/v1", default_model="m")
         _target, payload = _external_chat_request(provider, {"web_search_tool": True}, [{"role": "user", "content": "news"}])
         self.assertEqual(payload["tool_choice"], "auto")
 

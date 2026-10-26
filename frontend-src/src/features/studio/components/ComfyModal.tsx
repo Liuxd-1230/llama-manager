@@ -153,7 +153,7 @@ export function ComfyModal() {
           <div className="hint">宽度/高度默认跟随画布（{doc?.layout.width}×{doc?.layout.height}），可在此覆盖。</div>
 
           {result && <div style={{ marginTop: 12 }}>
-            <img src={result.image} alt={result.filename} style={{ width: "100%", borderRadius: 4, border: "1px solid var(--line)" }} />
+            <img src={result.image} alt={result.filename} style={{ width: "100%", maxHeight: "52vh", objectFit: "contain", borderRadius: 4, border: "1px solid var(--line)" }} />
             <div className="row" style={{ marginTop: 6 }}>
               <a className="btn btn-sm" href={result.image} download={result.filename}><Download size={13}/>下载</a>
               <span className="hint">{result.filename}</span>

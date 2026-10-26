@@ -43,13 +43,18 @@ export function Modal({ title, onClose, children, className = '', backdropClassN
   const ref = useModalFocus(true, onClose)
   return createPortal(<div className={`${styles.modalBackdrop} ${backdropClassName}`} onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
     <div ref={ref} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} className={[styles.dialog, wide ? styles.wide : '', xl ? styles.xl : '', className].filter(Boolean).join(' ')}>
-      {icon !== undefined && <header className={styles.dialogHeader}>
-        <div className={styles.dialogHeaderTitle}>{icon}{title}</div>
-        {head}
-        <Button iconOnly size="small" title="关闭 (Esc)" aria-label="关闭" onClick={onClose}><X size={15} /></Button>
-      </header>}
-      {children}
-      {foot && <footer className={styles.dialogFooter}>{foot}</footer>}
+      {/* `className` often carries the studio scope (.studio-root), whose rules
+          set overflow:hidden + height:100%. Applying it to the dialog itself
+          killed the dialog's own scrolling, so the scope gets its own wrapper. */}
+      <div className={className.includes('studio-root') ? 'studio-root dialog-scope' : undefined}>
+        {icon !== undefined && <header className={styles.dialogHeader}>
+          <div className={styles.dialogHeaderTitle}>{icon}{title}</div>
+          {head}
+          <Button iconOnly size="small" title="关闭 (Esc)" aria-label="关闭" onClick={onClose}><X size={15} /></Button>
+        </header>}
+        {children}
+        {foot && <footer className={styles.dialogFooter}>{foot}</footer>}
+      </div>
     </div>
   </div>, document.body)
 }

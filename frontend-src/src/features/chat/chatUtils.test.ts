@@ -22,7 +22,7 @@ describe('chat provider helpers', () => {
   it('uses provider kind for custom DeepSeek thinking support', () => {
     expect(supportsThinking({ id: 'custom-ds', name: 'DS', kind: 'openai_chat', base_url: 'https://api.deepseek.com' } as Provider)).toBe(true)
     expect(supportsThinking({ id: 'local-1', name: 'Local', kind: 'local' } as Provider)).toBe(true)
-    expect(supportsThinking({ id: 'deepseek-name-only', name: 'DS', kind: 'openai_compatible', base_url: 'https://example.com/v1' } as Provider)).toBe(false)
+    expect(supportsThinking({ id: 'deepseek-name-only', name: 'DS', kind: 'openai_chat', base_url: 'https://example.com/v1' } as Provider)).toBe(false)
   })
 
   it('removes DSML tool traces from visible reasoning', () => {

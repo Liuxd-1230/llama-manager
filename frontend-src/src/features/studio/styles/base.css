@@ -89,6 +89,14 @@
   overflow: hidden;
   user-select: none;
 }
+/* Scope wrapper inside a host dialog: provide the tokens and typography but let
+   the dialog own height and scrolling. */
+.studio-root.dialog-scope {
+  height: auto;
+  overflow: visible;
+  background: transparent;
+  user-select: auto;
+}
 .studio-root input,
 .studio-root textarea,
 .studio-root select,
