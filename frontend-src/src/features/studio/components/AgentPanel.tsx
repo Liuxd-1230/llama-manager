@@ -14,6 +14,7 @@ import {
   assistAgent, clearSession, closeSession, currentPage, currentSeries, deleteSession, dropQueued, openSession, renameSession, rerun,
   resolveProposal, selectPage, send, setAutoApprove, setUi, startNewSession, stop, toast, useStore,
 } from "../store";
+import { openGlobalSettings } from "../globalSettings";
 import type { Ask, Attachment, Message, Proposal, Skill, Step } from "../types";
 import { AutoTextarea, MenuItem, Popover, Switch, cx, useAnchor } from "../../../components/kit";
 import { Markdown } from "./Markdown";
@@ -306,7 +307,7 @@ function Welcome() {
         {tips.map((t) => <button key={t} type="button" className="tip" onClick={() => (t.startsWith("起稿：") ? quickDraft(t.slice(3)) : send(t))}>{t}</button>)}
       </div>
       {!keySet && (
-        <div className="notice warn"><AlertTriangle size={12} />还没配置 API Key。画框、编辑和编译不受影响；<button type="button" className="link" onClick={() => setUi({ modal: "settings" })}>去设置</button></div>
+        <div className="notice warn"><AlertTriangle size={12} />还没配置 API Key。画框、编辑和编译不受影响；<button type="button" className="link" onClick={openGlobalSettings}>去设置</button></div>
       )}
     </div>
   );

@@ -5,6 +5,7 @@ import {
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { ReverseModal } from "./ReverseModal";
+import { ComfyModal } from "./ComfyModal";
 import { confirmDialog, promptDialog } from "../dialog";
 import { boxColor, clone, emptyDoc, normalizeDoc, normalizeLayout, snap16 } from "../lib/doc";
 import {
@@ -37,104 +38,6 @@ export function DocPreview({ doc, size = 150 }: { doc: Doc; size?: number }) {
           fill={boxColor(it, i)} fillOpacity={0.14} stroke={boxColor(it, i)} strokeWidth={Math.max(2, L.width / 160)} rx={L.width / 120} />
       ))}
     </svg>
-  );
-}
-
-// ---------- 设置 ----------
-function SettingsModal() {
-  const [s, setS] = useState<AppSettings | null>(null);
-  const [models, setModels] = useState<string[]>([]);
-  const [test, setTest] = useState<{ ok: boolean; message: string; stream_ok?: boolean; tools_ok?: boolean } | null>(null);
-  const [busy, setBusy] = useState("");
-  useEffect(() => {
-    void api.settings().then(setS);
-  }, []);
-  if (!s) return null;
-  const up = (p: Partial<AppSettings>) => setS({ ...s, ...p });
-  const probe = { provider_id: s.provider_id, model: s.model };
-  const save = async () => {
-    setBusy("save");
-    try {
-      const r = await api.saveSettings({
-        provider_id: s.provider_id, model: s.model, vision_model: s.vision_model,
-        fallback_models: s.fallback_models, temperature: s.temperature,
-        agent_protocol: s.agent_protocol, context_turns: s.context_turns,
-        prompt_prefix: s.prompt_prefix, negative_prompt: s.negative_prompt,
-      });
-      useStore.setState({ settings: r });
-      toast("设置已保存", "ok");
-      setUi({ modal: null });
-    } catch (e) {
-      toast("保存失败：" + err(e), "err");
-    } finally {
-      setBusy("");
-    }
-  };
-  return (
-    <Modal className="studio-root" title="设置" icon={<Settings size={16} />} onClose={() => setUi({ modal: null })}
-      foot={<>
-        <div className="spacer" />
-        <button type="button" className="btn" onClick={() => setUi({ modal: null })}>取消</button>
-        <button type="button" className="btn btn-primary" disabled={!!busy} onClick={() => void save()}>{busy === "save" && <Loader2 size={13} className="spin" />}保存</button>
-      </>}>
-      <div className="form-grid">
-        <div className="form-group">
-          <div className="group-title"><Plug size={13} />模型提供商（与主界面共享）</div>
-          <div className="field">
-            <label>提供商</label>
-            <select className="input mono" value={s.provider_id} onChange={(e) => up({ provider_id: e.target.value })}>
-              {(s.providers || []).map((p) => <option key={p.id} value={p.id}>{p.name}{p.enabled ? "" : "（已停用）"}</option>)}
-            </select>
-            <span className="hint">{s.api_key_set ? "密钥已由主界面配置（环境变量）。" : "该提供商尚未配置密钥：请到主界面「设置」中填写。"}当前：{s.provider_name || "—"}</span>
-          </div>
-          <div className="row">
-            <div className="field grow"><label>主模型</label>
-              <input className="input mono" list="model-list" value={s.model} onChange={(e) => up({ model: e.target.value })} /></div>
-            <div className="field grow"><label>视觉模型（反推 / 看参考图，留空跟随主模型）</label>
-              <input className="input mono" list="model-list" value={s.vision_model} onChange={(e) => up({ vision_model: e.target.value })} /></div>
-          </div>
-          <datalist id="model-list">{models.map((m) => <option key={m} value={m} />)}</datalist>
-          <div className="field"><label>后备模型（主模型 429 / 5xx / 网络失败时依次尝试，逗号分隔）</label>
-            <input className="input mono" value={s.fallback_models} onChange={(e) => up({ fallback_models: e.target.value })} placeholder="例如 gpt-4o-mini, deepseek-chat" /></div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <button type="button" className="btn btn-sm" disabled={!!busy} onClick={async () => {
-              setBusy("test"); setTest(null);
-              try { setTest(await api.testSettings(probe)); } catch (e) { setTest({ ok: false, message: err(e) }); } finally { setBusy(""); }
-            }}>{busy === "test" ? <Loader2 size={13} className="spin" /> : <Plug size={13} />}测试连接</button>
-            <button type="button" className="btn btn-sm" disabled={!!busy} onClick={async () => {
-              setBusy("models");
-              try { const r = await api.models(probe); setModels(r.models); toast(`拉取到 ${r.count} 个模型`, "ok"); } catch (e) { toast(err(e), "err"); } finally { setBusy(""); }
-            }}>{busy === "models" && <Loader2 size={13} className="spin" />}拉取模型列表</button>
-          </div>
-          {test && (
-            <div className={cx("test-result", test.ok ? "ok" : "bad")}>
-              <div>{test.message}</div>
-              {test.ok && (
-                <div className="row" style={{ marginTop: 4 }}>
-                  <span className={cx("chip", test.stream_ok ? "accent" : "warm")}>{test.stream_ok ? <Check size={10} /> : <X size={10} />}流式输出</span>
-                  <span className={cx("chip", test.tools_ok ? "accent" : "warm")}>{test.tools_ok ? <Check size={10} /> : <X size={10} />}函数调用</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="form-group">
-          <div className="group-title"><Bot size={13} />Agent</div>
-          <div className="field"><label>工具协议</label>
-            <Seg full value={s.agent_protocol} onChange={(v) => up({ agent_protocol: v })} options={[
-              { v: "auto", t: "自动", title: "先用原生函数调用，接口不支持时自动切换到标签协议" },
-              { v: "tools", t: "函数调用", title: "OpenAI function calling" },
-              { v: "tags", t: "标签协议", title: "<tool name=…>{json}</tool> 文本块，兼容任何模型" },
-            ]} />
-          </div>
-          <div className="field"><Dial label="温度" value={s.temperature} min={0} max={2} step={0.05} digits={2} onChange={(v) => up({ temperature: v })} /></div>
-          <div className="field"><Dial label="记忆轮数" value={s.context_turns} min={2} max={40} step={1} onChange={(v) => up({ context_turns: Math.round(v) })} title="每次带给 Agent 的最近对话轮数，更早的自动压缩成摘要" /></div>
-          <div className="group-title" style={{ marginTop: 14 }}><Sparkles size={13} />编译附加</div>
-          <div className="field"><label>质量前缀（复制时可选附加）</label><input className="input" value={s.prompt_prefix} onChange={(e) => up({ prompt_prefix: e.target.value })} /></div>
-          <div className="field"><label>负面提示词</label><AutoTextarea className="textarea" minRows={2} value={s.negative_prompt} onChange={(e) => up({ negative_prompt: e.target.value })} /></div>
-        </div>
-      </div>
-    </Modal>
   );
 }
 
@@ -521,9 +424,9 @@ function DraftModal() {
 
 export function Modals() {
   const m = useStore((s) => s.modal);
-  if (m === "settings") return <SettingsModal />;
   if (m === "skills") return <SkillsModal />;
   if (m === "reverse") return <ReverseModal />;
+  if (m === "comfy") return <ComfyModal />;
   if (m === "archive") return <ArchiveModal />;
   if (m === "revisions") return <RevisionsModal />;
   if (m === "quick") return <QuickModal />;

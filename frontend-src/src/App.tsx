@@ -1,4 +1,4 @@
-import { Activity, Bot, Boxes, Gauge, Moon, PenLine, Settings, SlidersHorizontal, Sun, Wrench, Zap } from 'lucide-react'
+import { Activity, Bot, Boxes, Gauge, Moon, Pause, PenLine, Play, Settings, SlidersHorizontal, Sun, Wrench, Zap } from 'lucide-react'
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, useReducedMotion } from 'motion/react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -38,6 +38,13 @@ function Shell() {
   const [accent, setAccentState] = useState<Accent>(resolveInitialAccent)
   const [config, setConfig] = useState<AppConfig>(defaultConfig)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsTab, setSettingsTab] = useState<'providers' | 'search' | 'appearance' | 'studio'>('providers')
+  useEffect(() => {
+    // Studio surfaces ask for the global drawer's 提示词工坊 tab via this event.
+    const openStudioSettings = () => { setSettingsTab('studio'); setSettingsOpen(true) }
+    window.addEventListener('llm-open-settings', openStudioSettings)
+    return () => window.removeEventListener('llm-open-settings', openStudioSettings)
+  }, [])
   const [toastText, setToastText] = useState('')
   const [scrolled, setScrolled] = useState(false)
   const [providerRefresh, setProviderRefresh] = useState(0)
@@ -55,6 +62,27 @@ function Shell() {
   const serverQuery = useQuery({ queryKey: ['server-status'], queryFn: () => api<{ state: string; pid?: number; profile?: string }>('/api/server/status'), refetchInterval: 4000 })
   const server = serverQuery.data ?? { state: 'stopped' }
   const configQuery = useQuery({ queryKey: ['config'], queryFn: () => api<AppConfig>('/api/config') })
+  const hostQuery = useQuery({
+    queryKey: ['host-resources'],
+    queryFn: () => api<{ ram: { used_mib: number; total_mib: number } | null; gpu: { used_mib: number; total_mib: number } | null }>('/api/host/resources'),
+    refetchInterval: 3000,
+  })
+  const [suspending, setSuspending] = useState(false)
+  const suspend = async () => {
+    setSuspending(true)
+    try { await api('/api/server/suspend', { method: 'POST' }); toast('已暂停，显存已释放'); await queryClient.invalidateQueries({ queryKey: ['server-status'] }) }
+    catch (reason) { toast(`暂停失败：${reason instanceof Error ? reason.message : String(reason)}`) }
+    finally { setSuspending(false) }
+  }
+  const resume = async () => {
+    setSuspending(true)
+    try { await api('/api/server/resume', { method: 'POST', body: JSON.stringify({}) }); toast('已恢复上次档案'); await queryClient.invalidateQueries({ queryKey: ['server-status'] }) }
+    catch (reason) { toast(`恢复失败：${reason instanceof Error ? reason.message : String(reason)}`) }
+    finally { setSuspending(false) }
+  }
+  const host = hostQuery.data
+  const gib = (mib: number) => (mib / 1024).toFixed(1)
+  const resourceTitle = host ? `显存 ${host.gpu ? `${gib(host.gpu.used_mib)} / ${gib(host.gpu.total_mib)} GB` : '不可用'} · 内存 ${host.ram ? `${gib(host.ram.used_mib)} / ${gib(host.ram.total_mib)} GB` : '不可用'}` : '正在读取主机占用…'
   const savedConfig = useRef('')
   useEffect(() => {
     if (!configQuery.data) return
@@ -83,7 +111,14 @@ function Shell() {
     <div className={styles.layout}>
       <header className={`${styles.topbar} ${scrolled ? styles.topbarScrolled : ''}`}>
         <div className={styles.brand}><span className={styles.brandMark}><Zap size={18}/></span><div><div className={styles.brandText}>llama.cpp Manager</div><div className={styles.brandSub}>本地推理控制台</div></div></div>
-        <div className={styles.topMeta}><span className={styles.serverAddress}>{ENGINE_LABELS[config.engine] || config.engine} · {config.server.host}:{config.server.port}</span>{dirty && <button type="button" className={styles.dirtyButton} title="有未保存的配置修改，点击前往配置页" onClick={() => navigate('/config')}><Badge tone="warn">未保存</Badge></button>}<Badge tone={server.state === 'running' ? 'good' : 'neutral'}><Gauge size={12}/>{server.state === 'running' ? `运行中 · ${server.pid || ''}` : '已停止'}</Badge><Button iconOnly title="切换主题" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>{theme === 'light' ? <Moon size={16}/> : <Sun size={16}/>}</Button></div>
+        <div className={styles.topMeta}><span className={styles.serverAddress}>{ENGINE_LABELS[config.engine] || config.engine} · {config.server.host}:{config.server.port}</span>{dirty && <button type="button" className={styles.dirtyButton} title="有未保存的配置修改，点击前往配置页" onClick={() => navigate('/config')}><Badge tone="warn">未保存</Badge></button>}<Badge tone={server.state === 'running' ? 'good' : 'neutral'}><Gauge size={12}/>{server.state === 'running' ? `运行中 · ${server.pid || ''}` : '已停止'}</Badge><span className={styles.resources} title={resourceTitle}>
+          {host?.gpu && <span className={styles.resourceItem} data-kind="gpu">显存 <b>{gib(host.gpu.used_mib)}</b>/{gib(host.gpu.total_mib)}G</span>}
+          {host?.ram && <span className={styles.resourceItem} data-kind="ram">内存 <b>{gib(host.ram.used_mib)}</b>/{gib(host.ram.total_mib)}G</span>}
+        </span>
+        {server.state === 'running'
+          ? <Button iconOnly title="暂停：停止本地引擎，释放显存" disabled={suspending} onClick={() => void suspend()}><Pause size={15}/></Button>
+          : <Button iconOnly title="恢复：重新拉起上次使用的档案" disabled={suspending} onClick={() => void resume()}><Play size={15}/></Button>}
+        <Button iconOnly title="切换主题" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>{theme === 'light' ? <Moon size={16}/> : <Sun size={16}/>}</Button></div>
       </header>
       <aside className={styles.sidebar}><nav className={styles.nav}>{nav.map(item => <NavLink key={item.id} to={`/${item.id}`} aria-label={item.label} title={item.label} className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`}><item.icon size={16}/><span>{item.label}</span></NavLink>)}</nav><div className={styles.sidebarBottom}><Button className={styles.settingsButton} onClick={() => setSettingsOpen(true)}><Settings size={16}/>设置</Button></div></aside>
       <main className={styles.main} ref={main} onScroll={event => setScrolled(event.currentTarget.scrollTop > 16)}>
@@ -108,7 +143,7 @@ function Shell() {
         </div>
       </main>
     </div>
-    <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} onProvidersChanged={() => setProviderRefresh(value => value + 1)} toast={toast}/>
+    <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} tab={settingsTab} onTabChange={setSettingsTab} theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} onProvidersChanged={() => setProviderRefresh(value => value + 1)} toast={toast}/>
     {toastText && <motion.div role="status" aria-live="polite" className={uiStyles.toast} initial={reduced ? false : { y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: reduced ? 0 : .18 }}>{toastText}</motion.div>}
   </div>
 }

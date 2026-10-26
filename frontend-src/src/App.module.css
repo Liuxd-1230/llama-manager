@@ -40,3 +40,7 @@
  .main { grid-row:2; border-radius:0; scrollbar-gutter:auto }.page { padding:20px 16px 32px }.pageHeader { margin-bottom:22px }.pageHeader h1 { font-size:27px }.pageHeader p { font-size:12px }.topMeta [class*="badge"] { font-size:11px;padding:3px 6px }.topMeta button { width:30px;height:32px }
 }
 @media(max-width:360px) { .brandText { font-size:11px }.brand { gap:6px }.topMeta { gap:3px } }
+.resources { display: inline-flex; align-items: center; gap: 10px; padding: 0 10px; height: 26px; border: 1px solid var(--line); border-radius: 4px; font-family: var(--font-mono); font-size: 11px; color: var(--text-3); white-space: nowrap }
+.resourceItem b { color: var(--text); font-weight: 600 }
+.resourceItem[data-kind='gpu'] b { color: var(--green) }
+@media(max-width: 1100px) { .resources { display: none } }

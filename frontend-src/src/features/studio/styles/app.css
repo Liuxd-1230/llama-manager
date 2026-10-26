@@ -3873,3 +3873,23 @@ button.chip.accent:hover {
 .stage-bar .bar-right > * {
   flex: none;
 }
+
+/* ===================== ComfyUI 出图 ===================== */
+.comfy {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  min-height: 0;
+}
+.comfy-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.comfy-col .textarea {
+  min-height: 0;
+}
+@media (max-width: 980px) {
+  .comfy { grid-template-columns: 1fr; }
+}

@@ -2,6 +2,7 @@ import "./styles/base.css";
 import "./styles/app.css";
 import { AlertTriangle, CheckCircle2, Info, Loader2 } from "lucide-react";
 import { useEffect } from "react";
+import { api } from "./api";
 import { AgentPanel } from "./components/AgentPanel";
 import { DirectorView } from "./components/DirectorView";
 import { DocPanel } from "./components/DocPanel";
@@ -201,6 +202,13 @@ function App() {
 
 /** Host wrapper: scopes the studio palette (.studio-root) to the host theme. */
 export function PromptStudioPage() {
+  useEffect(() => {
+    // Settings now live only in the global drawer; keep the store fresh.
+    const refresh = () => { void api.settings().then(settings => useStore.setState({ settings })).catch(() => undefined) }
+    window.addEventListener('moss-settings-changed', refresh)
+    return () => window.removeEventListener('moss-settings-changed', refresh)
+  }, [])
+
   return (
     <div className="studio-root" style={{ height: "100%" }}>
       <App />

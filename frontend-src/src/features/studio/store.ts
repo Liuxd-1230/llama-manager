@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { api, putKeepalive, runAgent, type AgentEvent } from "./api";
+import { openGlobalSettings } from "./globalSettings";
 import {
   alignGroupDepth, bodyOf, bringIntoView, cameraMoved, clampCamera, compileView, dragInView, estimateBodies, itemFromView, moveTargets, projectLayout, rebaseCamera,
   type CamHold, type MoveResult, type MoveScope,
@@ -14,7 +15,7 @@ import type {
   Page, Proposal, Series, Session, SkillsState, Step,
 } from "./types";
 
-export type Modal = null | "settings" | "skills" | "reverse" | "archive" | "revisions" | "quick" | "draft";
+export type Modal = null | "skills" | "reverse" | "archive" | "revisions" | "quick" | "draft" | "comfy";
 export type Tool = "select" | "draw";
 
 export interface Toast {
@@ -774,7 +775,7 @@ export function draftLayout(o: DraftOpts): boolean {
   if (!s.doc || !o.text.trim()) return false;
   if (s.settings && !s.settings.api_key_set) {
     toast("先在「设置」里填写接口地址和 API Key，才能 AI 起稿", "err");
-    set({ modal: "settings" });
+    openGlobalSettings();
     return false;
   }
   if (s.doc.kind !== "layout" && o.mode !== "page") {
@@ -967,7 +968,7 @@ export function assistAgent(opts: { prefs?: AssistPrefs; note?: string } = {}): 
   if (!s.doc) return false;
   if (s.settings && !s.settings.api_key_set) {
     toast("先在「设置」里填写接口地址和 API Key，Agent 才能补全", "err");
-    set({ modal: "settings" });
+    openGlobalSettings();
     return false;
   }
   const prefs = opts.prefs || loadAssistPrefs();

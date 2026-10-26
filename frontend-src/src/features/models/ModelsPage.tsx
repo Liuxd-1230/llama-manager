@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../api'
-import { Badge, Button, ConfirmButton, Input, Panel } from '../../components/ui'
+import { Badge, Button, ConfirmButton, Input, Panel, Select } from '../../components/ui'
 import type { AppConfig } from '../../types'
 import { estimateUsage } from '../../utils/vram'
 import { ResourceUsage } from '../../components/ResourceUsage'
@@ -149,7 +149,7 @@ export function ModelsPage({ config, dirty, server, toast }: {
   return <>
     <div className={styles.libraryToolbar}>
       <div className={styles.search}><Search size={17}/><Input aria-label="搜索档案" placeholder="搜索模型或档案…" value={search} onChange={event => setSearch(event.target.value)}/></div>
-      <select className={styles.filter} aria-label="筛选推理引擎" value={engineFilter} onChange={event => setEngineFilter(event.target.value)}><option value="all">全部引擎</option><option value="llama.cpp">llama.cpp</option><option value="kvmem">KVMem</option><option value="ninfer">NInfer</option></select>
+      <Select className={styles.filter} aria-label="筛选推理引擎" value={engineFilter} onChange={event => setEngineFilter(event.target.value)}><option value="all">全部引擎</option><option value="llama.cpp">llama.cpp</option><option value="kvmem">KVMem</option><option value="ninfer">NInfer</option></Select>
       <span className={styles.count}>{visibleProfiles.length} 个档案</span>
       {creating
         ? <div className={styles.createRow}><Input aria-label="新档案名称" placeholder="档案名称" value={newName} onChange={event => setNewName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && newName.trim()) void create() }} autoFocus /><Button tone="primary" disabled={!newName.trim()} onClick={() => void create()}>确定</Button><Button onClick={() => { setCreating(false); setNewName('') }}>取消</Button></div>

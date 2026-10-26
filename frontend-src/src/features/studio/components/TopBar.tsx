@@ -6,6 +6,7 @@ import { useState } from "react";
 import {
   addPage, addSeries, currentSeries, deletePage, deleteSeries, duplicatePage, redo, renamePage, renameSeries,
   selectPage, setUi, undo, useStore, useWorkState } from "../store";
+import { openGlobalSettings } from "../globalSettings";
 import { confirmDialog, promptDialog } from "../dialog";
 import { MenuItem, Popover, cx, useAnchor } from "../../../components/kit";
 
@@ -117,10 +118,11 @@ export function TopBar() {
       </div>
       <div className="topbar-sep" />
       <button type="button" className="btn btn-sm" onClick={() => setUi({ modal: "reverse" })} title="从参考图反推 Caption / Layout"><ImageUp size={14} />反推</button>
+      <button type="button" className="btn btn-sm" onClick={() => setUi({ modal: "comfy" })} title="把编译结果送到 ComfyUI 出图"><Sparkles size={14} />出图</button>
       <button type="button" className="btn btn-sm" onClick={() => setUi({ modal: "archive" })} title="档案库：保存和复用整页文档"><Archive size={14} />档案库</button>
       <button type="button" className="btn btn-sm" onClick={() => setUi({ modal: "revisions" })} title="此页的操作记录，可回滚"><History size={14} />记录</button>
       <button type="button" className="btn btn-sm" onClick={() => setUi({ modal: "skills" })} title="Skills：Caption / Layout / 改稿风格"><Sparkles size={14} />Skills</button>
-      <button type="button" className="btn btn-sm btn-icon" onClick={() => setUi({ modal: "settings" })} title="设置"><Settings size={15} /></button>
+      <button type="button" className="btn btn-sm btn-icon" onClick={openGlobalSettings} title="设置"><Settings size={15} /></button>
     </header>
   );
 }
