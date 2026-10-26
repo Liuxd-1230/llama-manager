@@ -97,7 +97,7 @@ def save_settings(s: dict) -> dict:
 
 def public_settings(s: dict) -> dict:
     from .. import provider_manager
-    from .bridge import resolve, ProviderError
+    from .bridge import local_provider, resolve, ProviderError
 
     out = dict(s)
     # Legacy moss settings could carry a plaintext key; credentials now live
@@ -106,12 +106,13 @@ def public_settings(s: dict) -> dict:
     out.pop("base_url", None)
     try:
         resolved = resolve(out.get("provider_id"))
-        out["api_key_set"] = bool(resolved["api_key"])
+        is_local = getattr(resolved["provider"], "kind", "") == "local"
+        out["api_key_set"] = True if is_local else bool(resolved["api_key"])
         out["provider_name"] = resolved["provider"].name
     except ProviderError as exc:
         out["api_key_set"] = False
         out["provider_name"] = str(exc)
-    out["providers"] = provider_manager.list_providers()
+    out["providers"] = [vars(local_provider()), *provider_manager.list_providers()]
     return out
 
 

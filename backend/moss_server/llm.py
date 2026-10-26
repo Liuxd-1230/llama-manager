@@ -34,7 +34,7 @@ def _creds() -> tuple[str, str]:
         resolved = resolve(s.get("provider_id"))
     except ProviderError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if not resolved["api_key"]:
+    if not resolved["api_key"] and getattr(resolved["provider"], "kind", "") != "local":
         raise HTTPException(status_code=400, detail=f"提供商 {resolved['provider'].name} 未配置密钥：请在系统设置中设置对应的环境变量。")
     return resolved["base_url"], resolved["api_key"]
 
@@ -64,7 +64,7 @@ async def chat(messages: list[dict], *, model: Optional[str] = None, max_tokens:
         try:
             async with httpx.AsyncClient(timeout=180.0) as client:
                 r = await client.post(f"{base}/chat/completions", json=payload,
-                                      headers={"Authorization": f"Bearer {key}"})
+                                      headers={"Authorization": f"Bearer {key}"} if key else {})
             if r.status_code >= 400:
                 last = UpstreamError(r.status_code, r.text)
                 if r.status_code in (408, 429) or r.status_code >= 500:
@@ -112,8 +112,8 @@ async def stream_chat(
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=20.0)) as client:
                 async with client.stream("POST", f"{base}/chat/completions", json=payload,
-                                         headers={"Authorization": f"Bearer {key}",
-                                                  "Accept": "text/event-stream"}) as r:
+                                         headers=({"Authorization": f"Bearer {key}"} if key else {})
+                                         | {"Accept": "text/event-stream"}) as r:
                     if r.status_code >= 400:
                         body = (await r.aread()).decode("utf-8", "replace")
                         if tools and r.status_code in (400, 404, 422) and _TOOL_ERR.search(body):

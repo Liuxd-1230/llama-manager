@@ -2,11 +2,14 @@
 
 Credentials never live in moss settings: base_url and key resolve from
 providers.json plus the environment, mirroring backend.main's helpers.
+The local engine ("local") is a synthetic provider: llama-server already
+speaks the OpenAI protocol at its own port and needs no key.
 """
 
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 from typing import Any
 
 from .. import provider_manager
@@ -15,6 +18,31 @@ from .config import load_settings
 
 class ProviderError(RuntimeError):
     pass
+
+
+LOCAL_PROVIDER_ID = "local"
+
+
+def local_provider() -> SimpleNamespace:
+    """The managed llama-server seen as one more provider."""
+    from .. import config_manager
+    from ..process_manager import process_manager
+
+    config = config_manager.get_config()
+    state = process_manager.get_status().state
+    host = config.server.host if config.server.host not in ("", "0.0.0.0") else "127.0.0.1"
+    path = (config.model_path or "").strip()
+    model = path.replace("\\", "/").rsplit("/", 1)[-1] if path else ""
+    suffix = "" if state == "running" else "（未运行）"
+    return SimpleNamespace(
+        id=LOCAL_PROVIDER_ID,
+        name=f"本地引擎{suffix}",
+        kind="local",
+        base_url=f"http://{host}:{config.server.port}",
+        default_model=model,
+        models=[model] if model else [],
+        enabled=True,
+    )
 
 
 def _api_key(provider) -> str:
@@ -39,6 +67,10 @@ def _openai_base(provider) -> str:
 
 
 def resolve(provider_id: str | None = None) -> dict[str, Any]:
+    if provider_id == LOCAL_PROVIDER_ID:
+        provider = local_provider()
+        # llama-server exposes /v1/chat/completions and /v1/models; no auth.
+        return {"provider": provider, "base_url": provider.base_url + "/v1", "api_key": ""}
     provider = provider_manager.get_provider(provider_id) if provider_id else None
     if provider is None:
         enabled = [item for item in provider_manager.list_providers() if item.get("enabled")]

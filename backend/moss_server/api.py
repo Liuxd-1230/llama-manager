@@ -459,7 +459,7 @@ def _resolve_creds(body: Optional[ProbeBody] = None) -> tuple[str, str]:
         resolved = bridge.resolve(provider_id)
     except bridge.ProviderError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if not resolved["api_key"]:
+    if not resolved["api_key"] and getattr(resolved["provider"], "kind", "") != "local":
         raise HTTPException(status_code=400, detail=f"提供商 {resolved['provider'].name} 未配置密钥：请在系统设置中设置对应的环境变量。")
     return resolved["base_url"], resolved["api_key"]
 

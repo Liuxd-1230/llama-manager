@@ -56,5 +56,45 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(chain, ["m0", "m2", "m1", "m3"])
 
 
+class LocalEngineBridgeTests(unittest.TestCase):
+    """The managed llama-server participates as the synthetic "local" provider."""
+
+    def test_local_resolve_targets_engine_v1_without_key(self):
+        from backend import config_manager
+        from backend.process_manager import ProcessManager
+
+        config = config_manager.AppConfig(model_path="D:\models\hermes-35b.gguf")
+        config.server.host = "0.0.0.0"
+        config.server.port = 8080
+        with mock.patch.object(config_manager, "get_config", return_value=config):
+            with mock.patch.object(ProcessManager, "get_status", return_value=type("S", (), {"state": "running"})()):
+                resolved = bridge.resolve("local")
+        self.assertEqual(resolved["base_url"], "http://127.0.0.1:8080/v1")
+        self.assertEqual(resolved["api_key"], "")
+        self.assertEqual(resolved["provider"].kind, "local")
+        self.assertEqual(resolved["provider"].default_model, "hermes-35b.gguf")
+        self.assertIn("本地引擎", resolved["provider"].name)
+        self.assertNotIn("未运行", resolved["provider"].name)
+
+    def test_local_name_flags_stopped_engine(self):
+        from backend import config_manager
+        from backend.process_manager import ProcessManager
+
+        config = config_manager.AppConfig(model_path="")
+        with mock.patch.object(config_manager, "get_config", return_value=config):
+            with mock.patch.object(ProcessManager, "get_status", return_value=type("S", (), {"state": "stopped"})()):
+                resolved = bridge.resolve("local")
+        self.assertIn("未运行", resolved["provider"].name)
+        self.assertEqual(resolved["provider"].models, [])
+
+    def test_model_chain_for_local_fills_engine_model(self):
+        with mock.patch.object(bridge, "resolve", return_value={
+                "provider": type("P", (), {"default_model": "hermes.gguf", "models": ["hermes.gguf"]})(),
+                "base_url": "http://127.0.0.1:8080/v1", "api_key": ""}):
+            with mock.patch.object(bridge, "load_settings", return_value={"model": "", "fallback_models": ""}):
+                chain = bridge.model_chain("local")
+        self.assertEqual(chain, ["hermes.gguf"])
+
+
 if __name__ == "__main__":
     unittest.main()
