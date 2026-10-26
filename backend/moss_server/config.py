@@ -70,6 +70,11 @@ SETTINGS_DEFAULTS: dict[str, Any] = {
     "negative_prompt": "nsfw, worst quality, bad anatomy, watermark, jpeg artifact",
     # ComfyUI 出图：地址、导入的 workflow（API 格式）与字段绑定
     "comfy_url": "http://127.0.0.1:8188",
+    # Workflow library: id -> {name, nodes, bindings, layout, created_at}.
+    # Multiple ComfyUI pipelines coexist; one is active at a time.
+    "comfy_workflows": {},
+    "comfy_active": "",
+    # Legacy single-workflow keys, migrated into the library on load.
     "comfy_workflow": {},
     "comfy_bindings": {},
     "comfy_layout": {},
@@ -94,6 +99,52 @@ def load_settings() -> dict:
         out["context_turns"] = 10
     if out.get("agent_protocol") not in ("auto", "tools", "tags"):
         out["agent_protocol"] = "auto"
+    _migrate_single_workflow(out)
+    return out
+
+
+def _migrate_single_workflow(s: dict) -> None:
+    """Fold the pre-library single workflow into comfy_workflows once."""
+    legacy = s.get("comfy_workflow") or {}
+    if not legacy or s.get("comfy_workflows"):
+        return
+    wid = "default"
+    s["comfy_workflows"] = {
+        wid: {
+            "name": "默认工作流",
+            "nodes": legacy,
+            "bindings": s.get("comfy_bindings") or {},
+            "layout": s.get("comfy_layout") or {},
+            "created_at": now_iso(),
+        }
+    }
+    s["comfy_active"] = wid
+
+
+def active_workflow(s: dict) -> dict:
+    """The active entry, or {} when the library is empty."""
+    workflows = s.get("comfy_workflows") or {}
+    wid = s.get("comfy_active") or ""
+    if wid and isinstance(workflows.get(wid), dict):
+        return workflows[wid]
+    if workflows:
+        return next(iter(workflows.values()))
+    return {}
+
+
+def workflow_summaries(s: dict) -> list[dict]:
+    out = []
+    for wid, wf in (s.get("comfy_workflows") or {}).items():
+        if not isinstance(wf, dict):
+            continue
+        out.append({
+            "id": wid,
+            "name": wf.get("name") or wid,
+            "nodes": len(wf.get("nodes") or {}),
+            "bindings": len(wf.get("bindings") or {}),
+            "created_at": wf.get("created_at") or "",
+            "active": wid == (s.get("comfy_active") or ""),
+        })
     return out
 
 

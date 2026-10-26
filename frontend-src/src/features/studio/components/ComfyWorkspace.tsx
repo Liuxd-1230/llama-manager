@@ -14,6 +14,10 @@ interface ComfyStatus {
   fields: Record<string, string>;
   nodes: { node: string; class_type: string; title: string; inputs: { name: string; type: string; is_link: boolean; value: string | number | boolean | null }[] }[];
   binding_errors: string[];
+  workflows: { id: string; name: string; nodes: number; bindings: number; active: boolean }[];
+  active_id: string;
+  active_name: string;
+  params?: Record<string, unknown>;
 }
 type Bindings = Record<string, { node: string; input: string }>;
 
@@ -41,6 +45,9 @@ export function ComfyWorkspace() {
   const [sampler, setSampler] = useState("euler");
   const [scheduler, setScheduler] = useState("normal");
   const [steps, setSteps] = useState(20);
+  const [workflows, setWorkflows] = useState<{ id: string; name: string; nodes: number; bindings: number; active: boolean }[]>([]);
+  const [activeId, setActiveId] = useState("");
+  const [workflowName, setWorkflowName] = useState("");
   const [choices, setChoices] = useState<{ samplers: string[]; schedulers: string[] }>({ samplers: [], schedulers: [] });
   const [result, setResult] = useState<{ image: string; filename: string } | null>(null);
   const [focusNode, setFocusNode] = useState<string | null>(null);
@@ -51,6 +58,8 @@ export function ComfyWorkspace() {
     setLabels(s.fields || {});
     setUrl(s.url);
     setBindingErrors(s.binding_errors || []);
+    setWorkflows(s.workflows || []);
+    setActiveId(s.active_id || "");
     if (restore) setBindings(s.bindings || {});
     // Prompts are NOT restored from the last run: they come from the current
     // compile result (seeded below). Restoring them would silently resurrect a
@@ -110,6 +119,48 @@ export function ComfyWorkspace() {
     return () => window.clearInterval(timer);
   }, [loadStatus]);
 
+  const switchWorkflow = async (id: string) => {
+    if (!id || id === activeId) return;
+    setBusy("switch");
+    try {
+      const r = await api.comfyActivate(id);
+      setWorkflows(r.workflows);
+      setActiveId(r.active_id);
+      // Prompts deliberately survive the switch: the compiled text belongs to
+      // the page, and a new pipeline usually consumes the same prompt.
+      await loadStatus(false);
+      const name = r.workflows.find((w) => w.id === id)?.name || id;
+      toast(`已切换到 ${name}，提示词已保留`, "ok");
+    } catch (error) {
+      toast(`切换失败：${error instanceof Error ? error.message : String(error)}`, "err");
+    } finally { setBusy(""); }
+  };
+
+  const renameWorkflow = async (id: string, current: string) => {
+    const name = window.prompt("工作流名称", current);
+    if (!name?.trim()) return;
+    try {
+      const r = await api.comfyRenameWorkflow(id, name.trim());
+      setWorkflows(r.workflows);
+      toast("已重命名", "ok");
+    } catch (error) {
+      toast(`重命名失败：${error instanceof Error ? error.message : String(error)}`, "err");
+    }
+  };
+
+  const deleteWorkflow = async (id: string, name: string) => {
+    if (!window.confirm(`删除工作流 ${name}？节点、绑定和布局都会移除。`)) return;
+    try {
+      const r = await api.comfyDeleteWorkflow(id);
+      setWorkflows(r.workflows);
+      setActiveId(r.active_id);
+      await loadStatus(false);
+      toast("已删除", "ok");
+    } catch (error) {
+      toast(`删除失败：${error instanceof Error ? error.message : String(error)}`, "err");
+    }
+  };
+
   const persist = useCallback(async (next: Bindings) => {
     setBusy("bind");
     try {
@@ -132,8 +183,11 @@ export function ComfyWorkspace() {
     if (!raw.trim()) { toast("先选择或粘贴 API 格式的 workflow", "err"); return }
     setBusy("import");
     try {
-      const r = await api.comfyImport(raw);
+      const r = await api.comfyImport(raw, workflowName.trim() || undefined);
       setLabels(r.fields);
+      setWorkflows(r.workflows);
+      setActiveId(r.id);
+      setWorkflowName("");
       const suggested = r.suggested || {};
       setBindings(suggested);
       await api.comfyBindings(suggested);
@@ -200,6 +254,17 @@ export function ComfyWorkspace() {
   return (
     <div className="image-ws">
       <header className="image-ws-head">
+        <Select aria-label="当前工作流" value={activeId} disabled={!workflows.length || busy !== ""}
+          onChange={(e) => void switchWorkflow(e.target.value)}>
+          {!workflows.length && <option value="">（还没有工作流）</option>}
+          {workflows.map((w) => <option key={w.id} value={w.id}>{w.name} · {w.nodes} 节点</option>)}
+        </Select>
+        {activeId && <>
+          <Button size="small" title="重命名当前工作流"
+            onClick={() => { const cur = workflows.find((w) => w.id === activeId); if (cur) void renameWorkflow(cur.id, cur.name); }}>改名</Button>
+          <Button size="small" title="删除当前工作流"
+            onClick={() => { const cur = workflows.find((w) => w.id === activeId); if (cur) void deleteWorkflow(cur.id, cur.name); }}>删除</Button>
+        </>}
         <span className="comfy-state" data-state={connected ? "ok" : status ? "bad" : "unknown"}>
           <i />{connected ? `已连接 ${status?.url}` : status ? `连不上 ${status?.url}` : statusError ? `状态不可用：${statusError}` : "检测中…"}
         </span>
@@ -243,7 +308,8 @@ export function ComfyWorkspace() {
                 toast(`已读取 ${file.name}`, "ok");
               }} />
             </label>
-            <Button size="small" disabled={busy !== ""} onClick={() => void importWorkflow()}>{busy === "import" ? "解析中…" : "解析并绑定"}</Button>
+            <Input value={workflowName} onChange={(e) => setWorkflowName(e.target.value)} placeholder="工作流名称（可选）" aria-label="新工作流名称" />
+            <Button size="small" disabled={busy !== ""} onClick={() => void importWorkflow()}>{busy === "import" ? "解析中…" : "保存为新工作流"}</Button>
             {dirty ? <span className="hint" data-state="pending">绑定未保存…</span> : <span className="hint" data-state="ok"><Check size={11}/>绑定已同步</span>}
           </div>
 
@@ -287,7 +353,7 @@ export function ComfyWorkspace() {
         </section>
 
         <section className="image-ws-col image-ws-graph">
-          <div className="group-title">节点图与通配符<span className="hint" style={{ marginLeft: 8, fontWeight: 400 }}>点击节点 → 右侧列出输入 → 绑定为通配符；连线输入不可绑定</span></div>
+          <div className="group-title">节点图与通配符{status?.active_name ? ` · ${status.active_name}` : ""}<span className="hint" style={{ marginLeft: 8, fontWeight: 400 }}>点击节点 → 右侧列出输入 → 绑定为通配符；连线输入不可绑定</span></div>
           <ComfyGraphView
             graph={graph}
             bindings={bindings}

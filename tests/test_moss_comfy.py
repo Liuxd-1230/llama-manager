@@ -221,3 +221,63 @@ class EmptyKeyAuthTests(unittest.TestCase):
     def test_present_key_sends_bearer(self):
         from backend.moss_server import api as moss_api
         self.assertEqual(moss_api._auth_headers("sk-x"), {"Authorization": "Bearer sk-x"})
+
+
+class WorkflowLibraryTests(unittest.TestCase):
+    """Multiple ComfyUI pipelines coexist; switching keeps each one's own wiring."""
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        from backend.moss_server import config
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "settings.json"
+        self.patches = [mock.patch.object(config, "SETTINGS_PATH", self.path)]
+        for p in self.patches:
+            p.start()
+        self.config = config
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+        self.tmp.cleanup()
+
+    def test_legacy_single_workflow_is_migrated_into_the_library(self):
+        self.path.write_text(json.dumps({
+            "comfy_workflow": {"3": {"class_type": "KSampler", "inputs": {"seed": 1}}},
+            "comfy_bindings": {"seed": {"node": "3", "input": "seed"}},
+        }), encoding="utf-8")
+        s = self.config.load_settings()
+        self.assertEqual(len(s["comfy_workflows"]), 1)
+        self.assertEqual(s["comfy_active"], "default")
+        wf = self.config.active_workflow(s)
+        self.assertEqual(len(wf["nodes"]), 1)
+        self.assertEqual(wf["bindings"]["seed"]["node"], "3")
+
+    def test_switching_keeps_bindings_per_workflow(self):
+        s = self.config.load_settings()
+        s["comfy_workflows"] = {
+            "a": {"name": "A", "nodes": {"1": {"class_type": "X", "inputs": {}}}, "bindings": {"seed": {"node": "1", "input": "seed"}}, "layout": {}},
+            "b": {"name": "B", "nodes": {"9": {"class_type": "Y", "inputs": {}}}, "bindings": {"steps": {"node": "9", "input": "steps"}}, "layout": {}},
+        }
+        s["comfy_active"] = "a"
+        self.config.save_settings(s)
+        self.assertEqual(self.config.active_workflow(self.config.load_settings())["bindings"], {"seed": {"node": "1", "input": "seed"}})
+        s = self.config.load_settings()
+        s["comfy_active"] = "b"
+        self.config.save_settings(s)
+        active = self.config.active_workflow(self.config.load_settings())
+        self.assertEqual(active["name"], "B")
+        self.assertIn("steps", active["bindings"])
+
+    def test_summaries_report_node_and_binding_counts(self):
+        s = self.config.load_settings()
+        s["comfy_workflows"] = {
+            "a": {"name": "A", "nodes": {"1": {}, "2": {}}, "bindings": {"seed": {}}, "layout": {}, "created_at": "x"},
+        }
+        s["comfy_active"] = "a"
+        self.config.save_settings(s)
+        rows = self.config.workflow_summaries(self.config.load_settings())
+        self.assertEqual(rows[0]["nodes"], 2)
+        self.assertEqual(rows[0]["bindings"], 1)
+        self.assertTrue(rows[0]["active"])

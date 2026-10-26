@@ -20,7 +20,7 @@ from . import comfy, db, llm
 from .agent import run_agent
 from . import bridge
 from .config import (APP_VERSION, ATTACH_DIR, CAPTION_PROMPT_PATH, SKILL_COMPILE, SETTINGS_DEFAULTS,
-                     load_settings, public_settings, save_settings)
+                     active_workflow, load_settings, public_settings, save_settings, workflow_summaries)
 from .layout_core import _ensure_wh, _sanitize_layout_draft, compile_checks, compile_safe, sanitize_draft
 from .ops import describe_changes
 from .reverse_boxes import box_format_for, items_to_draft, normalize_reverse, reverse_rules
@@ -441,6 +441,7 @@ class ProbeBody(BaseModel):
 
 class ComfyImportBody(BaseModel):
     workflow: str
+    name: Optional[str] = None
 
 
 class ComfyBindBody(BaseModel):
@@ -467,9 +468,63 @@ def comfy_import(body: ComfyImportBody):
     except comfy.ComfyError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     s = load_settings()
-    s["comfy_workflow"] = nodes
+    suggested = comfy.guess_bindings(nodes)
+    name = (body.name or "").strip() or f"工作流 {len(s.get('comfy_workflows') or {}) + 1}"
+    wid = uuid.uuid4().hex[:10]
+    s.setdefault("comfy_workflows", {})[wid] = {
+        "name": name, "nodes": nodes, "bindings": suggested, "layout": {},
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    }
+    s["comfy_active"] = wid
     save_settings(s)
-    return {"nodes": comfy.node_choices(nodes), "fields": comfy.FIELD_LABELS, "suggested": comfy.guess_bindings(nodes)}
+    return {"id": wid, "name": name, "nodes": comfy.node_choices(nodes),
+            "fields": comfy.FIELD_LABELS, "suggested": suggested,
+            "workflows": workflow_summaries(s)}
+
+
+@router.get("/comfy/workflows")
+def comfy_workflows():
+    s = load_settings()
+    return {"workflows": workflow_summaries(s), "active_id": s.get("comfy_active") or ""}
+
+
+@router.put("/comfy/workflows/active")
+def comfy_activate(body: dict):
+    """Switch the active workflow. Bindings/layout travel with each workflow."""
+    wid = str(body.get("id") or "")
+    s = load_settings()
+    workflows = s.get("comfy_workflows") or {}
+    if wid not in workflows:
+        raise HTTPException(status_code=404, detail="工作流不存在")
+    s["comfy_active"] = wid
+    save_settings(s)
+    return {"active_id": wid, "workflows": workflow_summaries(s)}
+
+
+@router.put("/comfy/workflows/{wid}")
+def comfy_rename(wid: str, body: dict):
+    s = load_settings()
+    wf = (s.get("comfy_workflows") or {}).get(wid)
+    if not isinstance(wf, dict):
+        raise HTTPException(status_code=404, detail="工作流不存在")
+    name = str(body.get("name") or "").strip()
+    if name:
+        wf["name"] = name
+    save_settings(s)
+    return {"workflows": workflow_summaries(s)}
+
+
+@router.delete("/comfy/workflows/{wid}")
+def comfy_delete_workflow(wid: str):
+    s = load_settings()
+    workflows = s.get("comfy_workflows") or {}
+    if wid not in workflows:
+        raise HTTPException(status_code=404, detail="工作流不存在")
+    workflows.pop(wid)
+    if s.get("comfy_active") == wid:
+        s["comfy_active"] = next(iter(workflows), "")
+    save_settings(s)
+    return {"workflows": workflow_summaries(s), "active_id": s.get("comfy_active") or ""}
 
 
 @router.put("/comfy/bindings")
@@ -479,7 +534,10 @@ def comfy_bindings(body: ComfyBindBody):
     for field, binding in (body.bindings or {}).items():
         if field in comfy.FIELDS and isinstance(binding, dict) and binding.get("node"):
             clean[field] = {"node": str(binding["node"]), "input": str(binding.get("input") or "")}
-    s["comfy_bindings"] = clean
+    wf = active_workflow(s)
+    if wf:
+        wf["bindings"] = clean
+    s["comfy_bindings"] = clean  # keep legacy key in sync for older clients
     save_settings(s)
     return {"bindings": clean}
 
@@ -494,12 +552,15 @@ async def comfy_status():
             reachable = (await client.get(f"{base}/system_stats")).status_code < 400
     except Exception:
         reachable = False
-    nodes = s.get("comfy_workflow") or {}
-    bindings = s.get("comfy_bindings") or {}
+    wf = active_workflow(s)
+    nodes = wf.get("nodes") or {}
+    bindings = wf.get("bindings") or {}
     # The node catalog ships with the status so reopening the dialog restores
     # the binding dropdowns (they render blank without it).
     return {"url": base, "reachable": reachable, "has_workflow": bool(nodes),
             "bindings": bindings, "fields": comfy.FIELD_LABELS,
+            "workflows": workflow_summaries(s), "active_id": s.get("comfy_active") or "",
+            "active_name": wf.get("name") or "",
             "params": s.get("comfy_params") or {},
             "nodes": comfy.node_choices(nodes) if nodes else [],
             "binding_errors": [error for field, binding in bindings.items()
@@ -515,7 +576,7 @@ async def comfy_choices():
 @router.get("/comfy/graph")
 def comfy_graph():
     s = load_settings()
-    nodes = s.get("comfy_workflow") or {}
+    nodes = (active_workflow(s).get("nodes") or {})
     if not nodes:
         return {"nodes": [], "edges": []}
     return comfy.build_graph(nodes, s.get("comfy_layout") or {})
@@ -530,6 +591,9 @@ def comfy_layout(body: dict):
         if isinstance(pos, dict) and isinstance(pos.get("x"), (int, float)) and isinstance(pos.get("y"), (int, float)):
             clean[str(node_id)] = {"x": float(pos["x"]), "y": float(pos["y"])}
     s = load_settings()
+    wf = active_workflow(s)
+    if wf:
+        wf["layout"] = clean
     s["comfy_layout"] = clean
     save_settings(s)
     return {"positions": clean}
@@ -559,10 +623,11 @@ def comfy_params(body: dict):
 @router.post("/comfy/generate")
 async def comfy_generate(body: ComfyGenerateBody):
     s = load_settings()
-    nodes = s.get("comfy_workflow") or {}
+    wf = active_workflow(s)
+    nodes = wf.get("nodes") or {}
     if not nodes:
         raise HTTPException(status_code=400, detail="还没有导入 ComfyUI workflow")
-    bindings = s.get("comfy_bindings") or {}
+    bindings = wf.get("bindings") or {}
     errors = [error for field, binding in bindings.items()
               if (error := comfy.validate_binding(nodes, field, binding))]
     if errors:

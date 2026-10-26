@@ -88,8 +88,12 @@ export const api = {
       ok: boolean; message: string; stream_ok: boolean; tools_ok: boolean; chat_ok: boolean; models_ok: boolean;
       latency_ms: number | null; sample_models: string[]; model_count: number;
     }>("/settings/test", b),
-  comfyStatus: () => get<{ url: string; reachable: boolean; has_workflow: boolean; bindings: Record<string, { node: string; input: string }>; fields: Record<string, string>; nodes: { node: string; class_type: string; title: string; inputs: { name: string; type: string; is_link: boolean; value: string | number | boolean | null }[] }[]; binding_errors: string[] }>("/comfy/status"),
-  comfyImport: (workflow: string) => post<{ nodes: { node: string; class_type: string; title: string; inputs: { name: string; type: string; is_link: boolean; value: string | number | boolean | null }[] }[]; fields: Record<string, string>; suggested: Record<string, { node: string; input: string }> }>("/comfy/import", { workflow }),
+  comfyStatus: () => get<{ url: string; reachable: boolean; has_workflow: boolean; bindings: Record<string, { node: string; input: string }>; fields: Record<string, string>; nodes: { node: string; class_type: string; title: string; inputs: { name: string; type: string; is_link: boolean; value: string | number | boolean | null }[] }[]; binding_errors: string[]; workflows: { id: string; name: string; nodes: number; bindings: number; active: boolean }[]; active_id: string; active_name: string }>("/comfy/status"),
+  comfyWorkflows: () => get<{ workflows: { id: string; name: string; nodes: number; bindings: number; active: boolean }[]; active_id: string }>("/comfy/workflows"),
+  comfyActivate: (id: string) => put<{ active_id: string; workflows: { id: string; name: string; nodes: number; bindings: number; active: boolean }[] }>("/comfy/workflows/active", { id }),
+  comfyRenameWorkflow: (id: string, name: string) => put<{ workflows: { id: string; name: string; nodes: number; bindings: number; active: boolean }[] }>(`/comfy/workflows/${id}`, { name }),
+  comfyDeleteWorkflow: (id: string) => del<{ workflows: { id: string; name: string; nodes: number; bindings: number; active: boolean }[]; active_id: string }>(`/comfy/workflows/${id}`),
+  comfyImport: (workflow: string, name?: string) => post<{ id: string; name: string; nodes: { node: string; class_type: string; title: string; inputs: { name: string; type: string; is_link: boolean; value: string | number | boolean | null }[] }[]; fields: Record<string, string>; suggested: Record<string, { node: string; input: string }>; workflows: { id: string; name: string; nodes: number; bindings: number; active: boolean }[] }>("/comfy/import", { workflow, name }),
   comfyUrl: (url: string) => put<{ url: string }>("/comfy/url", { url }),
   comfyParams: (p: Record<string, unknown>) => put<{ params: Record<string, unknown> }>("/comfy/params", p),
   comfyChoices: () => get<{ samplers: string[]; schedulers: string[] }>("/comfy/choices"),
