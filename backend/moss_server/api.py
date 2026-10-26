@@ -494,8 +494,26 @@ async def comfy_status():
             reachable = (await client.get(f"{base}/system_stats")).status_code < 400
     except Exception:
         reachable = False
-    return {"url": base, "reachable": reachable, "has_workflow": bool(s.get("comfy_workflow")),
-            "bindings": s.get("comfy_bindings") or {}, "fields": comfy.FIELD_LABELS}
+    nodes = s.get("comfy_workflow") or {}
+    bindings = s.get("comfy_bindings") or {}
+    # The node catalog ships with the status so reopening the dialog restores
+    # the binding dropdowns (they render blank without it).
+    return {"url": base, "reachable": reachable, "has_workflow": bool(nodes),
+            "bindings": bindings, "fields": comfy.FIELD_LABELS,
+            "nodes": comfy.node_choices(nodes) if nodes else [],
+            "binding_errors": [error for field, binding in bindings.items()
+                               if (error := comfy.validate_binding(nodes, field, binding))]}
+
+
+@router.put("/comfy/url")
+def comfy_set_url(body: dict):
+    url = str(body.get("url") or "").strip()
+    if url and not re.match(r"^https?://", url):
+        raise HTTPException(status_code=400, detail="地址必须以 http:// 或 https:// 开头")
+    s = load_settings()
+    s["comfy_url"] = url or comfy.COMFY_DEFAULT
+    save_settings(s)
+    return {"url": s["comfy_url"]}
 
 
 @router.post("/comfy/generate")
@@ -504,8 +522,13 @@ async def comfy_generate(body: ComfyGenerateBody):
     nodes = s.get("comfy_workflow") or {}
     if not nodes:
         raise HTTPException(status_code=400, detail="还没有导入 ComfyUI workflow")
+    bindings = s.get("comfy_bindings") or {}
+    errors = [error for field, binding in bindings.items()
+              if (error := comfy.validate_binding(nodes, field, binding))]
+    if errors:
+        raise HTTPException(status_code=400, detail="绑定已失效：" + "；".join(errors))
     values = {key: value for key, value in body.model_dump().items() if value is not None}
-    workflow = comfy.apply_bindings(nodes, s.get("comfy_bindings") or {}, values)
+    workflow = comfy.apply_bindings(nodes, bindings, values)
     try:
         prompt_id = await comfy.submit(comfy.comfy_base(s), workflow)
         images = await comfy.wait_for_images(comfy.comfy_base(s), prompt_id)

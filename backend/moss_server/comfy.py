@@ -57,15 +57,13 @@ def parse_workflow(raw: str | dict) -> dict:
     return nodes
 
 
-def _set_path(inputs: dict, name: str, value: Any) -> None:
-    inputs[name] = value
-
-
 def apply_bindings(nodes: dict, bindings: dict, values: dict) -> dict:
     """Return a copy of the workflow with each bound input replaced.
 
-    bindings: field -> {node: "12", input: "text"}. Missing values leave the
-    original workflow value untouched (so a partial binding still runs).
+    bindings: field -> {node: "12", input: "text"}. Values that are None, empty
+    strings or blank are skipped, so a half-filled form keeps the workflow's own
+    defaults instead of wiping them. A binding whose node/input does not exist
+    is skipped rather than inventing a field the node never reads.
     """
     out = copy.deepcopy(nodes)
     for field in FIELDS:
@@ -74,11 +72,16 @@ def apply_bindings(nodes: dict, bindings: dict, values: dict) -> dict:
         input_name = str(binding.get("input") or "")
         if not node_id or not input_name or field not in values:
             continue
+        value = values[field]
+        if value is None or (isinstance(value, str) and not value.strip()):
+            continue
         node = out.get(node_id)
         if not node:
             continue
-        node.setdefault("inputs", {})
-        _set_path(node["inputs"], input_name, values[field])
+        inputs = node.setdefault("inputs", {})
+        if input_name not in inputs or is_link(inputs[input_name]):
+            continue
+        inputs[input_name] = value
     return out
 
 
@@ -139,8 +142,33 @@ async def fetch_image(base: str, image: dict) -> tuple[bytes, str]:
     return response.content, image["filename"]
 
 
+def is_link(value: Any) -> bool:
+    """API-format links are [node_id, output_slot] pairs."""
+    return isinstance(value, list) and len(value) == 2 and isinstance(value[0], str) and isinstance(value[1], int)
+
+
+# Text inputs in preference order. SDXL/Flux dual-encoder nodes expose text_g /
+# text_l instead of text, so a hardcoded "text" would invent a field the node
+# never reads (the workflow would silently keep its own prompt).
+TEXT_INPUTS = ("text", "text_g", "text_l", "prompt", "positive", "negative")
+
+
+def text_input_of(node: dict) -> Optional[str]:
+    inputs = node.get("inputs") or {}
+    for name in TEXT_INPUTS:
+        value = inputs.get(name)
+        if name in inputs and not is_link(value):
+            return name
+    return None
+
+
 def node_choices(nodes: dict) -> list[dict]:
-    """Flatten the workflow into candidate bindings for the UI."""
+    """Flatten the workflow into candidate bindings for the UI.
+
+    Literal values are included so the client can show what it is replacing;
+    link inputs are flagged so they cannot be bound (a link is a wire, not a
+    value).
+    """
     out = []
     for node_id, node in nodes.items():
         inputs = node.get("inputs") or {}
@@ -148,32 +176,59 @@ def node_choices(nodes: dict) -> list[dict]:
             "node": str(node_id),
             "class_type": node.get("class_type", ""),
             "title": node.get("_meta", {}).get("title") or node.get("class_type", ""),
-            "inputs": [{"name": name, "type": type(value).__name__} for name, value in inputs.items()],
+            "inputs": [
+                {
+                    "name": name,
+                    "type": type(value).__name__,
+                    "is_link": is_link(value),
+                    "value": None if is_link(value) or isinstance(value, (dict, list)) else value,
+                }
+                for name, value in inputs.items()
+            ],
         })
     return out
+
+
+def validate_binding(nodes: dict, field: str, binding: dict) -> Optional[str]:
+    """Return an error string when a binding cannot be applied, else None."""
+    node_id = str(binding.get("node") or "")
+    input_name = str(binding.get("input") or "")
+    if not node_id or not input_name:
+        return None  # unbound on purpose
+    node = nodes.get(node_id)
+    if not node:
+        return f"{FIELD_LABELS.get(field, field)}：工作流里没有节点 {node_id}（可能换过工作流）"
+    inputs = node.get("inputs") or {}
+    if input_name not in inputs:
+        return f"{FIELD_LABELS.get(field, field)}：节点 {node_id} 没有输入「{input_name}」"
+    if is_link(inputs[input_name]):
+        return f"{FIELD_LABELS.get(field, field)}：「{input_name}」是连线，不能填值"
+    return None
+
 
 def guess_bindings(nodes: dict) -> dict:
     """Best-effort bindings from the workflow's own wiring.
 
-    Positive/negative come from whichever CLIPTextEncode feeds a sampler's
-    `positive`/`negative` input (both nodes are usually named just "text", so
-    name matching alone would bind both to the same node). The rest fall back
-    to input-name matching.
+    Positive/negative resolve through the sampler's positive/negative links, and
+    bind to whichever text input the target node actually has. The rest fall
+    back to input-name matching on literal (non-link) inputs.
     """
     out: dict[str, dict] = {}
 
     def ref(node_id: str, input_name: str) -> Optional[str]:
         value = (nodes.get(node_id) or {}).get("inputs", {}).get(input_name)
-        if isinstance(value, list) and value:
+        if is_link(value):
             return str(value[0])
         return None
 
     for node_id, node in nodes.items():
-        inputs = node.get("inputs") or {}
         for field in ("positive", "negative"):
             target = ref(node_id, field)
-            if target and field not in out:
-                out[field] = {"node": target, "input": "text"}
+            if not target or field in out:
+                continue
+            text_input = text_input_of(nodes.get(target) or {})
+            if text_input:
+                out[field] = {"node": target, "input": text_input}
 
     name_map = {
         "text": "positive", "positive": "positive", "negative": "negative",
@@ -181,9 +236,9 @@ def guess_bindings(nodes: dict) -> dict:
         "cfg": "cfg", "sampler_name": "sampler", "scheduler": "scheduler", "steps": "steps",
     }
     for node_id, node in nodes.items():
-        for input_name in (node.get("inputs") or {}):
+        for input_name, value in (node.get("inputs") or {}).items():
             field = name_map.get(str(input_name).lower())
-            if not field or field in out:
+            if not field or field in out or is_link(value):
                 continue
             if field == "negative" and out.get("positive", {}).get("node") == str(node_id):
                 continue

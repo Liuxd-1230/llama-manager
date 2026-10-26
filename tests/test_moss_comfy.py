@@ -23,7 +23,11 @@ class WorkflowParsingTests(unittest.TestCase):
         choices = comfy.node_choices(nodes)
         sampler = next(c for c in choices if c["node"] == "3")
         self.assertEqual(sampler["class_type"], "KSampler")
-        self.assertIn({"name": "steps", "type": "int"}, sampler["inputs"])
+        steps = next(i for i in sampler["inputs"] if i["name"] == "steps")
+        self.assertEqual(steps["value"], 20)
+        self.assertFalse(steps["is_link"])
+        positive = next(i for i in sampler["inputs"] if i["name"] == "positive")
+        self.assertTrue(positive["is_link"])
 
     def test_ui_export_is_rejected_with_hint(self):
         with self.assertRaises(comfy.ComfyError) as caught:
@@ -75,6 +79,47 @@ class BindingTests(unittest.TestCase):
         out = comfy.apply_bindings(nodes, {"positive": {"node": "6", "input": "text"}}, {"positive": "x"})
         self.assertEqual(out["6"]["inputs"]["text"], "x")
         self.assertEqual(out["3"]["inputs"]["steps"], 20)
+
+    def test_empty_prompt_keeps_the_template_text(self):
+        nodes = comfy.parse_workflow(API_WORKFLOW)
+        out = comfy.apply_bindings(nodes, {"positive": {"node": "6", "input": "text"}}, {"positive": "   "})
+        self.assertEqual(out["6"]["inputs"]["text"], "a cat")
+
+    def test_binding_to_a_missing_input_is_ignored_not_invented(self):
+        nodes = comfy.parse_workflow(API_WORKFLOW)
+        out = comfy.apply_bindings(nodes, {"positive": {"node": "6", "input": "nonexistent"}}, {"positive": "x"})
+        self.assertNotIn("nonexistent", out["6"]["inputs"])
+
+    def test_link_inputs_cannot_be_bound(self):
+        nodes = comfy.parse_workflow(API_WORKFLOW)
+        out = comfy.apply_bindings(nodes, {"positive": {"node": "3", "input": "positive"}}, {"positive": "x"})
+        self.assertEqual(out["3"]["inputs"]["positive"], ["6", 0])
+
+
+SDXL_WORKFLOW = {
+    "6": {"class_type": "CLIPTextEncodeSDXL", "inputs": {"text_g": "global", "text_l": "local", "clip": ["4", 0]}},
+    "7": {"class_type": "CLIPTextEncodeSDXL", "inputs": {"text_g": "bad", "text_l": "bad", "clip": ["4", 0]}},
+    "9": {"class_type": "KSampler", "inputs": {"seed": 1, "steps": 20, "cfg": 7, "sampler_name": "euler",
+                                                "scheduler": "normal", "positive": ["6", 0], "negative": ["7", 0]}},
+}
+
+
+class SdxlBindingTests(unittest.TestCase):
+    def test_dual_encoder_binds_an_input_the_node_really_has(self):
+        nodes = comfy.parse_workflow(SDXL_WORKFLOW)
+        guess = comfy.guess_bindings(nodes)
+        self.assertEqual(guess["positive"]["node"], "6")
+        self.assertIn(guess["positive"]["input"], nodes["6"]["inputs"])
+        out = comfy.apply_bindings(nodes, guess, {"positive": "a cat"})
+        self.assertEqual(out["6"]["inputs"][guess["positive"]["input"]], "a cat")
+        self.assertNotIn("text", out["6"]["inputs"], "invented a field the node never reads")
+
+    def test_validate_reports_stale_bindings(self):
+        nodes = comfy.parse_workflow(SDXL_WORKFLOW)
+        self.assertIsNone(comfy.validate_binding(nodes, "seed", {"node": "9", "input": "seed"}))
+        self.assertIn("没有节点", comfy.validate_binding(nodes, "seed", {"node": "99", "input": "seed"}) or "")
+        self.assertIn("没有输入", comfy.validate_binding(nodes, "seed", {"node": "9", "input": "nope"}) or "")
+        self.assertIn("连线", comfy.validate_binding(nodes, "positive", {"node": "9", "input": "positive"}) or "")
 
 
 class SubmitTests(unittest.IsolatedAsyncioTestCase):

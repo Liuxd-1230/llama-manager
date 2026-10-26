@@ -3879,6 +3879,8 @@ button.chip.accent:hover {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 18px;
+  /* Bounded by the dialog body so each column scrolls instead of growing. */
+  height: min(70vh, 720px);
   min-height: 0;
 }
 .comfy-col {
@@ -3896,3 +3898,15 @@ button.chip.accent:hover {
 @media (max-width: 980px) {
   .comfy { grid-template-columns: 1fr; }
 }
+
+/* ComfyUI 连接状态徽章 */
+.comfy-state { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-3) }
+.comfy-state i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); flex: none }
+.comfy-state[data-state='ok'] { color: var(--ok-ink) }
+.comfy-state[data-state='ok'] i { background: var(--ok) }
+.comfy-state[data-state='bad'] { color: var(--err-ink) }
+.comfy-state[data-state='bad'] i { background: var(--err) }
+.comfy-error { display: flex; align-items: flex-start; gap: 6px; padding: 6px 8px; border-radius: 4px; background: var(--err-soft); color: var(--err-ink); font-size: 11.5px; line-height: 1.5 }
+.hint[data-state='pending'] { color: var(--warm-ink) }
+.hint[data-state='ok'] { display: inline-flex; align-items: center; gap: 3px; color: var(--ok-ink) }
+.comfy-current { display: block; max-height: 2.6em; overflow: hidden; text-overflow: ellipsis; word-break: break-all; opacity: .85 }
