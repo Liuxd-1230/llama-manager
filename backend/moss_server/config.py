@@ -68,6 +68,10 @@ SETTINGS_DEFAULTS: dict[str, Any] = {
     "context_turns": 10,
     "prompt_prefix": "best quality, masterpiece",
     "negative_prompt": "nsfw, worst quality, bad anatomy, watermark, jpeg artifact",
+    # ComfyUI 出图：地址、导入的 workflow（API 格式）与字段绑定
+    "comfy_url": "http://127.0.0.1:8188",
+    "comfy_workflow": {},
+    "comfy_bindings": {},
 }
 
 

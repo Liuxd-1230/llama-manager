@@ -16,7 +16,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import db, llm
+from . import comfy, db, llm
 from .agent import run_agent
 from . import bridge
 from .config import (APP_VERSION, ATTACH_DIR, CAPTION_PROMPT_PATH, SKILL_COMPILE, SETTINGS_DEFAULTS,
@@ -437,6 +437,86 @@ class SettingsBody(BaseModel):
 class ProbeBody(BaseModel):
     provider_id: Optional[str] = None
     model: Optional[str] = None
+
+
+class ComfyImportBody(BaseModel):
+    workflow: str
+
+
+class ComfyBindBody(BaseModel):
+    bindings: dict[str, dict]
+
+
+class ComfyGenerateBody(BaseModel):
+    positive: str = ""
+    negative: str = ""
+    seed: Optional[int] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    cfg: Optional[float] = None
+    sampler: Optional[str] = None
+    scheduler: Optional[str] = None
+    steps: Optional[int] = None
+
+
+@router.post("/comfy/import")
+def comfy_import(body: ComfyImportBody):
+    """Parse an API-format workflow and return its bindable nodes."""
+    try:
+        nodes = comfy.parse_workflow(body.workflow)
+    except comfy.ComfyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    s = load_settings()
+    s["comfy_workflow"] = nodes
+    save_settings(s)
+    return {"nodes": comfy.node_choices(nodes), "fields": comfy.FIELD_LABELS}
+
+
+@router.put("/comfy/bindings")
+def comfy_bindings(body: ComfyBindBody):
+    s = load_settings()
+    clean = {}
+    for field, binding in (body.bindings or {}).items():
+        if field in comfy.FIELDS and isinstance(binding, dict) and binding.get("node"):
+            clean[field] = {"node": str(binding["node"]), "input": str(binding.get("input") or "")}
+    s["comfy_bindings"] = clean
+    save_settings(s)
+    return {"bindings": clean}
+
+
+@router.get("/comfy/status")
+async def comfy_status():
+    s = load_settings()
+    base = comfy.comfy_base(s)
+    reachable = False
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            reachable = (await client.get(f"{base}/system_stats")).status_code < 400
+    except Exception:
+        reachable = False
+    return {"url": base, "reachable": reachable, "has_workflow": bool(s.get("comfy_workflow")),
+            "bindings": s.get("comfy_bindings") or {}, "fields": comfy.FIELD_LABELS}
+
+
+@router.post("/comfy/generate")
+async def comfy_generate(body: ComfyGenerateBody):
+    s = load_settings()
+    nodes = s.get("comfy_workflow") or {}
+    if not nodes:
+        raise HTTPException(status_code=400, detail="还没有导入 ComfyUI workflow")
+    values = {key: value for key, value in body.model_dump().items() if value is not None}
+    workflow = comfy.apply_bindings(nodes, s.get("comfy_bindings") or {}, values)
+    try:
+        prompt_id = await comfy.submit(comfy.comfy_base(s), workflow)
+        images = await comfy.wait_for_images(comfy.comfy_base(s), prompt_id)
+        if not images:
+            raise comfy.ComfyError("ComfyUI 没有产出图片（检查 workflow 的输出节点）")
+        raw, filename = await comfy.fetch_image(comfy.comfy_base(s), images[0])
+    except comfy.ComfyError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"prompt_id": prompt_id, "filename": filename,
+            "image": "data:image/png;base64," + base64.b64encode(raw).decode("ascii"),
+            "count": len(images)}
 
 
 @router.get("/settings")

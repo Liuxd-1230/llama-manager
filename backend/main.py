@@ -19,6 +19,7 @@ from .models import AppConfig
 from pypdf import PdfReader
 from . import config_manager as cfg
 from . import provider_manager as providers
+from . import resources
 from . import search_manager
 from .process_manager import process_manager
 from .update_manager import update_manager
@@ -1365,6 +1366,44 @@ async def server_stop():
 @app.get("/api/server/status")
 def server_status():
     return process_manager.get_status().model_dump()
+
+
+@app.get("/api/host/resources")
+def host_resources():
+    """Live host RAM/VRAM for the top bar (degrades to nulls, never errors)."""
+    return resources.read_resources()
+
+
+_suspended_profile: str = ""
+
+
+@app.post("/api/server/suspend")
+async def server_suspend():
+    """Pause: stop the engine, remembering the profile so resume can relaunch it."""
+    global _suspended_profile
+    status = process_manager.get_status()
+    if status.state == "running":
+        _suspended_profile = status.profile or cfg.get_current_name()
+        await process_manager.stop()
+    return {"ok": True, "profile": _suspended_profile}
+
+
+@app.post("/api/server/resume")
+async def server_resume(body: dict | None = None):
+    """Resume: relaunch the remembered profile (or the one named in the body)."""
+    name = str((body or {}).get("profile") or _suspended_profile or cfg.get_current_name() or "").strip()
+    if not name:
+        return JSONResponse(status_code=400, content={"error": "没有可恢复的档案"})
+    profile = cfg.read_config(name)
+    if profile is None:
+        return JSONResponse(status_code=404, content={"error": f"档案不存在：{name}"})
+    if process_manager.get_status().state == "running":
+        return {"ok": True, "profile": name, "already_running": True}
+    try:
+        await process_manager.start(profile, profile_name=name)
+    except (ValueError, RuntimeError) as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    return {"ok": True, "profile": name}
 
 
 @app.get("/api/server/health")
