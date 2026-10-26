@@ -151,3 +151,41 @@ def node_choices(nodes: dict) -> list[dict]:
             "inputs": [{"name": name, "type": type(value).__name__} for name, value in inputs.items()],
         })
     return out
+
+def guess_bindings(nodes: dict) -> dict:
+    """Best-effort bindings from the workflow's own wiring.
+
+    Positive/negative come from whichever CLIPTextEncode feeds a sampler's
+    `positive`/`negative` input (both nodes are usually named just "text", so
+    name matching alone would bind both to the same node). The rest fall back
+    to input-name matching.
+    """
+    out: dict[str, dict] = {}
+
+    def ref(node_id: str, input_name: str) -> Optional[str]:
+        value = (nodes.get(node_id) or {}).get("inputs", {}).get(input_name)
+        if isinstance(value, list) and value:
+            return str(value[0])
+        return None
+
+    for node_id, node in nodes.items():
+        inputs = node.get("inputs") or {}
+        for field in ("positive", "negative"):
+            target = ref(node_id, field)
+            if target and field not in out:
+                out[field] = {"node": target, "input": "text"}
+
+    name_map = {
+        "text": "positive", "positive": "positive", "negative": "negative",
+        "seed": "seed", "noise_seed": "seed", "width": "width", "height": "height",
+        "cfg": "cfg", "sampler_name": "sampler", "scheduler": "scheduler", "steps": "steps",
+    }
+    for node_id, node in nodes.items():
+        for input_name in (node.get("inputs") or {}):
+            field = name_map.get(str(input_name).lower())
+            if not field or field in out:
+                continue
+            if field == "negative" and out.get("positive", {}).get("node") == str(node_id):
+                continue
+            out[field] = {"node": str(node_id), "input": input_name}
+    return out

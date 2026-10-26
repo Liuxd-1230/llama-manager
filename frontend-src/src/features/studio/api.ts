@@ -89,7 +89,7 @@ export const api = {
       latency_ms: number | null; sample_models: string[]; model_count: number;
     }>("/settings/test", b),
   comfyStatus: () => get<{ url: string; reachable: boolean; has_workflow: boolean; bindings: Record<string, { node: string; input: string }>; fields: Record<string, string> }>("/comfy/status"),
-  comfyImport: (workflow: string) => post<{ nodes: { node: string; class_type: string; title: string; inputs: { name: string; type: string }[] }[]; fields: Record<string, string> }>("/comfy/import", { workflow }),
+  comfyImport: (workflow: string) => post<{ nodes: { node: string; class_type: string; title: string; inputs: { name: string; type: string }[] }[]; fields: Record<string, string>; suggested: Record<string, { node: string; input: string }> }>("/comfy/import", { workflow }),
   comfyBindings: (bindings: Record<string, { node: string; input: string }>) => put<{ bindings: Record<string, { node: string; input: string }> }>("/comfy/bindings", { bindings }),
   comfyGenerate: (b: Record<string, unknown>) => post<{ image: string; filename: string; count: number; prompt_id: string }>("/comfy/generate", b),
   models: (b: { provider_id?: string; model?: string }) =>

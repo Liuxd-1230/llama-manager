@@ -31,9 +31,12 @@ export function ComfyModal() {
   const [steps, setSteps] = useState(20);
   const [result, setResult] = useState<{ image: string; filename: string } | null>(null);
 
-  const loadStatus = async () => {
+  const loadStatus = async (applyBindings = true) => {
     const s = await api.comfyStatus();
-    setStatus(s); setBindings(s.bindings || {}); setLabels(s.fields || {});
+    setStatus(s); setLabels(s.fields || {});
+    // Opening the modal restores saved bindings; after an import we keep the
+    // freshly suggested ones instead (the server still holds the old set).
+    if (applyBindings) setBindings(s.bindings || {});
   };
   useEffect(() => {
     void loadStatus();
@@ -47,19 +50,14 @@ export function ComfyModal() {
     try {
       const r = await api.comfyImport(raw);
       setNodes(r.nodes); setLabels(r.fields);
-      // Pre-bind by the usual input names so most workflows need one click.
-      const guess: Bindings = {};
-      for (const node of r.nodes) {
-        for (const input of node.inputs) {
-          const name = input.name.toLowerCase();
-          const map: Record<string, FieldKey> = { text: "positive", positive: "positive", negative: "negative", seed: "seed", width: "width", height: "height", cfg: "cfg", sampler_name: "sampler", scheduler: "scheduler", steps: "steps" };
-          const field = map[name];
-          if (field && !guess[field] && (field !== "positive" || !bindings.positive)) guess[field] = { node: node.node, input: input.name };
-        }
-      }
-      setBindings((prev) => ({ ...guess, ...prev }));
+      // The backend derives bindings from the workflow's own wiring.
+      const suggested = r.suggested || {};
+      setBindings(suggested);
+      // Persist immediately: generation reads bindings from the server, so an
+      // unsaved suggestion would silently run the workflow's own defaults.
+      await api.comfyBindings(suggested);
       toast(`已导入 ${r.nodes.length} 个节点`, "ok");
-      await loadStatus();
+      await loadStatus(false);
     } finally { setBusy(""); }
   };
 
@@ -96,6 +94,15 @@ export function ComfyModal() {
         <section className="comfy-col">
           <div className="group-title"><Upload size={13}/>1. 导入 workflow（API 格式）</div>
           <textarea className="textarea mono" rows={6} placeholder='在 ComfyUI 里用「保存 (API Format)」导出，然后粘贴 JSON' value={raw} onChange={(e) => setRaw(e.target.value)} />
+          <label className="btn btn-sm" style={{ alignSelf: 'flex-start' }}>
+            <Upload size={13}/>选择 JSON 文件
+            <input type="file" accept=".json,application/json" hidden onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setRaw(await file.text());
+              toast(`已读取 ${file.name}`, "ok");
+            }} />
+          </label>
           <div className="row" style={{ marginTop: 6 }}>
             <Button size="small" disabled={busy !== ""} onClick={() => void importWorkflow()}>{busy === "import" ? "解析中…" : "解析并绑定"}</Button>
             {nodes.length > 0 && <span className="hint">{nodes.length} 个节点</span>}

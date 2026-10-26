@@ -469,7 +469,7 @@ def comfy_import(body: ComfyImportBody):
     s = load_settings()
     s["comfy_workflow"] = nodes
     save_settings(s)
-    return {"nodes": comfy.node_choices(nodes), "fields": comfy.FIELD_LABELS}
+    return {"nodes": comfy.node_choices(nodes), "fields": comfy.FIELD_LABELS, "suggested": comfy.guess_bindings(nodes)}
 
 
 @router.put("/comfy/bindings")
