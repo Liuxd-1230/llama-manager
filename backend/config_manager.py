@@ -329,11 +329,32 @@ def read_ninfer_metadata(model_path: str) -> dict:
         return {}
 
 
+# Profile lists re-read model metadata on every refresh; header parses into
+# multi-GB files dominate that latency, so cache by (mtime, size) stamp.
+_META_CACHE: dict[str, tuple[tuple[float, int], dict]] = {}
+
+
 def read_model_metadata(model_path: str) -> dict:
     """Dispatch by artifact type: .ninfer containers vs GGUF headers."""
-    if model_path and str(model_path).lower().endswith(".ninfer"):
-        return read_ninfer_metadata(model_path)
-    return read_gguf_metadata(model_path)
+    if not model_path:
+        return {}
+    path = Path(model_path)
+    try:
+        if not path.is_file():
+            return {}
+        stat = path.stat()
+        stamp = (stat.st_mtime, stat.st_size)
+        cached = _META_CACHE.get(str(path))
+        if cached and cached[0] == stamp:
+            return cached[1]
+        if str(model_path).lower().endswith(".ninfer"):
+            meta = read_ninfer_metadata(model_path)
+        else:
+            meta = read_gguf_metadata(model_path)
+    except Exception:
+        return {}
+    _META_CACHE[str(path)] = (stamp, meta)
+    return meta
 
 
 def list_drives() -> list[str]:

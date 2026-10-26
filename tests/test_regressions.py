@@ -185,6 +185,26 @@ def _gguf_kv_string_array(key: str, values) -> bytes:
     return _gguf_string(key) + struct.pack("<I", 9) + struct.pack("<I", 8) + struct.pack("<Q", len(values)) + b"".join(_gguf_string(v) for v in values)
 
 
+class ModelMetadataCacheTests(unittest.TestCase):
+    def test_header_is_parsed_once_per_file_stamp(self):
+        import os
+        import tempfile
+        from backend import config_manager as cm
+
+        with tempfile.NamedTemporaryFile(suffix=".gguf", delete=False) as fh:
+            fh.write(b"GGUF" + struct.pack("<I", 3) + struct.pack("<Q", 0) + struct.pack("<Q", 0))
+            path = fh.name
+        try:
+            cm._META_CACHE.clear()
+            with patch.object(cm, "_parse_gguf_header", wraps=cm._parse_gguf_header) as parse:
+                first = cm.read_model_metadata(path)
+                second = cm.read_model_metadata(path)
+            self.assertEqual(first, second)
+            self.assertEqual(parse.call_count, 1)
+        finally:
+            os.unlink(path)
+
+
 class GgufMetadataTests(unittest.TestCase):
     def test_parses_layers_experts_and_context_from_header(self):
         blob = b"GGUF" + struct.pack("<I", 3) + struct.pack("<Q", 0) + struct.pack("<Q", 6)
