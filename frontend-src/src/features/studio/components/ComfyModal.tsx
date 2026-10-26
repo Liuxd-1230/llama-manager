@@ -1,8 +1,9 @@
 import { Check, Download, ImagePlus, Link2, Loader2, Play, RefreshCw, Upload, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { toast, useStore } from "../store";
-import { Button, Field, Input, Modal, Select } from "../../../components/kit";
+import { Button, Field, Input, Modal } from "../../../components/kit";
+import { ComfyGraphView, type ComfyGraph } from "./ComfyGraphView";
 
 interface ComfyInput { name: string; type: string; is_link: boolean; value: string | number | boolean | null }
 interface ComfyNode { node: string; class_type: string; title: string; inputs: ComfyInput[] }
@@ -19,12 +20,12 @@ interface ComfyStatus {
   binding_errors: string[];
 }
 
-const FIELD_ORDER = ["positive", "negative", "seed", "width", "height", "cfg", "sampler", "scheduler", "steps"] as const;
 
 export function ComfyModal() {
   const doc = useStore((s) => s.doc);
   const close = () => useStore.setState({ modal: null });
   const [nodes, setNodes] = useState<ComfyNode[]>([]);
+  const [graph, setGraph] = useState<ComfyGraph>({ nodes: [], edges: [] });
   const [labels, setLabels] = useState<Record<string, string>>({});
   const [bindings, setBindings] = useState<Bindings>({});
   const [status, setStatus] = useState<ComfyStatus | null>(null);
@@ -61,6 +62,8 @@ export function ComfyModal() {
       const s = await api.comfyStatus();
       setStatusError("");
       applyStatus(s, restoreBindings);
+      if (s.has_workflow) setGraph(await api.comfyGraph());
+      else setGraph({ nodes: [], edges: [] });
     } catch (error) {
       setStatusError(error instanceof Error ? error.message : String(error));
     }
@@ -115,6 +118,10 @@ export function ComfyModal() {
     } finally { setBusy(""); }
   };
 
+  const saveLayout = useCallback(async (positions: Record<string, { x: number; y: number }>) => {
+    try { await api.comfyLayout(positions) } catch { /* layout is cosmetic */ }
+  }, []);
+
   const saveUrl = async () => {
     setBusy("url");
     try {
@@ -138,7 +145,6 @@ export function ComfyModal() {
     } finally { setBusy(""); }
   };
 
-  const nodeOptions = useMemo(() => nodes.map((n) => ({ value: n.node, label: `${n.title} · ${n.class_type} (#${n.node})` })), [nodes]);
   const connected = status?.reachable === true;
   const canGenerate = connected && Boolean(status?.has_workflow) && busy === "" && !dirty && bindingErrors.length === 0;
 
@@ -180,39 +186,6 @@ export function ComfyModal() {
             <X size={12}/>{bindingErrors[0]}{bindingErrors.length > 1 ? `（另有 ${bindingErrors.length - 1} 项）` : ""}
           </div>}
 
-          <div className="group-title" style={{ marginTop: 12 }}><Link2 size={13}/>2. 字段绑定</div>
-          {FIELD_ORDER.map((field) => {
-            const bound = bindings[field];
-            const node = nodes.find((n) => n.node === bound?.node);
-            const bindable = (node?.inputs || []).filter((input) => !input.is_link);
-            return <Field key={field} label={labels[field] || field}>
-              <div className="row" style={{ gap: 6 }}>
-                <Select value={bound?.node || ""} onChange={(e) => {
-                  const next = { ...bindings };
-                  const picked = nodes.find((n) => n.node === e.target.value);
-                  if (picked) {
-                    const first = picked.inputs.find((input) => !input.is_link);
-                    next[field] = { node: picked.node, input: first?.name || "" };
-                  } else delete next[field];
-                  changeBinding(field, next);
-                }}>
-                  <option value="">不绑定</option>
-                  {nodeOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </Select>
-                <Select value={bound?.input || ""} disabled={!node} onChange={(e) => changeBinding(field, { ...bindings, [field]: { node: bound!.node, input: e.target.value } })}>
-                  {bindable.map((input) => <option key={input.name} value={input.name}>{input.name} ({input.type})</option>)}
-                </Select>
-              </div>
-              {node && bound?.input && (() => {
-                const current = node.inputs.find((i) => i.name === bound.input)?.value
-                const text = current == null ? '—' : String(current).replace(/\s+/g, ' ')
-                // Prompt nodes hold whole captions; show a preview, not the blob.
-                return <span className="hint comfy-current" title={text.length > 120 ? text : undefined}>
-                  当前值：{text.length > 120 ? `${text.slice(0, 120)}…（${text.length} 字符）` : text}
-                </span>
-              })()}
-            </Field>;
-          })}
         </section>
 
         <section className="comfy-col">
@@ -243,6 +216,20 @@ export function ComfyModal() {
           </div>}
         </section>
       </div>
+
+      <section className="comfy-graph-band">
+        <div className="group-title"><Link2 size={13}/>2. 节点图与通配符<span className="hint" style={{ marginLeft: 8, fontWeight: 400 }}>点击节点 → 右侧列出输入 → 绑定为通配符；连线输入不可绑定</span></div>
+        <ComfyGraphView
+          graph={graph}
+          bindings={bindings}
+          onBind={(field, binding) => {
+            const next = { ...bindings };
+            if (binding) next[field] = binding; else delete next[field];
+            changeBinding(field, next);
+          }}
+          onLayout={(positions) => void saveLayout(positions)}
+        />
+      </section>
     </Modal>
   );
 }

@@ -505,6 +505,29 @@ async def comfy_status():
                                if (error := comfy.validate_binding(nodes, field, binding))]}
 
 
+@router.get("/comfy/graph")
+def comfy_graph():
+    s = load_settings()
+    nodes = s.get("comfy_workflow") or {}
+    if not nodes:
+        return {"nodes": [], "edges": []}
+    return comfy.build_graph(nodes, s.get("comfy_layout") or {})
+
+
+@router.put("/comfy/layout")
+def comfy_layout(body: dict):
+    """Persist dragged node positions so the graph keeps the user's arrangement."""
+    positions = body.get("positions") or {}
+    clean = {}
+    for node_id, pos in positions.items():
+        if isinstance(pos, dict) and isinstance(pos.get("x"), (int, float)) and isinstance(pos.get("y"), (int, float)):
+            clean[str(node_id)] = {"x": float(pos["x"]), "y": float(pos["y"])}
+    s = load_settings()
+    s["comfy_layout"] = clean
+    save_settings(s)
+    return {"positions": clean}
+
+
 @router.put("/comfy/url")
 def comfy_set_url(body: dict):
     url = str(body.get("url") or "").strip()

@@ -72,6 +72,7 @@ SETTINGS_DEFAULTS: dict[str, Any] = {
     "comfy_url": "http://127.0.0.1:8188",
     "comfy_workflow": {},
     "comfy_bindings": {},
+    "comfy_layout": {},
 }
 
 

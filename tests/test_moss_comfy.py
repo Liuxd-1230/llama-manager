@@ -137,3 +137,33 @@ class SubmitTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GraphTests(unittest.TestCase):
+    def test_graph_has_nodes_edges_and_layered_positions(self):
+        nodes = comfy.parse_workflow(API_WORKFLOW)
+        graph = comfy.build_graph(nodes)
+        self.assertEqual(len(graph["nodes"]), 4)
+        # KSampler's positive/negative/latent edges are three of them
+        targets = {(e["source"], e["target"]) for e in graph["edges"]}
+        self.assertIn(("6", "3"), targets)
+        self.assertIn(("7", "3"), targets)  # negative
+        # loaders (6,7) sit left of the sampler (3)
+        by_id = {n["id"]: n for n in graph["nodes"]}
+        self.assertLess(by_id["6"]["position"]["x"], by_id["3"]["position"]["x"])
+
+    def test_saved_layout_overrides_computed_positions(self):
+        nodes = comfy.parse_workflow(API_WORKFLOW)
+        graph = comfy.build_graph(nodes, {"3": {"x": 999, "y": 42}})
+        sampler = next(n for n in graph["nodes"] if n["id"] == "3")
+        self.assertEqual(sampler["position"], {"x": 999, "y": 42})
+
+    def test_graph_exposes_link_flags_and_literal_values(self):
+        nodes = comfy.parse_workflow(API_WORKFLOW)
+        graph = comfy.build_graph(nodes)
+        sampler = next(n for n in graph["nodes"] if n["id"] == "3")
+        steps = next(i for i in sampler["inputs"] if i["name"] == "steps")
+        positive = next(i for i in sampler["inputs"] if i["name"] == "positive")
+        self.assertEqual(steps["value"], 20)
+        self.assertFalse(steps["is_link"])
+        self.assertTrue(positive["is_link"])

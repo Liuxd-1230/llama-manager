@@ -162,6 +162,58 @@ def text_input_of(node: dict) -> Optional[str]:
     return None
 
 
+def build_graph(nodes: dict, saved_layout: Optional[dict] = None) -> dict:
+    """Derive a renderable graph: nodes, edges, and a layered left-to-right layout.
+
+    API-format workflows carry no coordinates, so positions come from a
+    longest-path layering (depth = 1 + max depth of inputs) with rows assigned in
+    insertion order. A saved layout (node id -> {x, y}) wins, so dragging sticks.
+    """
+    layout = saved_layout or {}
+    depth: dict[str, int] = {}
+
+    def node_depth(node_id: str, seen: Optional[set] = None) -> int:
+        if node_id in depth:
+            return depth[node_id]
+        seen = seen or set()
+        if node_id in seen or node_id not in nodes:
+            return 0
+        seen.add(node_id)
+        inputs = (nodes[node_id].get("inputs") or {}).values()
+        parents = [str(value[0]) for value in inputs if is_link(value)]
+        depth[node_id] = 1 + max((node_depth(p, seen) for p in parents), default=-1)
+        return depth[node_id]
+
+    columns: dict[int, list[str]] = {}
+    for node_id in nodes:
+        columns.setdefault(node_depth(node_id), []).append(node_id)
+
+    graph_nodes = []
+    for column, ids in sorted(columns.items()):
+        for row, node_id in enumerate(ids):
+            node = nodes[node_id]
+            saved = layout.get(str(node_id)) or {}
+            graph_nodes.append({
+                "id": str(node_id),
+                "title": node.get("_meta", {}).get("title") or node.get("class_type", ""),
+                "class_type": node.get("class_type", ""),
+                "position": {"x": saved.get("x", column * 260), "y": saved.get("y", row * 130)},
+                "inputs": node_choices({str(node_id): node})[0]["inputs"],
+            })
+
+    edges = []
+    for node_id, node in nodes.items():
+        for input_name, value in (node.get("inputs") or {}).items():
+            if is_link(value):
+                edges.append({
+                    "id": f"{value[0]}-{node_id}-{input_name}",
+                    "source": str(value[0]),
+                    "target": str(node_id),
+                    "target_input": input_name,
+                })
+    return {"nodes": graph_nodes, "edges": edges}
+
+
 def node_choices(nodes: dict) -> list[dict]:
     """Flatten the workflow into candidate bindings for the UI.
 
