@@ -248,7 +248,7 @@
   gap: 7px;
   height: 30px;
   padding: 0 6px 0 8px;
-  border-radius: 7px;
+  border-radius: 4px;
   cursor: pointer;
   font-size: 12.5px;
 }
@@ -275,7 +275,7 @@
   width: 22px;
   height: 22px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 4px;
   background: none;
   display: grid;
   place-items: center;
@@ -306,7 +306,7 @@
   font-size: 12px;
   color: var(--warm-ink);
   background: var(--warm-soft);
-  border-radius: 7px;
+  border-radius: 4px;
   padding: 5px 8px;
   margin-bottom: 8px;
 }
@@ -327,7 +327,7 @@ fieldset.insp:disabled {
 .body-box {
   margin-top: 12px;
   padding: 9px 10px 10px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--warm) 5%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warm) 18%, transparent);
   display: flex;
@@ -378,9 +378,9 @@ fieldset.insp:disabled {
 .dial-track {
   position: relative;
   height: 14px;
-  border-radius: 7px;
+  border-radius: 4px;
   background: var(--panel-2);
-  box-shadow: inset 0 0 0 1px var(--line);
+  box-shadow: inset 0 0 0 1px var(--line-2);
   cursor: ew-resize;
   touch-action: none;
 }
@@ -447,7 +447,7 @@ fieldset.insp:disabled {
   gap: 6px;
   height: 40px;
   padding: 0 8px;
-  border-radius: 11px;
+  border-radius: 8px;
   background: var(--panel);
   box-shadow: var(--sh-panel);
   flex: none;
@@ -913,7 +913,7 @@ fieldset.insp:disabled {
   align-items: center;
   margin: 2px 10px 0;
   padding: 5px 8px;
-  border-radius: 7px;
+  border-radius: 8px;
   font-size: 11.5px;
   background: var(--warm-soft);
   color: var(--warm-ink);
@@ -1022,7 +1022,7 @@ fieldset.insp:disabled {
   gap: 5px;
   height: 26px;
   padding: 0 4px 0 9px;
-  border-radius: 7px;
+  border-radius: 4px;
   font-size: 12px;
   color: var(--ink-2);
   cursor: pointer;
@@ -1395,7 +1395,7 @@ fieldset.insp:disabled {
   }
 }
 .proposal {
-  border-radius: 11px;
+  border-radius: 8px;
   background: var(--paper);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--warm) 40%, transparent), 0 2px 8px -3px color-mix(in srgb, var(--shadow-warm) 20%, transparent);
   overflow: hidden;
@@ -1492,7 +1492,7 @@ fieldset.insp:disabled {
 .change-diff {
   margin: 0 4px 6px 26px;
   padding: 6px 8px;
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--well);
   box-shadow: inset 0 0 0 1px var(--line);
   font-size: 12px;
@@ -1521,7 +1521,7 @@ fieldset.insp:disabled {
   background: color-mix(in srgb, var(--paper) 50%, transparent);
 }
 .ask {
-  border-radius: 11px;
+  border-radius: 8px;
   padding: 10px;
   background: var(--paper);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 2px 8px -3px color-mix(in srgb, var(--accent) 18%, transparent);
@@ -1575,7 +1575,7 @@ fieldset.insp:disabled {
 .ask-idx {
   width: 18px;
   height: 18px;
-  border-radius: 5px;
+  border-radius: 4px;
   display: grid;
   place-items: center;
   font-size: 11px;
@@ -1608,7 +1608,7 @@ fieldset.insp:disabled {
   gap: 6px;
   font-size: 12px;
   padding: 3px 4px 3px 8px;
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--panel-2);
   box-shadow: inset 0 0 0 1px var(--line);
 }
@@ -1691,7 +1691,7 @@ fieldset.insp:disabled {
   width: 40px;
   height: 40px;
   object-fit: cover;
-  border-radius: 7px;
+  border-radius: 4px;
   box-shadow: 0 0 0 1px var(--line-2);
 }
 .att button {
@@ -1795,7 +1795,7 @@ fieldset.insp:disabled {
   height: 30px;
   padding: 0 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 4px;
   background: none;
   font-size: 12.5px;
   text-align: left;
@@ -1934,7 +1934,7 @@ fieldset.insp:disabled {
   min-height: 32px;
   padding: 4px 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 4px;
   background: none;
   text-align: left;
   cursor: pointer;
@@ -2324,7 +2324,7 @@ fieldset.insp:disabled {
   gap: 10px;
 }
 .dir-sec {
-  border-radius: 11px;
+  border-radius: 8px;
   background: var(--panel);
   box-shadow: var(--sh-panel);
   padding: 8px 10px 10px;
@@ -2495,7 +2495,7 @@ fieldset.insp:disabled {
   height: 20px;
   align-items: center;
   justify-content: center;
-  border-radius: 5px;
+  border-radius: 4px;
   color: var(--ink-3);
 }
 .dir-row-act:hover {
@@ -2801,7 +2801,7 @@ fieldset.insp:disabled {
   flex: none;
   font-size: 10.5px;
   padding: 0 5px;
-  border-radius: 7px;
+  border-radius: 4px;
   background: var(--warm-soft);
   color: var(--warm-ink);
 }
@@ -3036,7 +3036,7 @@ fieldset.insp:disabled {
   font-size: 12px;
   color: var(--ink-2);
   background: color-mix(in srgb, var(--ink) 5%, transparent);
-  border-radius: 7px;
+  border-radius: 4px;
   padding: 4px 6px 4px 8px;
   margin-bottom: 8px;
   min-width: 0;
@@ -3264,7 +3264,7 @@ fieldset.insp:disabled {
   height: 22px;
   padding: 0 8px;
   border: 0;
-  border-radius: 11px;
+  border-radius: 6px;
   background: none;
   color: color-mix(in srgb, var(--inv-ink) 75%, transparent);
   font: inherit;
@@ -3301,7 +3301,7 @@ fieldset.insp:disabled {
   gap: 6px;
   height: 22px;
   padding: 0 9px;
-  border-radius: 11px;
+  border-radius: 6px;
   background: color-mix(in srgb, var(--inv) 55%, transparent);
   color: color-mix(in srgb, var(--inv-ink) 92%, transparent);
   font-size: 11.5px;
