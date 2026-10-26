@@ -4,7 +4,6 @@ import type { AppConfig } from '../types'
 // backend could read it (GGUF header math / .ninfer manifest), falling back to
 // coefficients measured on the Bonsai-2 27B family (docs/profile-guide.md).
 const DESKTOP_GB = 1
-const BUFFERS_GB = 0.4
 const SAFE_BUDGET_GB = 7.4
 
 // Bytes per KV element relative to f16 (2 bytes), by cache dtype.

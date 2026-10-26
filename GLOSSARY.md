@@ -14,3 +14,7 @@
 - **引擎(engine)** — 可被启动的推理后端,共三种:`llama.cpp`(llama-server)、`kvmem`(llama-kvmem-server,GGUF + KV 虚拟化)、`ninfer`(ninfer-kvmem-server,.ninfer 产物)。引擎差异(二进制、目录回退、payload 形状)属于后端知识。
 - **档案(profile)** — 一套完整的推理配置(JSON,存于 `~/llama-manager/config/`),含引擎、模型路径与引擎专属参数;同一时刻恰有一个当前档案。
 - **检索块(retrieval block)** — KVMem 与 NInfer 共有的一组参数(`sink_tokens/recent_tokens/lrfu/lrfu_lambda/lrfu_top_frac/score_agg`),决定 KV 虚拟化时如何保留上下文。
+
+## 估算
+
+- **VRAM 估算器(estimator)** — 前端纯函数 `frontend-src/src/utils/vram.ts`:按引擎(模型几何 + 实测系数)估算显存/内存占用,双消费方(配置页、模型卡片)。模型几何(GGUF 头/.ninfer 清单)由后端读出经 `model_meta` 下发;拿不到时回退到本机实测系数(nvidia-smi 差值,记录在源码注释与 `vram.test.ts` 的断言里)。`SAFE_BUDGET_GB = 7.4` 是 8GB 卡的过载阈值。
