@@ -36,7 +36,7 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(resolved["api_key"], "")
 
     def test_deepseek_base_url_is_kept_bare(self):
-        provider = _make_provider(kind="deepseek", base_url="https://api.deepseek.com")
+        provider = _make_provider(kind="openai_chat", base_url="https://api.deepseek.com")
         with mock.patch.object(bridge.provider_manager, "get_provider", return_value=provider):
             resolved = bridge.resolve("p1")
         self.assertEqual(resolved["base_url"], "https://api.deepseek.com")

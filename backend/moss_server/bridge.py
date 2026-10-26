@@ -59,7 +59,7 @@ def _openai_base(provider) -> str:
         raise ProviderError(f"提供商 {provider.name} 未配置 base_url")
     if provider.kind == "anthropic":
         raise ProviderError("Anthropic 协议不受提示词工坊支持，请改用 OpenAI 兼容提供商")
-    if provider.kind == "deepseek" and base == "https://api.deepseek.com":
+    if base.rstrip("/") == "https://api.deepseek.com":
         return base
     if not base.endswith("/v1"):
         base = base + "/v1"

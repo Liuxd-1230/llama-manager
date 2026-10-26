@@ -3,8 +3,10 @@ import type { Provider } from '../../types'
 export function supportsThinking(provider?: Provider) {
   // local covers both llama.cpp and KVMem servers: the chat toggle maps to
   // chat_template_kwargs.enable_thinking, honored by --jinja servers and
-  // safely ignored by the legacy path otherwise.
-  return provider?.kind === 'deepseek' || provider?.kind === 'local'
+  // safely ignored by the legacy path otherwise. The DeepSeek preset is an
+  // openai_chat provider whose base URL opts into thinking controls.
+  if (provider?.kind === 'local') return true
+  return Boolean(provider?.base_url?.replace(/\/+$/, '').startsWith('https://api.deepseek.com'))
 }
 
 export function canStartChatRequest(input: string, attachmentCount: number, active: boolean) {

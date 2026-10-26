@@ -13,11 +13,11 @@ from pydantic import BaseModel, Field
 from .env_manager import APP_DATA_DIR, env_source, env_value, set_user_env
 
 
-ProviderKind = Literal["deepseek", "openai_chat", "openai_responses", "anthropic", "openai_compatible"]
+ProviderKind = Literal["openai_chat", "openai_responses", "anthropic", "openai_compatible"]
 SECRETS_DIR = APP_DATA_DIR / "secrets"
 PROVIDERS_PATH = SECRETS_DIR / "providers.json"
+# The builtin DeepSeek preset reads DEEPSEEK_API_KEY first; see provider_env_names.
 STANDARD_ENV = {
-    "deepseek": "DEEPSEEK_API_KEY",
     "openai_chat": "OPENAI_API_KEY",
     "openai_responses": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
@@ -39,7 +39,7 @@ def _default_provider() -> ProviderConfig:
     return ProviderConfig(
         id="deepseek",
         name="DeepSeek",
-        kind="deepseek",
+        kind="openai_chat",
         base_url="https://api.deepseek.com",
         default_model="deepseek-chat",
         models=["deepseek-chat", "deepseek-reasoner"],
@@ -55,9 +55,11 @@ def provider_specific_env(provider_id: str) -> str:
 
 def provider_env_names(provider: ProviderConfig) -> list[str]:
     specific = provider_specific_env(provider.id)
+    if provider.id == "deepseek":
+        # The builtin DeepSeek provider is an openai_chat preset whose key has
+        # always lived in DEEPSEEK_API_KEY; keep resolving it there first.
+        return ["DEEPSEEK_API_KEY", specific]
     standard = STANDARD_ENV.get(provider.kind)
-    if provider.id == "deepseek" and standard:
-        return [standard, specific]
     return [specific, *([standard] if standard else [])]
 
 
@@ -98,13 +100,26 @@ def _migrate_legacy_keys(items: list[dict]) -> list[dict]:
     return migrated
 
 
+def _migrate_kinds(items: list[dict]) -> list[dict]:
+    # "deepseek" stopped being a protocol kind: stored entries move to the
+    # openai_chat preset; DeepSeek-only extras key off the base URL instead.
+    changed = False
+    for item in items:
+        if item.get("kind") == "deepseek":
+            item["kind"] = "openai_chat"
+            changed = True
+    if changed:
+        _write_raw(items)
+    return items
+
+
 def _read_raw() -> list[dict]:
     if not PROVIDERS_PATH.exists():
         return []
     payload = json.loads(PROVIDERS_PATH.read_text(encoding="utf-8"))
     if not isinstance(payload, list):
         raise ValueError("providers.json must contain a list")
-    return _migrate_legacy_keys(payload)
+    return _migrate_kinds(_migrate_legacy_keys(payload))
 
 
 def _public(provider: ProviderConfig) -> dict:

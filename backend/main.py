@@ -77,7 +77,6 @@ async def validation_error(request: Request, exc: ValueError):
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEFAULT_BASE_URLS = {
-    "deepseek": "https://api.deepseek.com",
     "openai_chat": "https://api.openai.com/v1",
     "openai_responses": "https://api.openai.com/v1",
     "anthropic": "https://api.anthropic.com/v1",
@@ -126,7 +125,8 @@ def _provider_headers(provider: providers.ProviderConfig) -> dict[str, str]:
 
 def _provider_base_url(provider: providers.ProviderConfig) -> str:
     base = provider.base_url or DEFAULT_BASE_URLS.get(provider.kind, "")
-    if provider.kind == "deepseek" and base.rstrip("/") == "https://api.deepseek.com":
+    if base.rstrip("/") == "https://api.deepseek.com":
+        # DeepSeek serves /chat/completions both bare and under /v1.
         return "https://api.deepseek.com"
     return base.rstrip("/")
 
@@ -397,17 +397,16 @@ def _external_chat_request(provider: providers.ProviderConfig, data: dict, messa
         if web_tool:
             payload["tools"] = [_anthropic_web_search_tool_schema()]
         return f"{base}/messages", payload
-    if provider.kind == "deepseek":
+    if base.startswith("https://api.deepseek.com"):
+        # DeepSeek speaks OpenAI Chat plus thinking controls; keyed on the
+        # base URL because "DeepSeek" is a preset, not a protocol kind.
         payload = _deepseek_chat_payload(data, messages)
-        if web_tool:
-            payload["tools"] = [_web_search_tool_schema()]
-            payload["tool_choice"] = "auto"
-        return _chat_completions_url(base), payload
-    payload = {
-        "model": model,
-        "messages": messages,
-        "stream": data.get("stream", True),
-    }
+    else:
+        payload = {
+            "model": model,
+            "messages": messages,
+            "stream": data.get("stream", True),
+        }
     if web_tool:
         payload["tools"] = [_web_search_tool_schema()]
         payload["tool_choice"] = "auto"
@@ -428,7 +427,7 @@ def _tool_event_chunk(event: dict) -> str:
 
 
 def _normalize_external_sse(provider_kind: str, payload: dict) -> str:
-    if provider_kind in {"deepseek", "openai_chat", "openai_compatible"}:
+    if provider_kind in {"openai_chat", "openai_compatible"}:
         return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
     if provider_kind == "openai_responses":
         event_type = payload.get("type", "")
@@ -449,7 +448,7 @@ def _normalize_external_sse(provider_kind: str, payload: dict) -> str:
 
 
 def _normalize_non_stream_response(provider_kind: str, payload: dict) -> dict:
-    if provider_kind in {"deepseek", "openai_chat", "openai_compatible"}:
+    if provider_kind in {"openai_chat", "openai_compatible"}:
         return payload
     content = ""
     reasoning = ""
@@ -1599,7 +1598,7 @@ async def chat_proxy(request: Request):
         return JSONResponse(status_code=400, content={"error": str(exc)})
 
     if stream:
-        if provider_kind in {"deepseek", "openai_chat", "openai_compatible"}:
+        if provider_kind in {"openai_chat", "openai_compatible"}:
             source = _stream_chat_with_tools(target, headers, payload, on_complete=save_context)
         elif provider_kind == "anthropic":
             source = _stream_anthropic_with_tools(target, headers, payload, on_complete=save_context)
@@ -1611,7 +1610,7 @@ async def chat_proxy(request: Request):
 
     if use_web_tool:
         try:
-            if provider_kind in {"deepseek", "openai_chat", "openai_compatible"}:
+            if provider_kind in {"openai_chat", "openai_compatible"}:
                 payload = await _complete_with_chat_tools(target, headers, payload)
             elif provider_kind == "anthropic":
                 raw_payload = await _complete_with_anthropic_tools(target, headers, payload)
@@ -1631,7 +1630,7 @@ async def chat_proxy(request: Request):
         if resp.status_code >= 400:
             return JSONResponse(status_code=resp.status_code, content={"error": resp.text})
         raw_payload = resp.json()
-        if provider_kind in {"deepseek", "openai_chat", "openai_compatible"}:
+        if provider_kind in {"openai_chat", "openai_compatible"}:
             payload = raw_payload
             message = payload.get("choices", [{}])[0].get("message", {})
             state = {"kind": "chat_messages", "messages": [*payload.get("messages", []), message]}
