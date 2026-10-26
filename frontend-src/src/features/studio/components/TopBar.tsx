@@ -118,7 +118,7 @@ export function TopBar() {
       </div>
       <div className="topbar-sep" />
       <button type="button" className="btn btn-sm" onClick={() => setUi({ modal: "reverse" })} title="从参考图反推 Caption / Layout"><ImageUp size={14} />反推</button>
-      <button type="button" className="btn btn-sm" onClick={() => setUi({ modal: "comfy" })} title="把编译结果送到 ComfyUI 出图"><Sparkles size={14} />出图</button>
+      <button type="button" className={`btn btn-sm${s.workspace === "image" ? " on" : ""}`} onClick={() => setUi({ workspace: s.workspace === "image" ? "edit" : "image" })} title={s.workspace === "image" ? "返回编辑（Layout / Caption）" : "切换到出图工作区（ComfyUI）"}><Sparkles size={14} />{s.workspace === "image" ? "编辑" : "出图"}</button>
       <button type="button" className="btn btn-sm" onClick={() => setUi({ modal: "archive" })} title="档案库：保存和复用整页文档"><Archive size={14} />档案库</button>
       <button type="button" className="btn btn-sm" onClick={() => setUi({ modal: "revisions" })} title="此页的操作记录，可回滚"><History size={14} />记录</button>
       <button type="button" className="btn btn-sm" onClick={() => setUi({ modal: "skills" })} title="Skills：Caption / Layout / 改稿风格"><Sparkles size={14} />Skills</button>

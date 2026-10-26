@@ -18,10 +18,16 @@
   --ink-2: color-mix(in oklab, var(--text-2) 95%, var(--warm-paper));
   --ink-3: color-mix(in oklab, var(--text-3) 94%, var(--warm-paper));
   --ink-4: color-mix(in oklab, var(--text-3) 94%, var(--warm-paper));
-  --accent: var(--accent);
-  --accent-2: var(--accent-hover);
+  /* The accent trio is redefined below, so reading the host value must be
+     anchored at :root — a bare var(--accent) here is self-referential and
+     resolves to invalid (transparent). */
+  --accent: var(--accent-fill, #b0502e);
+  --accent-2: var(--accent-hover, #93401f);
   --accent-ink: var(--accent);
-  --accent-soft: var(--accent-soft);
+  /* Host on-accent ink, aliased at :root (see the rule below the block) so this
+     scope can read it without shadowing itself. */
+  --accent-fg: var(--host-on-accent, #fdfaf3);
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
   --accent-ring: var(--accent-soft);
   /* 状态色（studio 自有常量，无宿主对应物） */
   --warm: #d9822b;
@@ -430,8 +436,10 @@ kbd {
 }
 .badge.accent {
   background: var(--accent);
-  color: var(--white);
+  /* --accent-fg is the host's on-accent ink; white fails on light accents. */
+  color: var(--accent-fg);
   box-shadow: none;
+  font-weight: 650;
 }
 .badge.warm {
   background: var(--warm);
@@ -626,6 +634,11 @@ kbd {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Host values the studio scope needs but redefines; captured at :root. */
+:root {
+  --host-on-accent: var(--accent-fg);
 }
 
 /* ===== 覆盖清单 escape-hatch overrides（guard-sanctioned） =====

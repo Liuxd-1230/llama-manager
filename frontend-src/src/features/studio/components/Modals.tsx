@@ -5,7 +5,6 @@ import {
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { ReverseModal } from "./ReverseModal";
-import { ComfyModal } from "./ComfyModal";
 import { confirmDialog, promptDialog } from "../dialog";
 import { boxColor, clone, emptyDoc, normalizeDoc, normalizeLayout, snap16 } from "../lib/doc";
 import {
@@ -208,7 +207,7 @@ function RevisionsModal() {
           <p className="hint" style={{ margin: "0 0 8px" }}>每条记录是该操作<b>之前</b>的页面状态。Agent 改动、载入、回滚都会自动留档；手动编辑每两分钟留一次。</p>
           <div className="archive-list">
             {list === null ? <div className="empty"><Loader2 size={14} className="spin" /></div> : !list.length ? <div className="empty">还没有记录</div> : list.map((r) => (
-              <button key={r.id} type="button" className={cx("archive-row rev", sel?.id === r.id && "on")} onClick={() => void api.revision(r.id).then(setSel)}>
+              <button key={r.id} type="button" className={cx("archive-row rev-row-item", sel?.id === r.id && "on")} onClick={() => void api.revision(r.id).then(setSel)}>
                 <span className="rev-ic">{SRC[r.source]?.ic || <History size={12} />}</span>
                 <span className="grow col" style={{ gap: 0, minWidth: 0 }}>
                   <span className="ellipsis">{SRC[r.source]?.t || r.source}</span>
@@ -427,7 +426,6 @@ export function Modals() {
   const m = useStore((s) => s.modal);
   if (m === "skills") return <SkillsModal />;
   if (m === "reverse") return <ReverseModal />;
-  if (m === "comfy") return <ComfyModal />;
   if (m === "archive") return <ArchiveModal />;
   if (m === "revisions") return <RevisionsModal />;
   if (m === "quick") return <QuickModal />;

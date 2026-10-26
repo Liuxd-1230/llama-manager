@@ -6,6 +6,7 @@ import { api } from "./api";
 import { AgentPanel } from "./components/AgentPanel";
 import { DirectorView } from "./components/DirectorView";
 import { DocPanel } from "./components/DocPanel";
+import { ComfyWorkspace } from "./components/ComfyWorkspace";
 import { Modals } from "./components/Modals";
 import { Stage } from "./components/Stage";
 import { TopBar } from "./components/TopBar";
@@ -166,6 +167,7 @@ function App() {
   const ready = useStore((s) => s.ready);
   const bootError = useStore((s) => s.bootError);
   const director = useStore((s) => s.director && s.doc?.kind === "layout");
+  const workspace = useStore((s) => s.workspace);
   useShortcuts();
   useEffect(() => {
     void boot();
@@ -187,11 +189,11 @@ function App() {
   return (
     <div className="app">
       <TopBar />
-      <div className="main">
+      {workspace === "image" ? <ComfyWorkspace /> : <div className="main">
         <DocPanel />
         <Stage />
         <AgentPanel />
-      </div>
+      </div>}
       {director && <DirectorView />}
       <Modals />
       <DialogHost />

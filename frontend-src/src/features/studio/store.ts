@@ -15,7 +15,8 @@ import type {
   Page, Proposal, Series, Session, SkillsState, Step,
 } from "./types";
 
-export type Modal = null | "skills" | "reverse" | "archive" | "revisions" | "quick" | "draft" | "comfy";
+export type Modal = null | "skills" | "reverse" | "archive" | "revisions" | "quick" | "draft";
+export type Workspace = "edit" | "image";
 export type Tool = "select" | "draw";
 
 export interface Toast {
@@ -92,6 +93,8 @@ interface State {
   compileError: string;
   compileStale: boolean;
   modal: Modal;
+  /** Top-level workspace: the editor (layout/caption) or the image pipeline. */
+  workspace: Workspace;
   toasts: Toast[];
   settings: AppSettings | null;
   skills: SkillsState | null;
@@ -152,6 +155,7 @@ export const useStore = create<State>(() => ({
   compileError: "",
   compileStale: true,
   modal: null,
+  workspace: "edit",
   toasts: [],
   settings: null,
   skills: null,
@@ -998,7 +1002,7 @@ export function setQuick(q: QuickAction[]) {
   persistState();
 }
 
-export function setUi(patch: Partial<Pick<State, "showWire" | "cameraPanelOpen" | "compileOpen" | "tool" | "drawLabel" | "freeCam" | "modal" | "director">>) {
+export function setUi(patch: Partial<Pick<State, "showWire" | "cameraPanelOpen" | "compileOpen" | "tool" | "drawLabel" | "freeCam" | "modal" | "director" | "workspace">>) {
   set(patch);
   if ("showWire" in patch || "cameraPanelOpen" in patch) persistState();
 }

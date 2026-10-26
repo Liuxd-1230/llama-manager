@@ -3912,7 +3912,7 @@ button.chip.accent:hover {
 .comfy-current { display: block; max-height: 2.6em; overflow: hidden; text-overflow: ellipsis; word-break: break-all; opacity: .85 }
 
 /* ComfyUI 节点图 */
-.comfy-graph { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; height: min(70vh, 720px); min-height: 0 }
+.comfy-graph { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 10px; height: 100%; min-height: 0 }
 .comfy-canvas { position: relative; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: var(--desk) }
 .comfy-canvas .react-flow { background: transparent }
 .comfy-canvas .react-flow__controls { box-shadow: none; border: 1px solid var(--line); border-radius: 4px; overflow: hidden }
@@ -3943,3 +3943,93 @@ button.chip.accent:hover {
 .comfy-inspector-row select { width: 100%; height: 26px; padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--field); color: var(--ink); font-size: 11.5px }
 .comfy-graph-band { margin-top: 16px }
 .comfy-graph-band .comfy-graph { height: min(58vh, 620px) }
+
+/* 操作记录行：两行文字（标题 + 摘要），不能套用 .rev 的网格 */
+.archive-row.rev-row-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 0;
+  height: auto;
+  padding: 6px 8px;
+  line-height: 1.45;
+}
+.archive-row.rev-row-item .col {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.archive-row.rev-row-item .rev-ic {
+  margin-top: 1px;
+}
+.archive-row.rev-row-item .muted.num {
+  flex: none;
+  white-space: nowrap;
+  padding-top: 1px;
+}
+
+/* ===================== 出图工作区（与 Layout/Caption 同级） ===================== */
+.image-ws {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 14px 12px;
+  overflow: hidden;
+}
+.image-ws-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.image-ws-head .comfy-state { flex: none; white-space: nowrap }
+.image-ws-head .image-ws-meta { flex: none; white-space: nowrap }
+.image-ws-meta { font-size: 11.5px; color: var(--ink-3); font-family: var(--mono) }
+.image-ws-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 12px;
+}
+.image-ws-col {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.image-ws-setup {
+  border-right: 1px solid var(--line);
+  padding-right: 14px;
+}
+.image-ws-graph { overflow: hidden }
+.image-ws-graph .comfy-graph { flex: 1; min-height: 0; height: auto }
+.image-ws-result { margin-top: 6px; display: flex; flex-direction: column; gap: 6px }
+.image-ws-result img {
+  width: 100%;
+  max-height: 46vh;
+  object-fit: contain;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--desk-2);
+}
+@media (max-width: 1200px) {
+  .image-ws-body { grid-template-columns: 300px minmax(0, 1fr) }
+}
+.image-ws-chips { display: flex; flex-wrap: nowrap; gap: 4px; min-width: 0; overflow-x: auto; overflow-y: hidden; height: 24px; scrollbar-width: none }
+.image-ws-chips::-webkit-scrollbar { display: none }
+.image-ws-chip { display: inline-flex; flex: none; align-items: center; gap: 5px; height: 22px; padding: 0 7px; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); font-size: 10.5px; cursor: pointer; color: var(--ink-2); white-space: nowrap }
+.image-ws-chip:hover { border-color: var(--warm); color: var(--ink) }
+.image-ws-chip b { color: var(--warm-ink); font-weight: 600 }
+.image-ws-chip span { font-family: var(--mono); font-size: 9.5px; color: var(--ink-3); max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.comfy-node { min-width: 176px; max-width: 240px; }

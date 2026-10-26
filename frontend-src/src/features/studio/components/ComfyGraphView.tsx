@@ -17,7 +17,7 @@ export interface ComfyGraph { nodes: GraphNode[]; edges: GraphEdge[] }
 /** Which field currently claims this input, if any. */
 type Bindings = Record<string, { node: string; input: string }>;
 
-const FIELD_LABELS: Record<string, string> = {
+const DEFAULT_LABELS: Record<string, string> = {
   positive: "正向提示词", negative: "负向提示词", seed: "种子", width: "宽度",
   height: "高度", cfg: "CFG", sampler: "采样器", scheduler: "调度器", steps: "步数",
 };
@@ -25,6 +25,7 @@ const FIELD_LABELS: Record<string, string> = {
 function NodeCard({ data }: NodeProps) {
   const node = data.node as GraphNode;
   const boundFields = (data.boundFields as string[]) || [];
+  const labels = (data.labels as Record<string, string>) || DEFAULT_LABELS;
   return (
     <div className="comfy-node" data-bound={boundFields.length > 0 ? true : undefined}>
       <Handle type="target" position={Position.Left} />
@@ -43,19 +44,24 @@ function NodeCard({ data }: NodeProps) {
         {node.inputs.length > 6 && <div className="comfy-node-more">+{node.inputs.length - 6}</div>}
       </div>
       {boundFields.length > 0 && <div className="comfy-node-bound">
-        {boundFields.map((field) => <span key={field}>{FIELD_LABELS[field] || field}</span>)}
+        {boundFields.map((field) => <span key={field}>{labels[field] || field}</span>)}
       </div>}
       <Handle type="source" position={Position.Right} />
     </div>
   );
 }
 
-export function ComfyGraphView({ graph, bindings, onBind, onLayout }: {
+export function ComfyGraphView({ graph, bindings, fieldLabels, focusNode, onBind, onLayout }: {
   graph: ComfyGraph;
   bindings: Bindings;
+  fieldLabels?: Record<string, string>;
+  focusNode?: string | null;
   onBind: (field: string, binding: { node: string; input: string } | null) => void;
   onLayout: (positions: Record<string, { x: number; y: number }>) => void;
 }) {
+  const labels = { ...DEFAULT_LABELS, ...(fieldLabels || {}) };
+  // Selecting from the chip list focuses that node in the inspector.
+  useEffect(() => { if (focusNode) setSelected(focusNode) }, [focusNode]);
   const [selected, setSelected] = useState<string | null>(null);
   const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
   const flow = useRef<{ fitView: (opts?: { padding?: number }) => void } | null>(null);
@@ -64,9 +70,19 @@ export function ComfyGraphView({ graph, bindings, onBind, onLayout }: {
     const next: Record<string, { x: number; y: number }> = {};
     for (const node of graph.nodes) next[node.id] = node.position;
     setPositions(next);
-    // The canvas is measured after mount, so the initial fitView runs too early.
-    const timer = window.setTimeout(() => flow.current?.fitView({ padding: 0.15 }), 120);
-    return () => window.clearTimeout(timer);
+    // The canvas is measured after mount, so the initial fitView runs too early;
+    // fit again once layout settles and whenever the pane is resized.
+    const fit = () => flow.current?.fitView({ padding: 0.12 });
+    const timers = [window.setTimeout(fit, 60), window.setTimeout(fit, 320)];
+    const observer = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(() => fit())
+      : null;
+    const pane = document.querySelector(".image-ws-graph .comfy-canvas");
+    if (observer && pane) observer.observe(pane);
+    return () => {
+      timers.forEach(window.clearTimeout);
+      observer?.disconnect();
+    };
   }, [graph]);
 
   const boundByNode = useMemo(() => {
@@ -82,9 +98,9 @@ export function ComfyGraphView({ graph, bindings, onBind, onLayout }: {
     id: node.id,
     type: "comfy",
     position: positions[node.id] || node.position,
-    data: { node, boundFields: boundByNode[node.id] || [] },
+    data: { node, boundFields: boundByNode[node.id] || [], labels },
     selected: selected === node.id,
-  })), [graph.nodes, positions, boundByNode, selected]);
+  })), [graph.nodes, positions, boundByNode, selected, labels]);
 
   const flowEdges = useMemo<Edge[]>(() => graph.edges.map((edge) => ({
     id: edge.id,
@@ -153,7 +169,7 @@ export function ComfyGraphView({ graph, bindings, onBind, onLayout }: {
                     if (field) onBind(field, { node: node.id, input: input.name });
                   }}>
                     <option value="">不绑定</option>
-                    {Object.entries(FIELD_LABELS).map(([value, label]) => (
+                    {Object.entries(labels).map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>}
