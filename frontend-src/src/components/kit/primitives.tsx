@@ -257,10 +257,25 @@ export const AutoTextarea = React.forwardRef<HTMLTextAreaElement, ATProps>(funct
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // scrollHeight already includes padding, and the CSS sets box-sizing:
+    // border-box, so the measured value can be assigned straight to height.
+    // Overflow stays hidden while measuring to avoid a feedback loop.
+    const prevOverflow = el.style.overflowY;
+    el.style.overflowY = "hidden";
     el.style.height = "auto";
-    const lh = 19.4;
-    const h = Math.min(Math.max(el.scrollHeight + 2, minRows * lh + 14), maxRows * lh + 14);
-    el.style.height = `${h}px`;
+    const cs = getComputedStyle(el);
+    const lineHeight = parseFloat(cs.lineHeight) || 19.4;
+    const border = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+    const minH = minRows * lineHeight + border;
+    const maxH = maxRows * lineHeight + border;
+    const measured = el.scrollHeight + border; // scrollHeight excludes borders
+    const next = Math.min(Math.max(measured, minH), maxH);
+    el.style.height = `${next}px`;
+    const clamped = el.scrollHeight + border > next;
+    el.style.overflowY = clamped ? "auto" : (prevOverflow || "");
+    // Overlay scrollbars stay invisible until you scroll, so a clamped box needs
+    // its own affordance: fade the last line and show a resize grip.
+    el.dataset.clamped = clamped ? "true" : undefined;
   }, [p.value, minRows, maxRows]);
   return <textarea ref={ref} {...rest} />;
 });

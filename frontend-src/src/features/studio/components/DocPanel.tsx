@@ -83,7 +83,7 @@ function PageSection() {
           </div>
           <div className="field">
             <label>整体描述 <span className="spacer" /><span className="muted num">{L.summary.caption.length}</span></label>
-            <AutoTextarea className="textarea" minRows={3} maxRows={10} value={L.summary.caption}
+            <AutoTextarea className="textarea" minRows={4} maxRows={16} value={L.summary.caption}
               placeholder="整张图的场景、氛围、画风、光线……"
               onChange={(e) => editLayout((d) => ({ ...d, summary: { ...d.summary, caption: e.target.value } }), "summary")} />
           </div>
