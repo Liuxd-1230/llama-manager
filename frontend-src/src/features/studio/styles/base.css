@@ -265,18 +265,22 @@ kbd {
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 .btn-warm {
-  color: var(--accent-fg);
-  background: var(--warm, var(--accent));
-  border-color: transparent;
+  /* Same outlined treatment as btn-primary: warm is a hue, not a licence to
+     fill. Only the border/ink differ, so the toolbar stays one rhythm. */
+  color: var(--warm-ink);
+  background: transparent;
+  border-color: color-mix(in srgb, var(--warm) 45%, var(--line));
   box-shadow: none;
   text-shadow: none;
 }
 .btn-warm:hover {
-  filter: brightness(1.06);
+  background: var(--warm-soft);
+  border-color: var(--warm);
+  color: var(--warm-ink);
 }
 .btn-warm:active {
-  filter: brightness(0.96);
-  box-shadow: none;
+  background: var(--warm-soft);
+  box-shadow: inset 0 0 0 1px var(--warm);
 }
 .btn-danger {
   color: var(--err);

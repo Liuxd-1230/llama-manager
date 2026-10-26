@@ -20,6 +20,8 @@ type Bindings = Record<string, { node: string; input: string }>;
 /** Image workspace: same level as Layout/Caption, not a modal. */
 export function ComfyWorkspace() {
   const doc = useStore((s) => s.doc);
+  const compileResult = useStore((s) => s.compileResult);
+  const compileStale = useStore((s) => s.compileStale);
   const [labels, setLabels] = useState<Record<string, string>>({});
   const [bindings, setBindings] = useState<Bindings>({});
   const [status, setStatus] = useState<ComfyStatus | null>(null);
@@ -50,9 +52,10 @@ export function ComfyWorkspace() {
     setUrl(s.url);
     setBindingErrors(s.binding_errors || []);
     if (restore) setBindings(s.bindings || {});
+    // Prompts are NOT restored from the last run: they come from the current
+    // compile result (seeded below). Restoring them would silently resurrect a
+    // stale prompt from a previous page.
     const p = (s as { params?: Record<string, unknown> }).params || {};
-    if (typeof p.positive === "string") setPositive(p.positive);
-    if (typeof p.negative === "string") setNegative(p.negative);
     if (typeof p.seed === "number") setSeed(p.seed);
     if (typeof p.width === "number") setWidth(p.width);
     if (typeof p.height === "number") setHeight(p.height);
@@ -75,6 +78,17 @@ export function ComfyWorkspace() {
   }, [applyStatus]);
 
   useEffect(() => { void loadStatus() }, [loadStatus]);
+
+  // The compiled prompt is what this workspace exists to send. Seed the fields
+  // from it so "compile → switch to 出图 → generate" actually carries the text.
+  const seeded = useRef("");
+  useEffect(() => {
+    const prompt = compileResult?.prompt?.trim();
+    if (!prompt || seeded.current === prompt) return;
+    seeded.current = prompt;
+    setPositive(prompt);
+    if (compileResult?.negative) setNegative(compileResult.negative);
+  }, [compileResult]);
 
   // Sampler/scheduler domains come from ComfyUI itself (values it accepts).
   useEffect(() => {
@@ -147,7 +161,7 @@ export function ComfyWorkspace() {
   useEffect(() => {
     window.clearTimeout(saveParams.current);
     saveParams.current = window.setTimeout(() => {
-      void api.comfyParams({ positive, negative, seed, width, height, cfg, sampler, scheduler, steps }).catch(() => undefined);
+      void api.comfyParams({ seed, width, height, cfg, sampler, scheduler, steps }).catch(() => undefined);
     }, 700);
     return () => window.clearTimeout(saveParams.current);
   }, [positive, negative, seed, width, height, cfg, sampler, scheduler, steps]);
@@ -190,6 +204,9 @@ export function ComfyWorkspace() {
           <i />{connected ? `已连接 ${status?.url}` : status ? `连不上 ${status?.url}` : statusError ? `状态不可用：${statusError}` : "检测中…"}
         </span>
         <span className="image-ws-meta">{graph.nodes.length} 节点 · {boundCount} 通配</span>
+        {compileResult && <span className="image-ws-meta" data-stale={compileStale || undefined}>
+          {compileStale ? "提示词已过期（页面有改动，请重新编译）" : `已带入编译结果 · ${compileResult.prompt.length} 字符`}
+        </span>}
         <div className="image-ws-chips">
           {Object.entries(bindings).map(([field, binding]) => {
             const node = graph.nodes.find((n) => n.id === binding.node);

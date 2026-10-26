@@ -104,10 +104,10 @@ function PageSection() {
               <Switch checked={po.depth} onChange={(v) => editLayout((d) => ({ ...d, prompt_options: { ...po, depth: v } }))} />写入前后关系
             </label>
             <label className="opt-row" title="摄像机开启时，把镜头语言追加到整体描述">
-              <Switch warm checked={po.camera} onChange={(v) => editLayout((d) => ({ ...d, prompt_options: { ...po, camera: v } }))} />写入镜头语言
+              <Switch checked={po.camera} onChange={(v) => editLayout((d) => ({ ...d, prompt_options: { ...po, camera: v } }))} />写入镜头语言
             </label>
             <label className="opt-row" title="灯光开启时（镜头调度 → 灯光），把灯光描述追加到整体描述">
-              <Switch warm checked={po.lighting !== false} onChange={(v) => editLayout((d) => ({ ...d, prompt_options: { ...po, lighting: v } }))} />写入灯光描述
+              <Switch checked={po.lighting !== false} onChange={(v) => editLayout((d) => ({ ...d, prompt_options: { ...po, lighting: v } }))} />写入灯光描述
               {!L.lighting?.enabled && <span className="hint">（灯光未开启）</span>}
             </label>
           </div>

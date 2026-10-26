@@ -920,7 +920,8 @@ fieldset.insp:disabled {
 }
 .cam-phrase .muted {
   flex: none;
-  color: color-mix(in srgb, var(--warm-ink) 70%, transparent);
+  /* Camera copy follows the accent, like every other active-control label. */
+  color: var(--accent-ink);
 }
 .cam-foot {
   display: flex;

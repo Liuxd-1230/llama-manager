@@ -277,7 +277,7 @@ export function LightingPanel({ L, cam, active, setActive, onSent }: {
       <section className="dir-sec">
         <div className="dir-sec-head">
           <span className="section-title">写进提示词</span>
-          <Switch warm checked={writeOn} disabled={!lg.enabled} onChange={(v) => editLayout((d) => ({ ...d, prompt_options: { depth: true, perspective: false, camera: true, ...d.prompt_options, lighting: v } }))}
+          <Switch checked={writeOn} disabled={!lg.enabled} onChange={(v) => editLayout((d) => ({ ...d, prompt_options: { depth: true, perspective: false, camera: true, ...d.prompt_options, lighting: v } }))}
             title="编译时把灯光短语追加到整体描述后面" />
           <div className="spacer" />
           <button type="button" className="btn btn-ghost btn-xs" onClick={() => setShowEn(!showEn)}>{showEn ? "看中文" : "看英文"}</button>
