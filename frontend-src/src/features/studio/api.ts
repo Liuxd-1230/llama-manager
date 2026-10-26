@@ -91,6 +91,7 @@ export const api = {
   comfyStatus: () => get<{ url: string; reachable: boolean; has_workflow: boolean; bindings: Record<string, { node: string; input: string }>; fields: Record<string, string>; nodes: { node: string; class_type: string; title: string; inputs: { name: string; type: string; is_link: boolean; value: string | number | boolean | null }[] }[]; binding_errors: string[] }>("/comfy/status"),
   comfyImport: (workflow: string) => post<{ nodes: { node: string; class_type: string; title: string; inputs: { name: string; type: string; is_link: boolean; value: string | number | boolean | null }[] }[]; fields: Record<string, string>; suggested: Record<string, { node: string; input: string }> }>("/comfy/import", { workflow }),
   comfyUrl: (url: string) => put<{ url: string }>("/comfy/url", { url }),
+  comfyParams: (p: Record<string, unknown>) => put<{ params: Record<string, unknown> }>("/comfy/params", p),
   comfyChoices: () => get<{ samplers: string[]; schedulers: string[] }>("/comfy/choices"),
   comfyGraph: () => get<{ nodes: { id: string; title: string; class_type: string; position: { x: number; y: number }; inputs: { name: string; type: string; is_link: boolean; value: string | number | boolean | null }[] }[]; edges: { id: string; source: string; target: string; target_input: string }[] }>("/comfy/graph"),
   comfyLayout: (positions: Record<string, { x: number; y: number }>) => put<{ positions: Record<string, { x: number; y: number }> }>("/comfy/layout", { positions }),
@@ -130,6 +131,7 @@ export type AgentEvent =
   | { type: "user_saved"; message: Message }
   | { type: "model"; model: string }
   | { type: "text"; delta: string }
+  | { type: "reasoning"; delta: string }
   | { type: "tool_pending"; name: string; label: string }
   | { type: "tool"; name: string; label: string; brief: string; ok: boolean; result: string }
   | { type: "ask"; question: string; options: string[]; multi: boolean }

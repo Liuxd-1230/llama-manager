@@ -1,7 +1,7 @@
 import {
   AlertTriangle, ArrowUp, AtSign, Bot, Check, CheckCheck, ChevronDown, ChevronRight, Copy, History, ImagePlus, Loader2,
   MessageSquarePlus, MousePointerClick, Pencil, RotateCcw, Settings2, Sparkles, Square, Trash2, Wrench, X, Zap, Info,
-  CircleHelp, ListPlus, Eraser, Wand2,
+  CircleHelp, ListPlus, Eraser, Wand2, BrainCircuit,
 } from "lucide-react";
 import React, { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useStoreWithEqualityFn } from "zustand/traditional";
@@ -257,6 +257,7 @@ const AssistantMsg = memo(function AssistantMsg({ m, isLast, latestAsk }: { m: M
       {m.content && <Markdown text={m.content} />}
       {meta.stopped && <div className="notice"><Square size={11} />已停止</div>}
       {meta.error && <div className="notice err"><AlertTriangle size={12} />{meta.error}</div>}
+      {meta.reasoning && <ReasoningBlock text={meta.reasoning} />}
       {(meta.proposals || []).map((p) => <ProposalCard key={p.page_id} messageId={m.id} p={p} />)}
       {meta.ask && <AskCard ask={meta.ask} active={latestAsk && !busy} />}
       <div className="msg-actions">
@@ -270,6 +271,22 @@ const AssistantMsg = memo(function AssistantMsg({ m, isLast, latestAsk }: { m: M
   );
 });
 
+function ReasoningBlock({ text, live }: { text: string; live?: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (!text.trim()) return null;
+  return (
+    <div className="reasoning" data-live={live || undefined}>
+      <button type="button" className="reasoning-head" onClick={() => setOpen((v) => !v)}>
+        <BrainCircuit size={11} />
+        <span>思考过程</span>
+        <span className="reasoning-len">{text.length} 字</span>
+        <ChevronDown size={11} className={open ? "rot" : ""} />
+      </button>
+      {open && <div className="reasoning-body">{text}</div>}
+    </div>
+  );
+}
+
 function StreamingMsg() {
   const st = useStore((s) => s.streaming);
   if (!st) return null;
@@ -277,7 +294,8 @@ function StreamingMsg() {
     <div className="msg ai streaming">
       {st.notices.map((n, i) => <div key={i} className="notice"><Info size={12} />{n}</div>)}
       <StepChips steps={st.steps} pending={st.pending} />
-      {st.text ? <Markdown text={st.text} caret /> : !st.pending && <div className="thinking"><span /><span /><span /></div>}
+      <ReasoningBlock text={st.reasoning} live />
+      {st.text ? <Markdown text={st.text} caret /> : !st.pending && !st.reasoning && <div className="thinking"><span /><span /><span /></div>}
       {st.error && <div className="notice err"><AlertTriangle size={12} />{st.error}</div>}
       {st.ask && <AskCard ask={st.ask} active={false} />}
       {st.model && <div className="msg-actions show"><span className="muted model-tag">{st.model}</span></div>}

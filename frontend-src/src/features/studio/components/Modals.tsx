@@ -289,7 +289,7 @@ function QuickModal() {
 // ---------- AI 起稿 ----------
 type DraftPrefs = { canvas: string; mode: DraftOpts["mode"]; camera: boolean; lighting: boolean; autoAccept: boolean };
 const DRAFT_KEY = "moss.draft.prefs";
-const DRAFT_DEFAULT: DraftPrefs = { canvas: "keep", mode: "replace", camera: true, lighting: true, autoAccept: true };
+const DRAFT_DEFAULT: DraftPrefs = { canvas: "keep", mode: "replace", camera: true, lighting: true, autoAccept: false };
 let draftSeed = "";
 let draftLast = "";
 export function draftPrefs(): DraftPrefs {

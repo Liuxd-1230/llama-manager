@@ -500,6 +500,7 @@ async def comfy_status():
     # the binding dropdowns (they render blank without it).
     return {"url": base, "reachable": reachable, "has_workflow": bool(nodes),
             "bindings": bindings, "fields": comfy.FIELD_LABELS,
+            "params": s.get("comfy_params") or {},
             "nodes": comfy.node_choices(nodes) if nodes else [],
             "binding_errors": [error for field, binding in bindings.items()
                                if (error := comfy.validate_binding(nodes, field, binding))]}
@@ -543,6 +544,16 @@ def comfy_set_url(body: dict):
     s["comfy_url"] = url or comfy.COMFY_DEFAULT
     save_settings(s)
     return {"url": s["comfy_url"]}
+
+
+@router.put("/comfy/params")
+def comfy_params(body: dict):
+    """Remember the last used generation parameters (not the workflow)."""
+    keep = {k: body[k] for k in ("positive", "negative", "seed", "width", "height", "cfg", "sampler", "scheduler", "steps") if k in body}
+    s = load_settings()
+    s["comfy_params"] = keep
+    save_settings(s)
+    return {"params": keep}
 
 
 @router.post("/comfy/generate")
@@ -596,8 +607,14 @@ def _resolve_creds(body: Optional[ProbeBody] = None) -> tuple[str, str]:
     return resolved["base_url"], resolved["api_key"]
 
 
+def _auth_headers(key: str) -> dict[str, str]:
+    # The local engine needs no key; an empty "Bearer " header makes
+    # llama-server reject the request, so omit it entirely when unset.
+    return {"Authorization": f"Bearer {key}"} if key else {}
+
+
 async def _list_models(client: httpx.AsyncClient, base: str, key: str) -> list[str]:
-    r = await client.get(f"{base}/models", headers={"Authorization": f"Bearer {key}"})
+    r = await client.get(f"{base}/models", headers=_auth_headers(key))
     if r.status_code >= 400:
         raise HTTPException(status_code=502, detail=f"GET /models 失败 {r.status_code}: {r.text[:300]}")
     try:
@@ -616,7 +633,7 @@ async def test_settings(body: ProbeBody = ProbeBody()):
                            "stream_ok": False, "tools_ok": False, "latency_ms": None, "model_count": 0,
                            "sample_models": [], "message": ""}
     t0 = time.perf_counter()
-    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    headers = {**_auth_headers(key), "Content-Type": "application/json"}
     async with httpx.AsyncClient(timeout=httpx.Timeout(40.0, connect=10.0)) as client:
         try:
             ids = await _list_models(client, base, key)

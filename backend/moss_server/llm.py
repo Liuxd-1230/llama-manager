@@ -132,6 +132,8 @@ async def stream_chat(
                         # 有些代理忽略 stream=true，直接回完整 JSON
                         data = json.loads((await r.aread()).decode("utf-8"))
                         msg = data["choices"][0]["message"]
+                        if msg.get("reasoning_content"):
+                            yield ("reasoning", msg["reasoning_content"])
                         if msg.get("content"):
                             yield ("text", msg["content"])
                             content.append(msg["content"])
@@ -157,6 +159,9 @@ async def stream_chat(
                             for ch in chunk.get("choices") or []:
                                 started = True
                                 delta = ch.get("delta") or {}
+                                reasoning = delta.get("reasoning_content") or delta.get("reasoning")
+                                if reasoning:
+                                    yield ("reasoning", reasoning)
                                 if delta.get("content"):
                                     content.append(delta["content"])
                                     yield ("text", delta["content"])

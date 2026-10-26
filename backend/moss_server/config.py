@@ -73,6 +73,9 @@ SETTINGS_DEFAULTS: dict[str, Any] = {
     "comfy_workflow": {},
     "comfy_bindings": {},
     "comfy_layout": {},
+    # Last generation parameters, so reopening the workspace keeps the user's
+    # sampler/steps/prompts instead of resetting to defaults.
+    "comfy_params": {},
 }
 
 

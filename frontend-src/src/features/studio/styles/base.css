@@ -370,9 +370,10 @@ kbd {
   color: var(--ink);
 }
 .seg > button.on {
-  background: var(--paper);
-  color: var(--ink);
-  box-shadow: 0 0 0 1px var(--line);
+  /* Selected segment reads as "active choice", so it takes the accent, not paper. */
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .seg.seg-sm > button {
   height: 20px;

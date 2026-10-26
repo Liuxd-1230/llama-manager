@@ -209,3 +209,15 @@ class ChoiceTests(unittest.IsolatedAsyncioTestCase):
         with mock.patch.object(comfy.httpx, "AsyncClient", return_value=client):
             out = await comfy.fetch_choices("http://127.0.0.1:8188")
         self.assertEqual(out["samplers"], [])
+
+
+class EmptyKeyAuthTests(unittest.TestCase):
+    """The local engine has no key; a bare 'Bearer ' header makes it reject us."""
+
+    def test_empty_key_sends_no_authorization_header(self):
+        from backend.moss_server import api as moss_api
+        self.assertEqual(moss_api._auth_headers(""), {})
+
+    def test_present_key_sends_bearer(self):
+        from backend.moss_server import api as moss_api
+        self.assertEqual(moss_api._auth_headers("sk-x"), {"Authorization": "Bearer sk-x"})

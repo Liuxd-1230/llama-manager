@@ -58,6 +58,7 @@ export interface SendOpts {
 export interface Streaming {
   sessionId: string;
   text: string;
+  reasoning: string;
   steps: Step[];
   pending: { name: string; label: string } | null;
   model: string;
@@ -798,7 +799,9 @@ export async function compileNow(open = true) {
   set({ compiling: true, compileOpen: open || s.compileOpen });
   try {
     const draft = s.doc.kind === "layout" ? s.doc.layout : s.doc.caption;
-    const view = s.doc.kind === "layout" ? compileView(s.doc.layout) : undefined;
+    const view = s.doc.kind === "layout"
+      ? { ...compileView(s.doc.layout), compiled: s.compileResult?.prompt || "" }
+      : undefined;
     const r = await api.compile(draft, view);
     set({ compileResult: r, compileError: "", compileStale: get().doc !== s.doc });
   } catch (e) {
@@ -1014,7 +1017,11 @@ async function run(text: string, opts: SendOpts) {
   const s = get();
   const sid = s.sessionId;
   const doc = s.doc!;
-  const view = doc.kind === "layout" ? compileView(doc.layout) : undefined;
+  // `compiled` carries the last compile output so the agent can read the exact
+  // text that would be sent to ComfyUI.
+  const view = doc.kind === "layout"
+    ? { ...compileView(doc.layout), compiled: s.compileResult?.prompt || "" }
+    : undefined;
   const temp: Message = {
     id: "tmp-user", session_id: sid, seq: 1e9, role: "user", content: text,
     meta: { page_id: s.pageId, selection: opts.selection || [], skill_ids: opts.skillIds || [],
@@ -1023,7 +1030,7 @@ async function run(text: string, opts: SendOpts) {
   const keep = (s.messages[sid] || []).filter((m) => !opts.replaceFromSeq || m.seq < opts.replaceFromSeq);
   set({
     messages: { ...s.messages, [sid]: [...keep, temp] },
-    streaming: { sessionId: sid, text: "", steps: [], pending: null, model: "", notices: [], ask: null, error: "" },
+    streaming: { sessionId: sid, text: "", reasoning: "", steps: [], pending: null, model: "", notices: [], ask: null, error: "" },
   });
   const ctrl = new AbortController();
   S.abort = ctrl;
@@ -1037,6 +1044,9 @@ async function run(text: string, opts: SendOpts) {
         break;
       case "model":
         upd(() => ({ model: e.model }));
+        break;
+      case "reasoning":
+        upd((st) => ({ reasoning: st.reasoning + e.delta }));
         break;
       case "text":
         upd((st) => ({ text: st.text + e.delta }));

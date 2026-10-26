@@ -1,6 +1,7 @@
 import { Check, Download, Loader2, Play, RefreshCw, Upload, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { api as api2 } from "../../../api";
 import { toast, useStore } from "../store";
 import { Button, Field, Input, Select } from "../../../components/kit";
 import { ComfyGraphView, type ComfyGraph } from "./ComfyGraphView";
@@ -49,6 +50,16 @@ export function ComfyWorkspace() {
     setUrl(s.url);
     setBindingErrors(s.binding_errors || []);
     if (restore) setBindings(s.bindings || {});
+    const p = (s as { params?: Record<string, unknown> }).params || {};
+    if (typeof p.positive === "string") setPositive(p.positive);
+    if (typeof p.negative === "string") setNegative(p.negative);
+    if (typeof p.seed === "number") setSeed(p.seed);
+    if (typeof p.width === "number") setWidth(p.width);
+    if (typeof p.height === "number") setHeight(p.height);
+    if (typeof p.cfg === "number") setCfg(p.cfg);
+    if (typeof p.sampler === "string") setSampler(p.sampler);
+    if (typeof p.scheduler === "string") setScheduler(p.scheduler);
+    if (typeof p.steps === "number") setSteps(p.steps);
   }, []);
 
   const loadStatus = useCallback(async (restore = true) => {
@@ -132,12 +143,37 @@ export function ComfyWorkspace() {
     } finally { setBusy(""); }
   };
 
+  const saveParams = useRef(0);
+  useEffect(() => {
+    window.clearTimeout(saveParams.current);
+    saveParams.current = window.setTimeout(() => {
+      void api.comfyParams({ positive, negative, seed, width, height, cfg, sampler, scheduler, steps }).catch(() => undefined);
+    }, 700);
+    return () => window.clearTimeout(saveParams.current);
+  }, [positive, negative, seed, width, height, cfg, sampler, scheduler, steps]);
+
   const generate = async () => {
     setBusy("gen");
     try {
-      const r = await api.comfyGenerate({ positive, negative, seed: seed < 0 ? Math.floor(Math.random() * 2 ** 32) : seed, width, height, cfg, sampler, scheduler, steps });
-      setResult(r);
-      toast(`出图完成（${r.count} 张）`, "ok");
+      // ComfyUI needs the VRAM the local engine is holding; pause it first and
+      // resume afterwards so the user's engine state survives the render.
+      const server = await api2<{ state: string }>("/api/server/status").catch(() => null);
+      let paused = false;
+      if (server?.state === "running") {
+        await api2("/api/server/suspend", { method: "POST" }).catch(() => undefined);
+        paused = true;
+        toast("已暂停本地引擎，释放显存给 ComfyUI", "info");
+      }
+      try {
+        const r = await api.comfyGenerate({ positive, negative, seed: seed < 0 ? Math.floor(Math.random() * 2 ** 32) : seed, width, height, cfg, sampler, scheduler, steps });
+        setResult(r);
+        toast(`出图完成（${r.count} 张）`, "ok");
+      } finally {
+        if (paused) {
+          await api2("/api/server/resume", { method: "POST", body: JSON.stringify({}) }).catch(() => undefined);
+          toast("已恢复本地引擎", "info");
+        }
+      }
     } catch (error) {
       toast(`生成失败：${error instanceof Error ? error.message : String(error)}`, "err");
     } finally { setBusy(""); }

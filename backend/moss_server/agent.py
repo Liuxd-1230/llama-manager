@@ -178,6 +178,12 @@ def build_messages(*, session: dict, history: list[dict], wb: Workbench, page_id
         sel = [f"「{items[i].get('name') or i}」(id={i})" for i in selection if i in items]
         if sel:
             wsl.append("用户当前选中：" + "、".join(sel) + "（用户说“这个/它”时通常指这些）")
+    # The compiled prompt is the actual artifact the user feeds to ComfyUI; the
+    # agent must see it verbatim or it will keep proposing changes to a text it
+    # has never read.
+    compiled = str((view or {}).get("compiled") or "").strip() if isinstance(view, dict) else ""
+    if compiled:
+        wsl.append("当前页面编译出的最终提示词（送 ComfyUI 的就是这段）：\n" + compiled)
     seen = (meta.get("seen") or {}).get(page_id)
     manual = describe_changes(seen, doc) if seen else []
     if manual:
@@ -244,6 +250,7 @@ async def run_agent(*, session_id: str, page_id: str, doc: dict, view: Optional[
     meta.setdefault("seen", {})[page_id] = copy.deepcopy(doc)
 
     visible: list[str] = []
+    reasoning: list[str] = []
     steps: list[dict] = []
     model_used = ""
     error: Optional[str] = None
@@ -261,6 +268,11 @@ async def run_agent(*, session_id: str, page_id: str, doc: dict, view: Optional[
                         if val != model_used:
                             model_used = val
                             yield sse({"type": "model", "model": val})
+                    elif kind == "reasoning":
+                        # Thinking models stream their chain of thought here; the
+                        # UI shows it in a collapsible block, separate from the answer.
+                        reasoning.append(val)
+                        yield sse({"type": "reasoning", "delta": val})
                     elif kind == "text":
                         out = filt.feed(val) if filt else val
                         if out:
@@ -379,7 +391,8 @@ async def run_agent(*, session_id: str, page_id: str, doc: dict, view: Optional[
             text = ""
         amsg = db.add_message(session_id, "assistant", text, {
             "steps": steps, "proposals": proposals, "ask": wb.ask, "model": model_used,
-            "error": error, "stopped": stopped, "page_id": page_id})
+            "error": error, "stopped": stopped, "page_id": page_id,
+            "reasoning": "".join(reasoning).strip() or None})
         fresh = db.get_session(session_id) or session
         fmeta = dict(fresh.get("meta") or {})
         fmeta["seen"] = {**(fmeta.get("seen") or {}), **meta["seen"]}

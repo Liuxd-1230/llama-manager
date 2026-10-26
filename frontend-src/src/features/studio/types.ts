@@ -208,6 +208,7 @@ export interface MessageMeta {
   model?: string;
   error?: string | null;
   stopped?: boolean;
+  reasoning?: string;
 }
 
 export interface Message {
