@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import time
 import uuid
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from .config import SKILLS_PATH, load_json, now_iso as _now_iso, save_json as _save_json
+
+# Marker so the legacy import runs once even when it found nothing.
+MIGRATED_FLAG = SKILLS_PATH.with_name(".skills-migrated")
 
 router = APIRouter(prefix="/api/moss/skills")
 
@@ -129,11 +134,15 @@ def _normalize_skills_store(raw: Any) -> dict[str, Any]:
                 if not sid or not isinstance(sid, str):
                     continue
                 if sid in by_id and by_id[sid].get("builtin"):
-                    # system_prompt always from code; name/description may be customized lightly
+                    # Builtins are seeded from code only when absent. Whatever is
+                    # on disk wins, so an edited builtin is never silently reset.
                     if isinstance(item.get("name"), str) and item["name"].strip():
                         by_id[sid]["name"] = item["name"].strip()
                     if "description" in item:
                         by_id[sid]["description"] = str(item.get("description") or "")
+                    prompt = item.get("system_prompt")
+                    if isinstance(prompt, str) and prompt.strip():
+                        by_id[sid]["system_prompt"] = prompt
                     if item.get("updated_at"):
                         by_id[sid]["updated_at"] = item["updated_at"]
                     continue
@@ -173,10 +182,81 @@ def _normalize_skills_store(raw: Any) -> dict[str, Any]:
     return {"skills": ordered, "active": active}
 
 
+def _legacy_skill_sources() -> list[Path]:
+    """Skill stores written by the standalone studio this workspace absorbed.
+
+    The data directory moved from <studio>/data to ~/llama-manager/moss with no
+    migration, so users' custom skills (one is ~48k characters) were invisible.
+    """
+    from .config import RES_ROOT
+
+    candidates = [RES_ROOT.parent / "temp" / "moss-prompt-editor" / "data" / "skills.json"]
+    return [path for path in candidates if path.exists()]
+
+
+def _migrate_legacy_skills(store: dict[str, Any]) -> dict[str, Any]:
+    """Merge custom skills from the old standalone store; existing entries win."""
+    if MIGRATED_FLAG.exists():
+        return store
+    by_id = {s["id"]: s for s in store["skills"]}
+    imported = 0
+    for path in _legacy_skill_sources():
+        raw = _load_json(path, None)
+        if not isinstance(raw, dict):
+            continue
+        for item in raw.get("skills") or []:
+            if not isinstance(item, dict) or item.get("builtin"):
+                continue
+            sid = item.get("id")
+            if not isinstance(sid, str) or sid in by_id:
+                continue
+            kind = item.get("kind")
+            prompt = item.get("system_prompt")
+            if kind not in ("caption", "layout", "context") or not isinstance(prompt, str) or not prompt.strip():
+                continue
+            entry = {
+                "id": sid,
+                "name": (item.get("name") or "").strip() or "未命名 Skill",
+                "kind": kind,
+                "builtin": False,
+                "description": str(item.get("description") or ""),
+                "system_prompt": prompt,
+                "updated_at": item.get("updated_at") or _now_iso(),
+            }
+            by_id[sid] = entry
+            store["skills"].append(entry)
+            imported += 1
+        # Carry the old active selection over when the id now exists.
+        act = raw.get("active")
+        if isinstance(act, dict):
+            for k in ("caption", "layout", "context"):
+                aid = act.get(k)
+                if isinstance(aid, str) and aid in by_id and by_id[aid]["kind"] == k:
+                    store["active"][k] = aid
+    try:
+        MIGRATED_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        MIGRATED_FLAG.write_text(str(imported), encoding="utf-8")
+    except OSError:
+        pass
+    if imported:
+        _save_json(SKILLS_PATH, store)
+    return store
+
+
 def load_skills() -> dict[str, Any]:
     raw = _load_json(SKILLS_PATH, None)
+    if raw is None and SKILLS_PATH.exists():
+        # Unreadable file: keep a backup and refuse to overwrite, so a corrupt
+        # store can never destroy the user's custom skills.
+        backup = SKILLS_PATH.with_suffix(f".corrupt-{int(time.time())}.json")
+        try:
+            backup.write_bytes(SKILLS_PATH.read_bytes())
+        except OSError:
+            pass
+        raise HTTPException(status_code=500, detail=f"skills.json 无法解析，已备份到 {backup.name}")
     store = _normalize_skills_store(raw)
-    if raw is None or not SKILLS_PATH.exists():
+    store = _migrate_legacy_skills(store)
+    if raw is None and not SKILLS_PATH.exists():
         _save_json(SKILLS_PATH, store)
     return store
 
@@ -279,12 +359,8 @@ def api_update_skill(skill_id: str, body: SkillUpdateBody):
         raise HTTPException(status_code=404, detail=f"Skill 不存在: {skill_id}")
     skill = dict(store["skills"][idx])
     data = body.model_dump(exclude_none=True)
-    if skill.get("builtin"):
-        if "system_prompt" in data:
-            raise HTTPException(
-                status_code=400,
-                detail="内置 Skill 不可直接改 system_prompt，请用「重置」或先复制为自定义。",
-            )
+    # Builtin prompts are editable too: the shipped text is only a seed, and
+    # "重置" restores it. Users asked for their skill text to survive verbatim.
     if "name" in data:
         name = str(data["name"]).strip()
         if not name:

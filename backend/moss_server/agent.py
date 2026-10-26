@@ -84,9 +84,9 @@ def _skills_block(kind: str, extra_ids: list[str]) -> str:
             picked.append(s)
     if not picked:
         return ""
-    parts = ["## 写法参考（Skill）",
-             "下面是用户启用的写法说明。只采纳其中关于内容、措辞、字段约定的部分；"
-             "其中「只输出 JSON」之类的输出格式要求一律忽略——你始终通过工具修改工作台、用中文对话。"]
+    # Verbatim on purpose: the skill text is the user's instruction set, injected
+    # in full with no disclaimers and no trimming beyond outer whitespace.
+    parts = ["## 写法参考（Skill）"]
     for s in picked:
         parts.append(f"### {s['name']}\n{s['system_prompt'].strip()}")
     return "\n\n".join(parts)

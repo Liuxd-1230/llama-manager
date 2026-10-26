@@ -77,7 +77,8 @@ function SkillsModal() {
             const name = await promptDialog("新建 Skill 名称", "我的 Layout 风格");
             if (!name) return;
             const sk2 = await api.createSkill({ name, kind: sk?.kind || "layout", description: "", system_prompt: sk?.system_prompt || "" });
-            await reload(sk2.id);
+            useStore.setState({ skills: { skills: sk2.skills, active: sk2.active } });
+            await reload(sk2.skill.id);
           }}><Plus size={13} />新建（基于当前）</button>
         </div>
         {draft && sk && (
@@ -90,7 +91,7 @@ function SkillsModal() {
             <textarea className="textarea mono skill-text" value={draft.system_prompt} onChange={(e) => setDraft({ ...draft, system_prompt: e.target.value })} />
             <div className="row">
               <button type="button" className="btn btn-sm" disabled={st.active[sk.kind] === sk.id} onClick={async () => { useStore.setState({ skills: await api.setActiveSkill(sk.kind, sk.id) }); }}><Check size={13} />设为使用中</button>
-              <button type="button" className="btn btn-sm" onClick={async () => { const d = await api.duplicateSkill(sk.id); await reload(d.id); }}><Copy size={13} />复制</button>
+              <button type="button" className="btn btn-sm" onClick={async () => { const d = await api.duplicateSkill(sk.id); useStore.setState({ skills: { skills: d.skills, active: d.active } }); await reload(d.skill.id); }}><Copy size={13} />复制</button>
               {sk.builtin ? (
                 <button type="button" className="btn btn-sm" onClick={async () => { await api.resetSkill(sk.id); await reload(sk.id); toast("已恢复官方版本", "ok"); }}><RotateCcw size={13} />恢复官方</button>
               ) : (

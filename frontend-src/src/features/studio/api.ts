@@ -110,12 +110,13 @@ export const api = {
   // ---------- Skills ----------
   skills: () => get<SkillsState>("/skills"),
   setActiveSkill: (kind: SkillKind, id: string) => put<SkillsState>("/skills/active", { kind, id }),
+  // Mutations return the whole store plus the affected skill, not a bare Skill.
   createSkill: (b: { name: string; kind: SkillKind; description?: string; system_prompt: string }) =>
-    post<Skill>("/skills", b),
+    post<SkillsState & { skill: Skill }>("/skills", b),
   updateSkill: (id: string, b: { name?: string; description?: string; system_prompt?: string }) =>
-    put<Skill>(`/skills/${id}`, b),
-  resetSkill: (id: string) => post<Skill>(`/skills/${id}/reset`),
-  duplicateSkill: (id: string) => post<Skill>(`/skills/${id}/duplicate`),
+    put<SkillsState & { skill: Skill }>(`/skills/${id}`, b),
+  resetSkill: (id: string) => post<SkillsState & { skill: Skill }>(`/skills/${id}/reset`),
+  duplicateSkill: (id: string) => post<SkillsState & { skill: Skill }>(`/skills/${id}/duplicate`),
   deleteSkill: (id: string) => del(`/skills/${id}`),
 };
 
