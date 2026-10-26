@@ -214,6 +214,34 @@ def build_graph(nodes: dict, saved_layout: Optional[dict] = None) -> dict:
     return {"nodes": graph_nodes, "edges": edges}
 
 
+async def fetch_choices(base: str) -> dict:
+    """Real sampler/scheduler enums from ComfyUI, so the UI can offer dropdowns.
+
+    /object_info is a large payload; only the sampler node's widget domains are
+    extracted. ComfyUI versions differ, so every step degrades to an empty list.
+    """
+    out: dict[str, list[str]] = {"samplers": [], "schedulers": []}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(f"{base}/object_info")
+        if response.status_code >= 400:
+            return out
+        info = response.json() or {}
+    except (httpx.RequestError, ValueError):
+        return out
+
+    def widget_domain(class_type: str, widget: str) -> list[str]:
+        required = ((info.get(class_type) or {}).get("input") or {}).get("required") or {}
+        spec = required.get(widget)
+        if isinstance(spec, list) and spec and isinstance(spec[0], list):
+            return [str(item) for item in spec[0]]
+        return []
+
+    out["samplers"] = widget_domain("KSampler", "sampler_name")
+    out["schedulers"] = widget_domain("KSampler", "scheduler")
+    return out
+
+
 def node_choices(nodes: dict) -> list[dict]:
     """Flatten the workflow into candidate bindings for the UI.
 

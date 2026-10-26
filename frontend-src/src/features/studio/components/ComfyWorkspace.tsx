@@ -2,7 +2,7 @@ import { Check, Download, Loader2, Play, RefreshCw, Upload, X } from "lucide-rea
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { toast, useStore } from "../store";
-import { Button, Field, Input } from "../../../components/kit";
+import { Button, Field, Input, Select } from "../../../components/kit";
 import { ComfyGraphView, type ComfyGraph } from "./ComfyGraphView";
 
 interface ComfyStatus {
@@ -38,6 +38,7 @@ export function ComfyWorkspace() {
   const [sampler, setSampler] = useState("euler");
   const [scheduler, setScheduler] = useState("normal");
   const [steps, setSteps] = useState(20);
+  const [choices, setChoices] = useState<{ samplers: string[]; schedulers: string[] }>({ samplers: [], schedulers: [] });
   const [result, setResult] = useState<{ image: string; filename: string } | null>(null);
   const [focusNode, setFocusNode] = useState<string | null>(null);
   const saveTimer = useRef(0);
@@ -63,6 +64,22 @@ export function ComfyWorkspace() {
   }, [applyStatus]);
 
   useEffect(() => { void loadStatus() }, [loadStatus]);
+
+  // Sampler/scheduler domains come from ComfyUI itself (values it accepts).
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const c = await api.comfyChoices();
+        if (!alive) return;
+        setChoices(c);
+        if (c.samplers.length && !c.samplers.includes(sampler)) setSampler(c.samplers[0]);
+        if (c.schedulers.length && !c.schedulers.includes(scheduler)) setScheduler(c.schedulers[0]);
+      } catch { /* offline: keep free text */ }
+    };
+    void load();
+    return () => { alive = false };
+  }, []);
   useEffect(() => {
     const timer = window.setInterval(() => { void loadStatus(false) }, 5000);
     return () => window.clearInterval(timer);
@@ -194,8 +211,16 @@ export function ComfyWorkspace() {
             <Field label="步数"><Input type="number" value={steps} onChange={(e) => setSteps(Number(e.target.value))} /></Field>
           </div>
           <div className="row">
-            <Field label="采样器"><Input value={sampler} onChange={(e) => setSampler(e.target.value)} /></Field>
-            <Field label="调度器"><Input value={scheduler} onChange={(e) => setScheduler(e.target.value)} /></Field>
+            <Field label={`采样器${choices.samplers.length ? `（${choices.samplers.length}）` : ""}`}>
+              {choices.samplers.length
+                ? <Select value={sampler} onChange={(e) => setSampler(e.target.value)}>{choices.samplers.map((v) => <option key={v} value={v}>{v}</option>)}</Select>
+                : <Input value={sampler} onChange={(e) => setSampler(e.target.value)} placeholder="连上 ComfyUI 后可选择" />}
+            </Field>
+            <Field label={`调度器${choices.schedulers.length ? `（${choices.schedulers.length}）` : ""}`}>
+              {choices.schedulers.length
+                ? <Select value={scheduler} onChange={(e) => setScheduler(e.target.value)}>{choices.schedulers.map((v) => <option key={v} value={v}>{v}</option>)}</Select>
+                : <Input value={scheduler} onChange={(e) => setScheduler(e.target.value)} placeholder="连上 ComfyUI 后可选择" />}
+            </Field>
           </div>
           <div className="hint">宽高默认跟随画布（{doc?.layout.width}×{doc?.layout.height}），可覆盖；留空字段沿用 workflow 原值。</div>
 

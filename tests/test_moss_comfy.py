@@ -167,3 +167,45 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(steps["value"], 20)
         self.assertFalse(steps["is_link"])
         self.assertTrue(positive["is_link"])
+
+
+class ChoiceTests(unittest.IsolatedAsyncioTestCase):
+    """Sampler/scheduler dropdowns are fed by ComfyUI's own widget domains."""
+
+    OBJECT_INFO = {
+        "KSampler": {"input": {"required": {
+            "sampler_name": [["euler", "dpmpp_2m"], {"default": "euler"}],
+            "scheduler": [["normal", "karras"], {"default": "normal"}],
+            "steps": ["INT", {"default": 20}],
+        }}},
+    }
+
+    async def test_extracts_domains(self):
+        response = mock.Mock(status_code=200, json=mock.Mock(return_value=self.OBJECT_INFO))
+        client = mock.AsyncMock()
+        client.get.return_value = response
+        client.__aenter__.return_value = client
+        client.__aexit__.return_value = False
+        with mock.patch.object(comfy.httpx, "AsyncClient", return_value=client):
+            out = await comfy.fetch_choices("http://127.0.0.1:8188")
+        self.assertEqual(out["samplers"], ["euler", "dpmpp_2m"])
+        self.assertEqual(out["schedulers"], ["normal", "karras"])
+
+    async def test_offline_degrades_to_empty_lists(self):
+        client = mock.AsyncMock()
+        client.get.side_effect = comfy.httpx.RequestError("offline")
+        client.__aenter__.return_value = client
+        client.__aexit__.return_value = False
+        with mock.patch.object(comfy.httpx, "AsyncClient", return_value=client):
+            out = await comfy.fetch_choices("http://127.0.0.1:1")
+        self.assertEqual(out, {"samplers": [], "schedulers": []})
+
+    async def test_unknown_node_yields_empty(self):
+        response = mock.Mock(status_code=200, json=mock.Mock(return_value={}))
+        client = mock.AsyncMock()
+        client.get.return_value = response
+        client.__aenter__.return_value = client
+        client.__aexit__.return_value = False
+        with mock.patch.object(comfy.httpx, "AsyncClient", return_value=client):
+            out = await comfy.fetch_choices("http://127.0.0.1:8188")
+        self.assertEqual(out["samplers"], [])

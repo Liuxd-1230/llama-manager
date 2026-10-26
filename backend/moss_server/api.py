@@ -505,6 +505,12 @@ async def comfy_status():
                                if (error := comfy.validate_binding(nodes, field, binding))]}
 
 
+@router.get("/comfy/choices")
+async def comfy_choices():
+    """Sampler/scheduler values ComfyUI actually accepts (empty when offline)."""
+    return await comfy.fetch_choices(comfy.comfy_base(load_settings()))
+
+
 @router.get("/comfy/graph")
 def comfy_graph():
     s = load_settings()
