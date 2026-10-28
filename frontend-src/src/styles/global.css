@@ -33,3 +33,6 @@ code, pre { font-family: "SFMono-Regular", Consolas, monospace }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important }
 }
+
+html[data-motion="reduced"] *,html[data-decoration="off"] [data-brand-animation]{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+::selection{background:var(--accent-soft);color:var(--text)}input,textarea{caret-color:var(--accent)}

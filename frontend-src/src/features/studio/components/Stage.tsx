@@ -1,3 +1,4 @@
+import { SegmentEditor } from "./CreativePanels";
 import {
   Box, Camera as CameraIcon, Check, ClipboardCopy, Hand, Maximize, Minus, MousePointer2, Move3d, Play, Plus, RefreshCw,
   Save, SquareDashed, Type, User, X, AlertTriangle, Loader2, ChevronDown, Clapperboard, Link2, Magnet, Sparkles, ArrowUp,
@@ -78,6 +79,9 @@ function Toolbar({ zoom, setZoom }: { zoom: number; setZoom: (z: number) => void
         onChange={(v) => setUi({ drawLabel: v, tool: "draw" })}
         options={(["object", "character", "text"] as ItemLabel[]).map((l) => ({ v: l, t: <>{LABEL_ICON[l]}<span className="bar-lbl">{LABEL_TEXT[l]}</span></>, title: `新框类型：${LABEL_TEXT[l]}` }))}
       />
+      <select aria-label="绘制形状" className="input" style={{width:100}} value={s.drawShape} onChange={e => setUi({ drawShape: e.target.value as typeof s.drawShape, tool: 'draw' })}>
+        <option value="rectangle">方框</option><option value="ellipse">椭圆</option><option value="polygon">多边形</option><option value="pen">钢笔轮廓</option>
+      </select>
       <div className="bar-sep" />
       <button type="button" className={cx("btn btn-sm", cam?.enabled && "on")} onClick={() => setUi({ cameraPanelOpen: true })} title="摄像机面板">
         <CameraIcon size={14} /><span className="bar-lbl">摄像机</span>{cam?.enabled && <span className="badge warm">开</span>}
@@ -102,9 +106,7 @@ function Toolbar({ zoom, setZoom }: { zoom: number; setZoom: (z: number) => void
         <button type="button" className="btn btn-ghost btn-xs btn-icon" onClick={() => setZoom(Math.min(4, zoom * 1.25))} title="放大"><Plus size={13} /></button>
       </div>
       <AssistButton />
-      <button type="button" className="btn btn-sm btn-primary" onClick={() => void compileNow(true)} title="编译成 MOSS 提示词（Ctrl+Enter）">
-        {s.compiling ? <Loader2 size={14} className="spin" /> : <Play size={13} />}编译
-      </button>
+
       </div>
     </div>
   );
@@ -182,6 +184,7 @@ function CanvasView({ zoom, setZoom }: { zoom: number; setZoom: (z: number) => v
   const board = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [drag, setDrag] = useState<Drag | null>(null);
+  const [penPoints, setPenPoints] = useState<[number, number][]>([]);
   const [guides, setGuides] = useState<{ gx: number[]; gy: number[] }>({ gx: [], gy: [] });
   const dragRef = useRef<Drag | null>(null);
   dragRef.current = drag;
@@ -261,6 +264,10 @@ function CanvasView({ zoom, setZoom }: { zoom: number; setZoom: (z: number) => v
     if (s.freeCam || (e.button === 1 && camOn)) return startOrbit(e);
     if (e.button !== 0) return;
     const p = toCanvas(e);
+    if (s.tool === 'draw' && s.drawShape === 'pen') {
+      setPenPoints(points => [...points, [Math.max(0, Math.min(W, p.x)), Math.max(0, Math.min(H, p.y))]]);
+      return;
+    }
     if (s.tool === "draw") setDrag({ kind: "draw", x0: Math.max(0, Math.min(W, p.x)), y0: Math.max(0, Math.min(H, p.y)), x1: p.x, y1: p.y });
     else setDrag({ kind: "marquee", x0: p.x, y0: p.y, x1: p.x, y1: p.y, add: e.shiftKey });
   };
@@ -401,6 +408,7 @@ function CanvasView({ zoom, setZoom }: { zoom: number; setZoom: (z: number) => v
     const style: React.CSSProperties = {
       left: b[0] * scale, top: b[1] * scale, width: Math.max(2, (b[2] - b[0]) * scale), height: Math.max(2, (b[3] - b[1]) * scale),
       ["--c" as any]: color,
+      ...(it.shape === 'ellipse' ? { borderRadius: '50%' } : {}),
       zIndex: moved && proj ? 10 + proj.order.indexOf(it.id) : 10 + i,
     };
     return (
@@ -412,6 +420,7 @@ function CanvasView({ zoom, setZoom }: { zoom: number; setZoom: (z: number) => v
         onDoubleClick={() => it.group && select([it.id])}
         title={`${LABEL_TEXT[it.label]} · ${itemName(it, i)}${it.caption ? "\n" + it.caption.slice(0, 140) : ""}`}
       >
+        {it.shape === 'polygon' && <svg className="shape-overlay" viewBox="0 0 100 100" preserveAspectRatio="none"><polygon points={(it.points || [[.1,0],[1,.15],[.9,1],[0,.85]]).map(p => `${p[0]*100},${p[1]*100}`).join(' ')} fill="none" stroke="currentColor" strokeWidth="1" vectorEffect="non-scaling-stroke"/></svg>}
         <div className="box-tag">
           {LABEL_ICON[it.label]}
           <span className="ellipsis">{itemName(it, i)}</span>
@@ -419,6 +428,13 @@ function CanvasView({ zoom, setZoom }: { zoom: number; setZoom: (z: number) => v
           {off && <span className="box-tag-off">出画</span>}
         </div>
         {it.label === "text" && it.text && <div className="box-text">{it.text}</div>}
+        {isSel && it.shape === 'polygon' && !it.locked && (it.points || []).map((point, index) => <button key={index} className="vertex-handle" aria-label={`调整顶点 ${index+1}`} style={{left:`${point[0]*100}%`,top:`${point[1]*100}%`}} onPointerDown={event => {
+          event.stopPropagation(); event.preventDefault();
+          const rect=event.currentTarget.parentElement!.getBoundingClientRect();
+          const move=(e:PointerEvent) => { const points=[...(it.points || [])]; points[index]=[Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width)),Math.max(0,Math.min(1,(e.clientY-rect.top)/rect.height))]; updateItems({[it.id]:{points}},`vertex-${it.id}-${index}`); };
+          const up=() => { window.removeEventListener('pointermove',move); window.removeEventListener('pointerup',up); };
+          window.addEventListener('pointermove',move); window.addEventListener('pointerup',up);
+        }}/>)}
         {isSel && !moved && !it.locked && s.selection.length === 1 && HANDLES.map((h) => (
           <div key={h} className={`handle h-${h}`} onPointerDown={(e) => onHandleDown(e, it, h)} />
         ))}
@@ -494,6 +510,13 @@ function CanvasView({ zoom, setZoom }: { zoom: number; setZoom: (z: number) => v
     <div
       ref={tray}
       className={cx("tray", s.freeCam && "freecam", s.tool === "draw" && "tool-draw", drag?.kind === "orbit" && "orbiting")}
+      onDoubleClick={() => {
+        if (s.drawShape !== 'pen' || penPoints.length < 3) return;
+        const xs = penPoints.map(p => p[0]), ys = penPoints.map(p => p[1]);
+        const b = clampBBox([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)], W, H, 8);
+        addItem(b, undefined, { shape: 'polygon', points: penPoints.map(p => [(p[0]-b[0])/(b[2]-b[0]), (p[1]-b[1])/(b[3]-b[1])]) });
+        setPenPoints([]); setUi({ tool: 'select' });
+      }}
       onPointerDown={onEmptyDown}
       onContextMenu={(e) => s.freeCam && e.preventDefault()}
     >
@@ -502,6 +525,7 @@ function CanvasView({ zoom, setZoom }: { zoom: number; setZoom: (z: number) => v
         <div ref={board} className={cx("artboard", moved && "cam-view")} style={{ width: bw, height: bh }}>
           <div className="artboard-grid" />
           {svg}
+          {penPoints.length > 0 && <svg style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none'}} viewBox={`0 0 ${W} ${H}`}><polyline points={penPoints.map(p => p.join(',')).join(' ')} fill="none" stroke="var(--accent)" strokeWidth={2/scale}/></svg>}
           {boxes}
           {!L.items.length && (
             <EmptyBoard caption={L.summary.caption} />
@@ -545,29 +569,7 @@ function CanvasView({ zoom, setZoom }: { zoom: number; setZoom: (z: number) => v
 }
 
 // ---------------- Caption 编辑 ----------------
-function CaptionEditor() {
-  const s = useWorkState();
-  const doc = s.doc!;
-  const text = doc.caption.caption;
-  const words = text.trim() ? (text.match(/[A-Za-z0-9'-]+|[\u3400-\u9fff]/g) || []).length : 0;
-  return (
-    <div className="tray caption-tray">
-      <div className="caption-paper">
-        <div className="caption-head">
-          <span className="section-title">Caption 散文</span>
-          <span className="spacer" />
-          <span className="muted num">{words} 词 · {text.length} 字符</span>
-        </div>
-        <textarea
-          className="caption-text"
-          value={text}
-          placeholder="写一段完整、连贯的画面描述：主体、动作、场景、光线、镜头、画风……也可以在右侧让 Agent 起稿。"
-          onChange={(e) => commit({ ...doc, caption: { caption: e.target.value } }, "caption-text")}
-        />
-      </div>
-    </div>
-  );
-}
+function CaptionEditor() { return <SegmentEditor />; }
 
 // ---------------- 编译结果抽屉 ----------------
 function CompileDrawer() {
@@ -637,19 +639,11 @@ export function Stage() {
   if (!s.doc) return <main className="stage" />;
   const layout = s.doc.kind === "layout";
   return (
-    <main className="stage">
-      {layout ? <Toolbar zoom={zoom} setZoom={setZoom} /> : (
-        <div className="stage-bar">
-          <span className="section-title">Caption 页</span>
-          <span className="hint">整段散文提示词，适合不需要精确构图的画面</span>
-          <div className="spacer" />
-          <AssistButton />
-          <button type="button" className="btn btn-sm btn-primary" onClick={() => void compileNow(true)}><Play size={13} />编译</button>
-        </div>
-      )}
+    <section className="stage" aria-label="创作画面">
+      {layout && <Toolbar zoom={zoom} setZoom={setZoom} />}
       {layout ? (director ? <div className="tray-wrap director-placeholder" /> : <CanvasView zoom={zoom} setZoom={setZoom} />) : <CaptionEditor />}
       <CompileDrawer />
-    </main>
+    </section>
   );
 }
 

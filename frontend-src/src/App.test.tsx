@@ -9,7 +9,7 @@ beforeEach(() => {
   vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
-    const payload = url.includes('/api/server/status') ? { state: 'stopped' } : defaultConfig
+    const payload = url.includes('/api/v1/server/status') ? { state: 'stopped' } : defaultConfig
     return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } })
   }))
 })

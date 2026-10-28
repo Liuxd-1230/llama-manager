@@ -19,11 +19,11 @@ export function RunPage({ config, toast }: { config: AppConfig; toast: (text: st
   const [fullscreen, setFullscreen] = useState(false)
   const refresh = useCallback(async () => {
     try {
-      setStatus(await api<Status>('/api/server/status'))
-      setHealthy((await api<{ ready: boolean }>('/api/server/health')).ready)
+      setStatus(await api<Status>('/api/v1/server/status'))
+      setHealthy((await api<{ ready: boolean }>('/api/v1/server/health')).ready)
     } catch { setHealthy(false) }
   }, [])
-  useEffect(() => { void refresh(); api<{ logs: string[] }>('/api/server/logs').then(result => setLogs(result.logs || [])).catch(() => {}) }, [refresh])
+  useEffect(() => { void refresh(); api<{ logs: string[] }>('/api/v1/server/logs').then(result => setLogs(result.logs || [])).catch(() => {}) }, [refresh])
   useInterval(() => void refresh(), 3000)
   useWebSocket('/ws/logs', text => setLogs(current => [...current.slice(-1499), text]))
   useEffect(() => {
@@ -53,16 +53,16 @@ export function RunPage({ config, toast }: { config: AppConfig; toast: (text: st
   }, [config.engine, logs])
   const running = status.state === 'running'
   const start = async () => {
-    await api('/api/config', { method: 'POST', body: JSON.stringify(config) })
+    await api('/api/v1/config', { method: 'POST', body: JSON.stringify(config) })
     // The POST just made the server state match this buffer — refresh the
     // cache so the topbar dirty badge does not linger as a false positive.
     await queryClient.invalidateQueries({ queryKey: ['config'] })
     try {
-      await api('/api/server/start', { method: 'POST' }); toast('服务器正在启动'); await refresh()
+      await api('/api/v1/server/start', { method: 'POST' }); toast('服务器正在启动'); await refresh()
     } catch (reason) { toast(`启动失败：${reason instanceof Error ? reason.message : String(reason)}`); await refresh() }
   }
-  const stop = async () => { try { await api('/api/server/stop', { method: 'POST' }); toast('服务器已停止'); await refresh() } catch (reason) { toast(`停止失败：${reason instanceof Error ? reason.message : String(reason)}`) } }
-  const clear = async () => { await api('/api/server/logs/clear', { method: 'POST' }); setLogs([]) }
+  const stop = async () => { try { await api('/api/v1/server/stop', { method: 'POST' }); toast('服务器已停止'); await refresh() } catch (reason) { toast(`停止失败：${reason instanceof Error ? reason.message : String(reason)}`) } }
+  const clear = async () => { await api('/api/v1/server/logs/clear', { method: 'POST' }); setLogs([]) }
 
   return <div className={styles.shell}>
     <div className={styles.controlRow}>

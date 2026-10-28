@@ -1,10 +1,10 @@
 @echo off
 chcp 65001 >nul 2>&1
-title llama.cpp Run Manager
+title Atelier
 
 echo.
 echo  ================================
-echo    llama.cpp Run Manager
+echo    Atelier
 echo  ================================
 echo.
 
@@ -13,7 +13,7 @@ cd /d "%~dp0"
 REM -- Check Python --
 where python >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [ERROR] Python not found. Install Python 3.10+
+    echo [ERROR] Python not found. Install Python 3.11+
     echo https://www.python.org/downloads/
     pause
     exit /b 1
@@ -35,7 +35,8 @@ call .venv\Scripts\activate.bat
 
 REM -- Install deps --
 echo [2/3] Checking dependencies...
-pip install -q -r requirements.txt 2>nul
+pip install -q -r requirements.txt
+if errorlevel 1 exit /b 1
 
 REM -- Start --
 echo [3/3] Starting server...
@@ -48,6 +49,6 @@ REM -- Open browser after delay --
 start "" cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:9090"
 
 REM -- Run uvicorn --
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 9090
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 9090
 
 pause

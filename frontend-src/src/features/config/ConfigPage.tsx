@@ -27,12 +27,12 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
     if (dirty) { setPendingLoad(selected); return }
     void attempt('载入', () => load(selected))
   }
-  const currentNameQuery = useQuery({ queryKey: ['current-profile'], queryFn: () => api<{ name: string }>('/api/profiles/current'), staleTime: 0 })
+  const currentNameQuery = useQuery({ queryKey: ['current-profile'], queryFn: () => api<{ name: string }>('/api/v1/profiles/current'), staleTime: 0 })
   // Direct read of the model file the current config points at — no second
   // query to correlate, so the estimator's weight term is always live.
   const modelInfoQuery = useQuery({
     queryKey: ['model-info', config.model_path, config.engine],
-    queryFn: () => api<{ size_mb: number; meta: Record<string, unknown> }>(`/api/model-info?path=${encodeURIComponent(config.model_path)}`),
+    queryFn: () => api<{ size_mb: number; meta: Record<string, unknown> }>(`/api/v1/model-info?path=${encodeURIComponent(config.model_path)}`),
     enabled: !!config.model_path.trim(),
     staleTime: 60000,
   })
@@ -78,7 +78,7 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
   }
   const detectQuery = useQuery({
     queryKey: ['detect-binary', config.engine, config.llama_cpp_dir],
-    queryFn: () => api<{ found: boolean; path: string; dir: string; bundled: boolean; lrfu: boolean }>(`/api/detect-server?llama_cpp_dir=${encodeURIComponent(config.llama_cpp_dir)}&engine=${config.engine}`),
+    queryFn: () => api<{ found: boolean; path: string; dir: string; bundled: boolean; lrfu: boolean }>(`/api/v1/detect-server?llama_cpp_dir=${encodeURIComponent(config.llama_cpp_dir)}&engine=${config.engine}`),
     staleTime: 30000,
   })
   // LRFU and --kvmem-score-agg only exist on v0.17+ workers; the preview and
@@ -86,24 +86,24 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
   const engineSupportsLrfu = !!detectQuery.data?.lrfu
 
   const refreshNames = async () => {
-    try { setConfigs((await api<{ configs: string[] }>('/api/config/list')).configs || []) } catch { setConfigs([]) }
+    try { setConfigs((await api<{ configs: string[] }>('/api/v1/config/list')).configs || []) } catch { setConfigs([]) }
   }
   useEffect(() => { void refreshNames() }, [])
 
   const save = async () => {
-    await api('/api/config/save-as', { method: 'POST', body: JSON.stringify({ name: name || 'default', config }) })
+    await api('/api/v1/config/save-as', { method: 'POST', body: JSON.stringify({ name: name || 'default', config }) })
     toast(`配置已保存：${name || 'default'}`); await refreshNames()
     await Promise.all([queryClient.invalidateQueries({ queryKey: ['config'] }), queryClient.invalidateQueries({ queryKey: ['current-profile'] }), queryClient.invalidateQueries({ queryKey: ['profiles'] })])
   }
   const load = async (selected: string) => {
     if (!selected) return
-    await api<AppConfig>('/api/config/load', { method: 'POST', body: JSON.stringify({ name: selected }) })
+    await api<AppConfig>('/api/v1/config/load', { method: 'POST', body: JSON.stringify({ name: selected }) })
     setName(selected); nameTouched.current = true; toast(`已载入：${selected}`)
     await Promise.all([queryClient.invalidateQueries({ queryKey: ['config'] }), queryClient.invalidateQueries({ queryKey: ['current-profile'] })])
   }
   const remove = async () => {
     if (!name || name === 'default') return toast('默认配置不能删除')
-    await api('/api/config/delete', { method: 'POST', body: JSON.stringify({ name }) })
+    await api('/api/v1/config/delete', { method: 'POST', body: JSON.stringify({ name }) })
     nameTouched.current = false; await load('default'); toast('配置已删除'); await refreshNames(); await queryClient.invalidateQueries({ queryKey: ['profiles'] })
   }
   const exportConfig = () => {
@@ -112,7 +112,7 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
   }
   const importConfig = async (file?: File) => {
     if (!file) return
-    const imported = await api<AppConfig>('/api/config/import', { method: 'POST', body: JSON.stringify({ content: await file.text() }) })
+    const imported = await api<AppConfig>('/api/v1/config/import', { method: 'POST', body: JSON.stringify({ content: await file.text() }) })
     setConfig(imported); toast('配置已导入，保存后生效')
   }
 

@@ -94,9 +94,10 @@ export function normalizeLayout(d: Partial<LayoutDraft> | undefined): LayoutDraf
 export function normalizeDoc(doc: Partial<Doc> | undefined | null): Doc {
   if (!doc) return emptyDoc();
   return {
+    ...doc,
     kind: doc.kind === "caption" ? "caption" : "layout",
     layout: normalizeLayout(doc.layout),
-    caption: { caption: doc.caption?.caption ?? "" },
+    caption: { ...doc.caption, caption: doc.caption?.caption ?? "" },
   };
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { Modal } from "../../components/kit";
+import { isComposingKey } from "../../hooks/useImeGuard";
 
 interface Req {
   kind: "confirm" | "prompt";
@@ -55,7 +56,7 @@ export function DialogHost() {
       <div style={{ width: 380, maxWidth: "100%" }}>
         {req.message && <p className="hint" style={{ marginTop: 0, fontSize: 12.5, color: "var(--ink-2)" }}>{req.message}</p>}
         {req.kind === "prompt" && (
-          <input ref={input} className="input" value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ok()} />
+          <input ref={input} className="input" value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => !isComposingKey(e.nativeEvent) && e.key === "Enter" && ok()} />
         )}
       </div>
     </Modal>

@@ -1,6 +1,6 @@
 # 档案创建指南（人机协作）
 
-供 AI 代理与用户协作创建/调整推理档案使用。所有操作走产品 HTTP API（默认 `http://127.0.0.1:9090`），不要直接改 `~/llama-manager/config/*.json`。
+供 AI 代理与用户协作创建/调整推理档案使用。所有操作走产品 HTTP API（默认 `http://127.0.0.1:9090`），不要直接改 `%LOCALAPPDATA%/Atelier/config/*.json`。
 
 ## 档案 = 什么
 
@@ -16,14 +16,14 @@ import httpx
 c = httpx.Client(timeout=120)
 BASE = 'http://127.0.0.1:9090'
 
-cfg = c.get(f'{BASE}/api/config').json()          # 1. 读当前配置做底板
+cfg = c.get(f'{BASE}/api/v1/config').json()          # 1. 读当前配置做底板
 cfg.update({...})                                  # 2. 改档案级字段
-r = c.post(f'{BASE}/api/config/save-as', json={'name': '<档案名>', 'config': cfg})   # 3. 保存（save-as 即成为当前）
-c.post(f'{BASE}/api/profiles/launch', json={'name': '<档案名>'})                      # 4. 启动（自动停旧）
+r = c.post(f'{BASE}/api/v1/config/save-as', json={'name': '<档案名>', 'config': cfg})   # 3. 保存（save-as 即成为当前）
+c.post(f'{BASE}/api/v1/profiles/launch', json={'name': '<档案名>'})                      # 4. 启动（自动停旧）
 # 5. 轮询 {引擎地址}/health 直到 200
 ```
 
-只想切换编辑目标不启动：用 `POST /api/profiles/set-current`。
+只想切换编辑目标不启动：用 `POST /api/v1/profiles/set-current`。
 
 ## 字段语义（三引擎对照）
 
@@ -118,8 +118,8 @@ PrismML fork（`E:\PrismLlma`，短对话极致 651/27.8 t/s）通过系统直�
 
 ## 验证清单（创建后必做）
 
-1. `GET /api/profiles` — 新档案在列、`model_exists: true`
-2. `POST /api/profiles/launch` — 200，且 60s 内 health 200
+1. `GET /api/v1/profiles` — 新档案在列、`model_exists: true`
+2. `POST /api/v1/profiles/launch` — 200，且 60s 内 health 200
 3. `nvidia-smi` — 总显存 ≤ 7.4GB（8GB 卡安全线）
 4. 冒烟：一条真实提问返回非空；思考模型注意空回复坑
 5. 测速（可选）：`timings.predicted_n / predicted_ms`，与下表对照

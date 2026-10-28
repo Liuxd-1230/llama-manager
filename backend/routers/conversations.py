@@ -10,7 +10,7 @@ from ..chat_state import conversation_store
 from ..api_models import ConversationCreate, TurnWrite
 
 
-router = APIRouter(prefix="/api/conversations", tags=["conversations"])
+router = APIRouter(prefix="/api/v1/conversations", tags=["conversations"])
 
 
 @router.get("")

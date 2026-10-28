@@ -1,6 +1,9 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import React, { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion, useIsPresent } from 'motion/react';
+import { useMotionPreference } from '../../hooks/useMotionPreference';
+import { isComposingKey } from '../../hooks/useImeGuard';
 
 export function cx(...xs: (string | false | null | undefined)[]) {
   return xs.filter(Boolean).join(" ");
@@ -36,6 +39,10 @@ export function Seg<T extends string | number>(p: {
 }
 
 // ---------- 弹出菜单 ----------
+const MenuSurface = React.forwardRef<HTMLDivElement, React.ComponentProps<typeof motion.div>>(function MenuSurface(props, ref) {
+  const present = useIsPresent();
+  return <motion.div {...props} ref={ref} inert={!present} aria-hidden={!present || undefined} />;
+});
 export function Popover(p: {
   anchor: HTMLElement | null;
   open: boolean;
@@ -46,6 +53,7 @@ export function Popover(p: {
   width?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const reduced = useMotionPreference();
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   useLayoutEffect(() => {
     if (!p.open || !p.anchor) return;
@@ -69,7 +77,16 @@ export function Popover(p: {
       if (ref.current?.contains(e.target as Node) || live.current.anchor?.contains(e.target as Node)) return;
       live.current.onClose();
     };
-    const key = (e: KeyboardEvent) => e.key === "Escape" && live.current.onClose();
+    const key = (e: KeyboardEvent) => {
+      if (isComposingKey(e)) return;
+      if (e.key === 'Escape') { e.preventDefault(); live.current.onClose(); live.current.anchor?.focus(); return; }
+      const items = Array.from(ref.current?.querySelectorAll<HTMLButtonElement>('button.menu-item:not(:disabled)') || []);
+      if (!items.length || e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
+      const index=items.indexOf(document.activeElement as HTMLButtonElement);
+      if (['ArrowDown','ArrowUp','Home','End'].includes(e.key)) {
+        e.preventDefault(); const next=e.key==='Home'?0:e.key==='End'?items.length-1:e.key==='ArrowDown'?(index+1)%items.length:(index-1+items.length)%items.length;items[next]?.focus();
+      }
+    };
     window.addEventListener("pointerdown", down, true);
     window.addEventListener("keydown", key);
     return () => {
@@ -77,11 +94,10 @@ export function Popover(p: {
       window.removeEventListener("keydown", key);
     };
   }, [p.open]);
-  if (!p.open) return null;
   return createPortal(
-    <div ref={ref} className="menu studio-root" style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, width: p.width }}>
+    <AnimatePresence>{p.open && <MenuSurface ref={ref} role="dialog" aria-label="选项" className="menu studio-root" style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, width: p.width, transformOrigin:p.above?'bottom right':'top right' }} initial={reduced?false:{y:p.above?5:-5,scale:.98,opacity:0}} animate={{y:0,scale:1,opacity:1}} exit={reduced?{opacity:0}:{y:p.above?3:-3,scale:.99,opacity:0}} transition={{duration:reduced?0:.18,ease:[.22,1,.36,1]}}>
       {p.children}
-    </div>,
+    </MenuSurface>}</AnimatePresence>,
     document.body,
   );
 }

@@ -56,7 +56,7 @@ export function ModelsPage({ config, dirty, server, toast }: {
 }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const profilesQuery = useQuery({ queryKey: ['profiles'], queryFn: () => api<{ profiles: Profile[] }>('/api/profiles') })
+  const profilesQuery = useQuery({ queryKey: ['profiles'], queryFn: () => api<{ profiles: Profile[] }>('/api/v1/profiles') })
   const profiles = profilesQuery.data?.profiles || []
   const [search, setSearch] = useState('')
   const [engineFilter, setEngineFilter] = useState('all')
@@ -86,7 +86,7 @@ export function ModelsPage({ config, dirty, server, toast }: {
   const launch = async (profile: Profile) => {
     setBusy(profile.name)
     try {
-      const result = await api<{ restarted: boolean }>('/api/profiles/launch', { method: 'POST', body: JSON.stringify({ name: profile.name }) })
+      const result = await api<{ restarted: boolean }>('/api/v1/profiles/launch', { method: 'POST', body: JSON.stringify({ name: profile.name }) })
       toast(result.restarted ? `已切换到档案：${profile.name}` : `已启动档案：${profile.name}`)
       await afterServerAction()
     } catch (reason) { toast(`启动失败：${errorMessage(reason)}`) } finally { setBusy('') }
@@ -94,13 +94,13 @@ export function ModelsPage({ config, dirty, server, toast }: {
 
   const stop = async () => {
     setBusy('__stop__')
-    try { await api('/api/server/stop', { method: 'POST' }); toast('服务已停止'); await afterServerAction() } catch (reason) { toast(`停止失败：${errorMessage(reason)}`) } finally { setBusy('') }
+    try { await api('/api/v1/server/stop', { method: 'POST' }); toast('服务已停止'); await afterServerAction() } catch (reason) { toast(`停止失败：${errorMessage(reason)}`) } finally { setBusy('') }
   }
 
   const setCurrent = async (profile: Profile) => {
     setBusy(profile.name)
     try {
-      await api('/api/profiles/set-current', { method: 'POST', body: JSON.stringify({ name: profile.name }) })
+      await api('/api/v1/profiles/set-current', { method: 'POST', body: JSON.stringify({ name: profile.name }) })
       toast(`当前档案：${profile.name}`)
       await Promise.all([queryClient.invalidateQueries({ queryKey: ['profiles'] }), queryClient.invalidateQueries({ queryKey: ['config'] }), queryClient.invalidateQueries({ queryKey: ['current-profile'] })])
     } catch (reason) { toast(`设置失败：${errorMessage(reason)}`) } finally { setBusy('') }
@@ -109,7 +109,7 @@ export function ModelsPage({ config, dirty, server, toast }: {
   const edit = async (profile: Profile) => {
     // No local setConfig: server state changed, so invalidate and let the Shell
     // apply one atomic update — otherwise the dirty flag flashes falsely.
-    await api<AppConfig>('/api/config/load', { method: 'POST', body: JSON.stringify({ name: profile.name }) })
+    await api<AppConfig>('/api/v1/config/load', { method: 'POST', body: JSON.stringify({ name: profile.name }) })
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['config'] }),
       queryClient.invalidateQueries({ queryKey: ['current-profile'] }),
@@ -123,7 +123,7 @@ export function ModelsPage({ config, dirty, server, toast }: {
     for (let index = 2; taken.has(name); index += 1) name = `${profile.name}-copy${index}`
     setBusy(profile.name)
     try {
-      await api('/api/profiles/duplicate', { method: 'POST', body: JSON.stringify({ source: profile.name, name }) })
+      await api('/api/v1/profiles/duplicate', { method: 'POST', body: JSON.stringify({ source: profile.name, name }) })
       toast(`已复制为：${name}`); await queryClient.invalidateQueries({ queryKey: ['profiles'] })
     } catch (reason) { toast(`复制失败：${errorMessage(reason)}`) } finally { setBusy('') }
   }
@@ -132,8 +132,8 @@ export function ModelsPage({ config, dirty, server, toast }: {
     if (profile.name === 'default') return toast('默认档案不能删除')
     setBusy(profile.name)
     try {
-      await api('/api/config/delete', { method: 'POST', body: JSON.stringify({ name: profile.name }) })
-      if (profile.is_current) await api<AppConfig>('/api/config/load', { method: 'POST', body: JSON.stringify({ name: 'default' }) })
+      await api('/api/v1/config/delete', { method: 'POST', body: JSON.stringify({ name: profile.name }) })
+      if (profile.is_current) await api<AppConfig>('/api/v1/config/load', { method: 'POST', body: JSON.stringify({ name: 'default' }) })
       toast('档案已删除')
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['profiles'] }),
@@ -147,7 +147,7 @@ export function ModelsPage({ config, dirty, server, toast }: {
     const name = newName.trim()
     if (!name) return
     try {
-      await api('/api/config/save-as', { method: 'POST', body: JSON.stringify({ name, config }) })
+      await api('/api/v1/config/save-as', { method: 'POST', body: JSON.stringify({ name, config }) })
       toast(`已创建档案：${name}（来自当前配置）`); setNewName(''); setCreating(false); await queryClient.invalidateQueries({ queryKey: ['profiles'] })
     } catch (reason) { toast(`创建失败：${errorMessage(reason)}`) }
   }

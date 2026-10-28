@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import copy
 import sqlite3
 import threading
 import uuid
@@ -107,7 +108,9 @@ def normalize_doc(doc: Any) -> dict:
     if isinstance(doc.get("layout"), dict):
         out["layout"] = doc["layout"]
     if isinstance(doc.get("caption"), dict):
-        out["caption"] = {"caption": str(doc["caption"].get("caption") or "")}
+        out["caption"] = {**doc["caption"], "caption": str(doc["caption"].get("caption") or "")}
+    for key in ("asset_ids", "compile_target", "character_ids", "style"):
+        if key in doc: out[key] = copy.deepcopy(doc[key])
     return out
 
 
@@ -115,6 +118,9 @@ def normalize_doc(doc: Any) -> dict:
 def init() -> None:
     with conn() as c:
         c.executescript(SCHEMA)
+        columns = {r[1] for r in c.execute("PRAGMA table_info(series)")}
+        if "project_id" not in columns:
+            c.execute("ALTER TABLE series ADD COLUMN project_id TEXT NOT NULL DEFAULT 'project_default'")
         n = c.execute("SELECT COUNT(*) FROM series").fetchone()[0]
         migrated = c.execute("SELECT v FROM kv WHERE k='legacy_history_migrated'").fetchone()
     if not migrated:
@@ -141,14 +147,14 @@ def _migrate_legacy_history() -> None:
 # ---------- 系列 / 分页 ----------
 def workspace() -> dict:
     with conn() as c:
-        series = [dict(r) for r in c.execute("SELECT * FROM series ORDER BY sort, created_at")]
+        series = [dict(r) for r in c.execute("SELECT * FROM series WHERE project_id=? ORDER BY sort, created_at", (kv_get("current_project", "project_default"),))]
         pages = [_row(r, "doc") for r in c.execute("SELECT * FROM pages ORDER BY sort, created_at")]
     by_s: dict[str, list] = {s["id"]: [] for s in series}
     for p in pages:
         by_s.setdefault(p["series_id"], []).append(p)
     for s in series:
         s["pages"] = by_s.get(s["id"], [])
-    return {"series": series}
+    return {"series": series,"project_id":kv_get("current_project", "project_default")}
 
 
 def create_series(name: str) -> dict:
@@ -156,7 +162,7 @@ def create_series(name: str) -> dict:
     now = now_iso()
     with conn() as c:
         mx = c.execute("SELECT COALESCE(MAX(sort), 0) FROM series").fetchone()[0]
-        c.execute("INSERT INTO series VALUES (?,?,?,?,?)", (sid, name.strip() or "新系列", mx + 1, now, now))
+        c.execute("INSERT INTO series(id,name,sort,created_at,updated_at,project_id) VALUES (?,?,?,?,?,?)", (sid, name.strip() or "新系列", mx + 1, now, now, kv_get("current_project", "project_default")))
     return {"id": sid, "name": name, "sort": mx + 1, "pages": []}
 
 
@@ -196,6 +202,11 @@ def create_page(series_id: str, name: str, doc: Optional[dict] = None) -> dict:
     pid = new_id("p")
     now = now_iso()
     d = normalize_doc(doc) if doc else empty_doc()
+    siblings=series_pages(series_id)
+    if siblings:
+        previous=siblings[-1]['doc']
+        for key in ('asset_ids','character_ids','style','compile_target'):
+            if key not in d and key in previous: d[key]=copy.deepcopy(previous[key])
     with conn() as c:
         mx = c.execute("SELECT COALESCE(MAX(sort), 0) FROM pages WHERE series_id=?", (series_id,)).fetchone()[0]
         c.execute("INSERT INTO pages VALUES (?,?,?,?,?,?,?)",

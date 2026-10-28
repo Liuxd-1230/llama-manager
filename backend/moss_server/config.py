@@ -2,6 +2,20 @@
 
 from __future__ import annotations
 
+from functools import wraps
+from threading import RLock
+
+_settings_lock = RLock()
+
+
+def workflow_write(function):
+    """Serialize read-modify-write of the shared workflow library."""
+    @wraps(function)
+    def locked(*args, **kwargs):
+        with _settings_lock:
+            return function(*args, **kwargs)
+    return locked
+
 import json
 import os
 import sys
@@ -18,20 +32,21 @@ RES_ROOT = Path(getattr(sys, "_MEIPASS", SRC_ROOT))
 if os.environ.get("MOSS_DATA_DIR"):
     DATA = Path(os.environ["MOSS_DATA_DIR"]).expanduser().resolve()
 else:
-    DATA = Path.home() / "llama-manager" / "moss"
+    from ..paths import APP_DATA_DIR
+    DATA = APP_DATA_DIR / "moss"
 DATA.mkdir(parents=True, exist_ok=True)
 
 SETTINGS_PATH = DATA / "settings.json"
 SKILLS_PATH = DATA / "skills.json"
 LEGACY_HISTORY_PATH = DATA / "history.json"
-DB_PATH = DATA / "workspace.db"
+DB_PATH = DATA / "workspace.db" if os.getenv("MOSS_DATA_DIR") else APP_DATA_DIR / "atelier.db"
 ATTACH_DIR = DATA / "attachments"
 DIST = RES_ROOT / "dist"
 VENDOR = RES_ROOT / "moss_vendor"
 SKILL_COMPILE = VENDOR / "moss-image-prompt-enhancer" / "scripts" / "compile_prompt.py"
 CAPTION_PROMPT_PATH = VENDOR / "docs" / "CAPTION_PROMPT_ZH.md"
 
-APP_VERSION = "2.4.0"
+APP_VERSION = "3.0.0"
 
 
 def now_iso() -> str:
@@ -166,7 +181,7 @@ def public_settings(s: dict) -> dict:
     try:
         resolved = resolve(out.get("provider_id"))
         is_local = getattr(resolved["provider"], "kind", "") == "local"
-        out["api_key_set"] = True if is_local else bool(resolved["api_key"])
+        out["api_key_set"] = True if is_local else bool(resolved["api_key"]) or not provider_manager.requires_api_key(resolved["provider"])
         out["provider_name"] = resolved["provider"].name
     except ProviderError as exc:
         out["api_key_set"] = False

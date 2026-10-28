@@ -3,8 +3,10 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { Button } from './ui'
 import styles from './ui.module.css'
+import { isComposingKey } from '../../hooks/useImeGuard'
 
 const focusable = 'button:not(:disabled), input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), a[href], summary, [tabindex="0"]'
+const overlayStack: HTMLElement[] = []
 
 // Shared focus lifecycle for overlays, including drawers rendered via portals.
 export function useModalFocus<T extends HTMLElement = HTMLDivElement>(open: boolean, onClose: () => void) {
@@ -15,9 +17,12 @@ export function useModalFocus<T extends HTMLElement = HTMLDivElement>(open: bool
     if (!open || !ref.current) return
     const previous = document.activeElement as HTMLElement | null
     const container = ref.current
-    const controls = () => Array.from(container.querySelectorAll<HTMLElement>(focusable)).filter(element => !element.closest('[hidden]') && (!element.closest('details:not([open])') || element.tagName === 'SUMMARY') && getComputedStyle(element).display !== 'none')
-    const frame = requestAnimationFrame(() => (container.querySelector<HTMLElement>('[data-autofocus]') ?? container).focus())
+    overlayStack.push(container)
+    const controls = () => Array.from(container.querySelectorAll<HTMLElement>(focusable)).filter(element => !element.closest('[hidden], [inert]') && (!element.closest('details:not([open])') || element.tagName === 'SUMMARY') && getComputedStyle(element).display !== 'none')
+    const frame = requestAnimationFrame(() => { if (overlayStack.at(-1) === container) (container.querySelector<HTMLElement>('[data-autofocus]') ?? container).focus() })
     const keydown = (event: KeyboardEvent) => {
+      if (overlayStack.at(-1) !== container) return
+      if (isComposingKey(event)) return
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close.current(); return }
       if (event.key !== 'Tab') return
       const items = controls()
@@ -26,14 +31,18 @@ export function useModalFocus<T extends HTMLElement = HTMLDivElement>(open: bool
       if (event.shiftKey && (document.activeElement === first || document.activeElement === container)) { event.preventDefault(); last.focus() }
       else if (!event.shiftKey && (document.activeElement === last || document.activeElement === container)) { event.preventDefault(); first.focus() }
     }
-    const focusin = (event: FocusEvent) => { if (!container.contains(event.target as Node)) container.focus() }
+    const focusin = (event: FocusEvent) => { if (overlayStack.at(-1) === container && !container.contains(event.target as Node)) container.focus() }
     document.addEventListener('keydown', keydown, true)
     document.addEventListener('focusin', focusin)
     return () => {
       cancelAnimationFrame(frame)
       document.removeEventListener('keydown', keydown, true)
       document.removeEventListener('focusin', focusin)
-      if (previous?.isConnected) previous.focus()
+      const index = overlayStack.indexOf(container)
+      if (index >= 0) overlayStack.splice(index, 1)
+      const parent = overlayStack.at(-1)
+      if (previous?.isConnected && (!parent || parent.contains(previous))) previous.focus()
+      else parent?.focus()
     }
   }, [open])
   return ref

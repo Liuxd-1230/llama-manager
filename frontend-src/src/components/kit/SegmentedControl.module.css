@@ -1,0 +1,6 @@
+.control{display:inline-flex;align-items:stretch;gap:2px;background:var(--input);padding:3px;border-radius:8px;isolation:isolate;flex:none}
+.control>button{position:relative;isolation:isolate;display:flex;justify-content:center;align-items:center;border:0;border-radius:5px;padding:7px 15px;background:transparent;color:var(--text-2);font-size:13px;white-space:nowrap;cursor:pointer;transition:color 140ms ease}
+.control>button[aria-pressed=true]{color:var(--text);font-weight:550}
+.control>button:hover{color:var(--text)}
+.indicator{position:absolute;inset:0;border-radius:5px;z-index:-1;background:var(--bg-elevated);box-shadow:inset 0 0 0 1px var(--line),0 1px 3px color-mix(in srgb,var(--text) 8%,transparent);pointer-events:none}
+@media(max-width:680px){.control>button{padding:7px 12px}}

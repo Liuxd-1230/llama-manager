@@ -1,11 +1,13 @@
 """HTTP 接口：工作区（系列/分页/版本）、Agent 会话、档案库、编译、设置、反推。"""
 
 from __future__ import annotations
+from .config import workflow_write
 
 import base64
 import copy
 import json
 import mimetypes
+from pathlib import Path
 import re
 import time
 import uuid
@@ -19,6 +21,7 @@ from pydantic import BaseModel, Field
 from . import comfy, db, llm
 from .agent import run_agent
 from . import bridge
+from ..inference import _provider_headers
 from .config import (APP_VERSION, ATTACH_DIR, CAPTION_PROMPT_PATH, SKILL_COMPILE, SETTINGS_DEFAULTS,
                      active_workflow, load_settings, public_settings, save_settings, workflow_summaries)
 from .layout_core import _ensure_wh, _sanitize_layout_draft, compile_checks, compile_safe, sanitize_draft
@@ -26,7 +29,7 @@ from .ops import describe_changes
 from .reverse_boxes import box_format_for, items_to_draft, normalize_reverse, reverse_rules
 from .skills import resolve_skill
 
-router = APIRouter(prefix="/api/moss")
+router = APIRouter(prefix="/api/v1/moss")
 
 
 def _404(what: str = "记录") -> HTTPException:
@@ -241,7 +244,15 @@ def clear_session(sid: str):
 def session_messages(sid: str):
     if not db.get_session(sid):
         raise _404("会话")
-    return db.list_messages(sid)
+    messages = db.list_messages(sid)
+    # Preserve history on disk; do not present a model-written audit line as a
+    # verified change when the original turn has no tool/proposal evidence.
+    import re
+    for message in messages:
+        meta = message.get('meta') or {}
+        if message['role']=='assistant' and not meta.get('steps') and not meta.get('proposals') and re.search(r'(?m)^\s*\[(?:执行的操作|改动「)[^\n]*(?:→成功|用户已采纳)',message.get('content') or ''):
+            message['meta']={**meta,'error':meta.get('error') or '此回复没有实际修改记录，画面未更新。可重新生成。'}
+    return messages
 
 
 class RunBody(BaseModel):
@@ -255,24 +266,70 @@ class RunBody(BaseModel):
     replace_from_seq: Optional[int] = None
     quick: Optional[str] = None
     mode: Optional[str] = None
+    request_id: Optional[str] = None
+
+
+@router.get('/sessions/{sid}/run')
+def active_session_run(sid: str):
+    from ..atelier.jobs import running_for_session
+    if not db.get_session(sid): raise _404('会话')
+    record = running_for_session(sid)
+    return {'job_id': record['id'] if record else None}
+
+
+class CancelRunBody(BaseModel):
+    request_id: str = Field(min_length=1,max_length=64)
+
+
+@router.post('/sessions/{sid}/cancel')
+async def cancel_session_request(sid: str, body: CancelRunBody):
+    from ..atelier import store
+    from ..atelier.jobs import active
+    if not db.get_session(sid): raise _404('会话')
+    with store.connection() as connection:
+        row=connection.execute("SELECT id FROM atelier_jobs WHERE kind='agent' AND json_extract(data,'$.session_id')=? AND json_extract(data,'$.request_id')=? ORDER BY updated_at DESC LIMIT 1",(sid,body.request_id)).fetchone()
+    if row:
+        record=store.job(row['id'])
+        if record['status'] not in ('queued','running'): return record
+        if record['id'] in active: active[record['id']].cancel()
+        return store.update_job(record['id'],status='cancelled')
+    # A stop can arrive before the original POST has been handled. Persist its
+    # identity so a late/deduplicated run cannot start model or tool execution.
+    record=store.create_job('agent','创作 Agent',{'session_id':sid,'request_id':body.request_id})
+    return store.update_job(record['id'],status='cancelled')
 
 
 @router.post("/sessions/{sid}/run")
 async def run_session(sid: str, body: RunBody):
     if not body.message.strip() and not body.attachments:
         raise HTTPException(status_code=400, detail="消息为空")
+    from ..atelier.jobs import start_agent, stream_agent, running_for_session
+    from ..atelier import providers, store
+    if not db.get_session(sid): raise _404('会话')
+    existing = running_for_session(sid)
+    if existing:
+        if not body.request_id or existing['data'].get('request_id') != body.request_id:
+            raise HTTPException(status_code=409, detail='此对话已有 Agent 任务在运行，请先恢复连接或停止该任务')
+        return StreamingResponse(stream_agent(existing['id']),media_type='text/event-stream',headers={'Cache-Control':'no-cache','X-Atelier-Job':existing['id']})
+    if body.request_id:
+        with store.connection() as connection:
+            previous = connection.execute("SELECT id FROM atelier_jobs WHERE kind='agent' AND json_extract(data,'$.session_id')=? AND json_extract(data,'$.request_id')=? ORDER BY updated_at DESC LIMIT 1",(sid,body.request_id)).fetchone()
+        if previous:
+            return StreamingResponse(stream_agent(previous['id']),media_type='text/event-stream',headers={'Cache-Control':'no-cache','X-Atelier-Job':previous['id']})
     gen = run_agent(session_id=sid, page_id=body.page_id, doc=db.normalize_doc(body.doc), view=body.view,
                     message=body.message.strip(), selection=body.selection, skill_ids=body.skill_ids,
                     attachments=body.attachments, replace_from_seq=body.replace_from_seq, quick=body.quick,
                     mode=body.mode if body.mode in ("draft",) else None)
-    return StreamingResponse(gen, media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    with providers.frozen_request():
+        identifier=start_agent(gen,'创作 Agent',{'session_id':sid,'page_id':body.page_id,'request_id':body.request_id,'provider_id':providers.request_settings().get('provider_id'),'model':providers.request_settings().get('model')})
+    return StreamingResponse(stream_agent(identifier),media_type='text/event-stream',headers={'Cache-Control':'no-cache','X-Atelier-Job':identifier})
 
 
 class ProposalBody(BaseModel):
     page_id: str
     status: str  # accepted | rejected | partial
     applied_doc: Optional[dict] = None
+    expected_doc: Optional[dict] = None
 
 
 @router.post("/messages/{mid}/proposal")
@@ -291,10 +348,16 @@ def resolve_proposal(mid: str, body: ProposalBody):
     if hit is None:
         raise _404("改动")
     page = db.get_page(body.page_id)
+    if body.status != "rejected" and page is not None and body.expected_doc is not None and db.normalize_doc(body.expected_doc) != page["doc"]:
+        raise HTTPException(status_code=409, detail="成稿已更新，请重新检查改动后采纳")
     hit["status"] = body.status
     new_doc = None
     if body.status != "rejected" and page is not None:
         new_doc = db.normalize_doc(body.applied_doc if body.applied_doc is not None else hit["proposed"])
+        locked={segment['id']:segment for segment in page['doc'].get('caption',{}).get('segments',[]) if segment.get('locked')}
+        proposed={segment['id']:segment for segment in new_doc.get('caption',{}).get('segments',[])}
+        if any(identifier not in proposed or proposed[identifier].get('text')!=segment.get('text') for identifier,segment in locked.items()):
+            raise HTTPException(status_code=409,detail='固定段落被改动，请先解除固定或重新生成提案')
         summ = hit.get("summary") or []
         summ = "；".join(summ[:4]) if isinstance(summ, list) else str(summ)
         db.add_revision(body.page_id, page["doc"], "agent", ("采纳部分：" if body.status == "partial" else "") + (summ or "Agent 改动"))
@@ -410,15 +473,10 @@ class CompileBody(BaseModel):
 
 
 @router.post("/compile")
-def api_compile(body: CompileBody):
-    draft = sanitize_draft(body.draft)
-    prompt, err = compile_safe(draft, body.view)
-    checks = compile_checks(draft) if "items" in draft else []
-    if err:
-        raise HTTPException(status_code=400, detail=err)
-    s = load_settings()
-    return {"prompt": prompt, "checks": checks, "prefix": s.get("prompt_prefix") or "",
-            "negative": s.get("negative_prompt") or ""}
+async def api_compile(body: CompileBody):
+    from ..atelier.creation import compile_document
+    kind='layout' if 'items' in body.draft else 'caption'
+    return await compile_document({'kind':kind,kind:body.draft},'moss',view=body.view)
 
 
 # ---------- 设置 ----------
@@ -446,6 +504,17 @@ class ComfyImportBody(BaseModel):
 
 class ComfyBindBody(BaseModel):
     bindings: dict[str, dict]
+    workflow_id: Optional[str] = None
+
+
+def _workflow_for(settings: dict, identifier: str | None) -> dict:
+    if identifier is None:
+        workflow = active_workflow(settings)
+    else:
+        workflow = (settings.get('comfy_workflows') or {}).get(identifier)
+    if not workflow:
+        raise HTTPException(status_code=404, detail='工作流不存在，请重新选择')
+    return workflow
 
 
 class ComfyGenerateBody(BaseModel):
@@ -461,25 +530,36 @@ class ComfyGenerateBody(BaseModel):
 
 
 @router.post("/comfy/import")
+@workflow_write
 def comfy_import(body: ComfyImportBody):
-    """Parse an API-format workflow and return its bindable nodes."""
+    """Each reported phase corresponds to real work, with a durable audit trail."""
+    from ..atelier import store
+    task = store.create_job('workflow', body.name or '导入工作流', {'source':'api_import'})
+    identifier = task['id']
+    def phase(name): store.update_job(identifier,status='running',result={'phase':name})
     try:
+        phase('parsing')
         nodes = comfy.parse_workflow(body.workflow)
+        phase('building')
+        suggested = comfy.guess_bindings(nodes)
+        phase('validating')
+        errors = [error for field,binding in suggested.items() if (error := comfy.validate_binding(nodes,field,binding))]
+        if errors: raise comfy.ComfyError('绑定无效：'+'；'.join(errors))
+        s = load_settings()
+        name = (body.name or '').strip() or f"工作流 {len(s.get('comfy_workflows') or {}) + 1}"
+        wid = uuid.uuid4().hex[:10]
+        phase('saving')
+        s.setdefault('comfy_workflows',{})[wid] = {'name':name,'nodes':nodes,'bindings':suggested,'layout':{},'params':{},'created_at':time.strftime('%Y-%m-%dT%H:%M:%S%z')}
+        s['comfy_active'] = wid
+        save_settings(s)
+        store.update_job(identifier,status='succeeded',result={'phase':'completed','workflow_id':wid,'nodes':len(nodes)})
+        return {'id':wid,'name':name,'job_id':identifier,'nodes':comfy.node_choices(nodes),'fields':comfy.FIELD_LABELS,'suggested':suggested,'workflows':workflow_summaries(s)}
     except comfy.ComfyError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    s = load_settings()
-    suggested = comfy.guess_bindings(nodes)
-    name = (body.name or "").strip() or f"工作流 {len(s.get('comfy_workflows') or {}) + 1}"
-    wid = uuid.uuid4().hex[:10]
-    s.setdefault("comfy_workflows", {})[wid] = {
-        "name": name, "nodes": nodes, "bindings": suggested, "layout": {},
-        "created_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-    }
-    s["comfy_active"] = wid
-    save_settings(s)
-    return {"id": wid, "name": name, "nodes": comfy.node_choices(nodes),
-            "fields": comfy.FIELD_LABELS, "suggested": suggested,
-            "workflows": workflow_summaries(s)}
+        store.update_job(identifier,status='failed',result={'phase':'failed'},error=str(exc))
+        raise HTTPException(status_code=400,detail=str(exc)) from exc
+    except Exception:
+        store.update_job(identifier,status='failed',result={'phase':'failed'},error='工作流未保存，请重试并检查日志')
+        raise
 
 
 @router.get("/comfy/workflows")
@@ -489,6 +569,7 @@ def comfy_workflows():
 
 
 @router.put("/comfy/workflows/active")
+@workflow_write
 def comfy_activate(body: dict):
     """Switch the active workflow. Bindings/layout travel with each workflow."""
     wid = str(body.get("id") or "")
@@ -502,6 +583,7 @@ def comfy_activate(body: dict):
 
 
 @router.put("/comfy/workflows/{wid}")
+@workflow_write
 def comfy_rename(wid: str, body: dict):
     s = load_settings()
     wf = (s.get("comfy_workflows") or {}).get(wid)
@@ -515,6 +597,7 @@ def comfy_rename(wid: str, body: dict):
 
 
 @router.delete("/comfy/workflows/{wid}")
+@workflow_write
 def comfy_delete_workflow(wid: str):
     s = load_settings()
     workflows = s.get("comfy_workflows") or {}
@@ -528,16 +611,18 @@ def comfy_delete_workflow(wid: str):
 
 
 @router.put("/comfy/bindings")
+@workflow_write
 def comfy_bindings(body: ComfyBindBody):
     s = load_settings()
     clean = {}
     for field, binding in (body.bindings or {}).items():
         if field in comfy.FIELDS and isinstance(binding, dict) and binding.get("node"):
             clean[field] = {"node": str(binding["node"]), "input": str(binding.get("input") or "")}
-    wf = active_workflow(s)
-    if wf:
-        wf["bindings"] = clean
-    s["comfy_bindings"] = clean  # keep legacy key in sync for older clients
+    wf = _workflow_for(s, body.workflow_id)
+    errors = [error for field, binding in clean.items() if (error := comfy.validate_binding(wf.get('nodes') or {}, field, binding))]
+    if errors:
+        raise HTTPException(status_code=400, detail='绑定无效：' + '；'.join(errors))
+    wf["bindings"] = clean
     save_settings(s)
     return {"bindings": clean}
 
@@ -561,7 +646,10 @@ async def comfy_status():
             "bindings": bindings, "fields": comfy.FIELD_LABELS,
             "workflows": workflow_summaries(s), "active_id": s.get("comfy_active") or "",
             "active_name": wf.get("name") or "",
-            "params": s.get("comfy_params") or {},
+            "defaults": comfy.parameter_state(wf)[0],
+            "params": comfy.parameter_state(wf)[1],
+            "overrides": wf.get('params') or {},
+            "graph": comfy.build_graph(nodes, wf.get('layout') or {}) if nodes else {"nodes": [], "edges": []},
             "nodes": comfy.node_choices(nodes) if nodes else [],
             "binding_errors": [error for field, binding in bindings.items()
                                if (error := comfy.validate_binding(nodes, field, binding))]}
@@ -579,10 +667,11 @@ def comfy_graph():
     nodes = (active_workflow(s).get("nodes") or {})
     if not nodes:
         return {"nodes": [], "edges": []}
-    return comfy.build_graph(nodes, s.get("comfy_layout") or {})
+    return comfy.build_graph(nodes, active_workflow(s).get("layout") or {})
 
 
 @router.put("/comfy/layout")
+@workflow_write
 def comfy_layout(body: dict):
     """Persist dragged node positions so the graph keeps the user's arrangement."""
     positions = body.get("positions") or {}
@@ -591,10 +680,8 @@ def comfy_layout(body: dict):
         if isinstance(pos, dict) and isinstance(pos.get("x"), (int, float)) and isinstance(pos.get("y"), (int, float)):
             clean[str(node_id)] = {"x": float(pos["x"]), "y": float(pos["y"])}
     s = load_settings()
-    wf = active_workflow(s)
-    if wf:
-        wf["layout"] = clean
-    s["comfy_layout"] = clean
+    wf = _workflow_for(s, body.get('workflow_id'))
+    wf["layout"] = clean
     save_settings(s)
     return {"positions": clean}
 
@@ -611,13 +698,25 @@ def comfy_set_url(body: dict):
 
 
 @router.put("/comfy/params")
+@workflow_write
 def comfy_params(body: dict):
-    """Remember the last used generation parameters (not the workflow)."""
-    keep = {k: body[k] for k in ("positive", "negative", "seed", "width", "height", "cfg", "sampler", "scheduler", "steps") if k in body}
+    """Save explicit overrides to the named workflow; reset exposes node defaults."""
     s = load_settings()
-    s["comfy_params"] = keep
+    wf = _workflow_for(s, body.get('workflow_id'))
+    defaults, _ = comfy.parameter_state(wf)
+    keep = {k: body[k] for k in defaults if k in body and body[k] != defaults[k]}
+    import math
+    limits = {'seed':(-1,2**64-1),'width':(64,8192),'height':(64,8192),'steps':(1,200),'cfg':(0,100)}
+    for key, value in keep.items():
+        if key in limits:
+            low, high = limits[key]
+            if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value) or not low <= value <= high or key != 'cfg' and int(value) != value:
+                raise ValueError(f'{key} 必须在 {low} 到 {high} 之间' + ('且为整数' if key != 'cfg' else ''))
+        elif not isinstance(value,str) or not value.strip(): raise ValueError(f'{key} 不能为空')
+    if body.get('reset'): keep = {}
+    wf['params'] = keep
     save_settings(s)
-    return {"params": keep}
+    return {"params": comfy.parameter_state(wf)[1], "overrides": keep}
 
 
 @router.post("/comfy/generate")
@@ -667,7 +766,8 @@ def _resolve_creds(body: Optional[ProbeBody] = None) -> tuple[str, str]:
         resolved = bridge.resolve(provider_id)
     except bridge.ProviderError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if not resolved["api_key"] and getattr(resolved["provider"], "kind", "") != "local":
+    from ..provider_manager import requires_api_key
+    if not resolved["api_key"] and getattr(resolved["provider"], "kind", "") != "local" and requires_api_key(resolved["provider"]):
         raise HTTPException(status_code=400, detail=f"提供商 {resolved['provider'].name} 未配置密钥：请在系统设置中设置对应的环境变量。")
     return resolved["base_url"], resolved["api_key"]
 
@@ -678,8 +778,8 @@ def _auth_headers(key: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {key}"} if key else {}
 
 
-async def _list_models(client: httpx.AsyncClient, base: str, key: str) -> list[str]:
-    r = await client.get(f"{base}/models", headers=_auth_headers(key))
+async def _list_models(client: httpx.AsyncClient, base: str, key: str, headers: dict | None = None) -> list[str]:
+    r = await client.get(f"{base}/models", headers=headers if headers is not None else _auth_headers(key))
     if r.status_code >= 400:
         raise HTTPException(status_code=502, detail=f"GET /models 失败 {r.status_code}: {r.text[:300]}")
     try:
@@ -691,80 +791,31 @@ async def _list_models(client: httpx.AsyncClient, base: str, key: str) -> list[s
 
 @router.post("/settings/test")
 async def test_settings(body: ProbeBody = ProbeBody()):
-    """依次探测：GET /models → 流式 chat → 流式 function calling。"""
+    """Use the actual Agent adapters; an empty HTTP 200 is never a passing probe."""
+    from ..atelier import providers
     base, key = _resolve_creds(body)
-    s = load_settings()
-    out: dict[str, Any] = {"ok": False, "base_url": base, "models_ok": False, "chat_ok": False,
-                           "stream_ok": False, "tools_ok": False, "latency_ms": None, "model_count": 0,
-                           "sample_models": [], "message": ""}
-    t0 = time.perf_counter()
-    headers = {**_auth_headers(key), "Content-Type": "application/json"}
-    async with httpx.AsyncClient(timeout=httpx.Timeout(40.0, connect=10.0)) as client:
-        try:
-            ids = await _list_models(client, base, key)
-            out["models_ok"] = True
-        except HTTPException as e:
-            ids = []
-            out["models_note"] = str(e.detail)
-        except httpx.RequestError as e:
-            out["message"] = f"无法连接上游: {e}"
-            return out
-        out["model_count"] = len(ids)
-        out["sample_models"] = ids[:12]
-        use_model = (body.model or "").strip() or s.get("model") or (ids[0] if ids else "gpt-4o-mini")
-        out["tested_model"] = use_model
-        payload = {
-            "model": use_model, "stream": True, "max_tokens": 64, "temperature": 0,
-            "messages": [{"role": "user", "content": "调用 ping 工具，参数 n=1。"}],
-            "tools": [{"type": "function", "function": {
-                "name": "ping", "description": "连通性测试",
-                "parameters": {"type": "object", "properties": {"n": {"type": "integer"}}, "required": ["n"]}}}],
-        }
-        try:
-            async with client.stream("POST", f"{base}/chat/completions", headers=headers, json=payload) as r:
-                if r.status_code >= 400:
-                    txt = (await r.aread()).decode("utf-8", "replace")[:300]
-                    # 有的接口拒绝 tools：退回普通流式再测一次
-                    payload.pop("tools")
-                    payload["messages"] = [{"role": "user", "content": "ping"}]
-                    out["tools_note"] = f"{r.status_code}: {txt}"
-                else:
-                    async for line in r.aiter_lines():
-                        if not line.startswith("data:"):
-                            continue
-                        data = line[5:].strip()
-                        if data == "[DONE]":
-                            break
-                        out["stream_ok"] = True
-                        try:
-                            ch = (json.loads(data).get("choices") or [{}])[0]
-                        except Exception:  # noqa: BLE001
-                            continue
-                        if (ch.get("delta") or {}).get("tool_calls") or ch.get("finish_reason") == "tool_calls":
-                            out["tools_ok"] = True
-                    out["chat_ok"] = True
-            if not out["chat_ok"]:
-                async with client.stream("POST", f"{base}/chat/completions", headers=headers, json=payload) as r:
-                    if r.status_code >= 400:
-                        txt = (await r.aread()).decode("utf-8", "replace")[:300]
-                        out["message"] = f"chat 失败 {r.status_code}: {txt}"
-                        out["latency_ms"] = int((time.perf_counter() - t0) * 1000)
-                        return out
-                    async for line in r.aiter_lines():
-                        if line.startswith("data:") and line[5:].strip() not in ("", "[DONE]"):
-                            out["stream_ok"] = True
-                    out["chat_ok"] = True
-        except httpx.RequestError as e:
-            out["message"] = f"chat 连接失败: {e}"
-            out["latency_ms"] = int((time.perf_counter() - t0) * 1000)
-            return out
-    out["latency_ms"] = int((time.perf_counter() - t0) * 1000)
-    out["ok"] = out["chat_ok"]
-    feats = [("流式", out["stream_ok"]), ("函数调用", out["tools_ok"])]
-    out["message"] = (f"连通正常 · {out['latency_ms']} ms · 模型 {use_model} · "
-                      + " · ".join(f"{n}{'✓' if ok else '✗'}" for n, ok in feats))
-    if not out["tools_ok"]:
-        out["message"] += "（Agent 将自动使用标签协议）"
+    settings = load_settings()
+    selected = bridge.resolve(body.provider_id or settings.get('provider_id'))
+    model = body.model or settings.get('model') or selected['provider'].default_model
+    started = time.perf_counter()
+    out = dict(ok=False,base_url=base,models_ok=False,chat_ok=False,stream_ok=False,tools_ok=False,model_count=0,sample_models=[])
+    tool = {'type':'function','function':{'name':'ping','description':'Connection test','parameters':{'type':'object','properties':{'n':{'type':'integer'}},'required':['n']}}}
+    async def probe(tools):
+        async for kind,value in providers.stream([{'role':'user','content':'Call ping with n=1.' if tools else 'Reply ping.'}],model=model,provider_id=selected['provider'].id,max_tokens=128,temperature=0,tools=tools):
+            if kind in ('text','reasoning') and value: out['stream_ok']=True
+            if kind=='done':
+                out['chat_ok']=bool(value.get('content') or value.get('tool_calls'))
+                out['tools_ok']=bool(value.get('tool_calls'))
+                out['stream_ok']=out['stream_ok'] or out['tools_ok']
+    try:
+        try: await probe([tool])
+        except providers.ToolsUnsupported:
+            out['tools_note']='此服务拒绝函数调用，Agent 自动模式将使用标签协议'
+            await probe(None)
+        out['ok']=out['chat_ok'] and out['stream_ok']
+        out['message']='连接正常' if out['ok'] else '服务未返回完整内容'
+    except (ValueError,httpx.HTTPError) as exc: out['message']=str(exc)
+    out.update(tested_model=model,latency_ms=int((time.perf_counter()-started)*1000))
     return out
 
 
@@ -773,7 +824,7 @@ async def list_upstream_models(body: ProbeBody = ProbeBody()):
     base, key = _resolve_creds(body)
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            ids = await _list_models(client, base, key)
+            ids = await _list_models(client, base, key, _provider_headers(bridge.resolve(body.provider_id or load_settings().get('provider_id'))['provider']) if (body.provider_id or load_settings().get('provider_id')) != 'local' else {})
         except httpx.RequestError as e:
             raise HTTPException(status_code=502, detail=f"无法连接上游: {e}") from e
     return {"base_url": base, "models": ids, "count": len(ids)}
@@ -801,8 +852,11 @@ LAYOUT_REVERSE_DETAIL = {
 }
 
 
-async def _vision(messages: list[dict], model: str, temperature: float) -> str:
+async def _vision(messages: list[dict], model: str, temperature: float, provider_id: str | None = None) -> str:
     try:
+        if provider_id:
+            from ..atelier.providers import complete
+            return (await complete(messages,model=model,temperature=temperature,provider_id=provider_id)).get('content','')
         return await llm.chat(messages, model=model, max_tokens=8192, temperature=temperature)
     except llm.UpstreamError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
@@ -818,10 +872,11 @@ async def api_reverse(
     skill_id: Optional[str] = Form(None),
     image_width: Optional[int] = Form(None),
     image_height: Optional[int] = Form(None),
+    provider_id: Optional[str] = Form(None),
 ):
     s = load_settings()
     try:
-        bridge.resolve(s.get("provider_id"))
+        bridge.resolve(provider_id or s.get("provider_id"))
     except bridge.ProviderError as exc:
         raise HTTPException(status_code=400, detail=f"无法调用视觉模型做图像反推：{exc}") from exc
     mode = (mode or "caption").strip().lower()
@@ -838,12 +893,18 @@ async def api_reverse(
     mime = file.content_type or "image/jpeg"
     data_url = f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
     vision_model = s.get("vision_model") or s.get("model") or "gpt-4o"
+    if provider_id=='local':
+        from .. import config_manager as cfg
+        from ..process_manager import process_manager
+        if process_manager.get_status().state!='running' or not cfg.get_config().mmproj_path:
+            raise HTTPException(status_code=409,detail='请先启动带有 MMProj 的视觉 GGUF 档案')
+        vision_model=Path(cfg.get_config().model_path).name
 
     if mode == "caption":
         messages = [{"role": "user", "content": [
             {"type": "text", "text": _load_caption_prompt()},
             {"type": "image_url", "image_url": {"url": data_url}}]}]
-        content = await _vision(messages, vision_model, 0.7)
+        content = await _vision(messages, vision_model, 0.7, provider_id)
         try:
             result = llm.extract_json(content)
         except (json.JSONDecodeError, ValueError) as e:

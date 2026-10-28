@@ -20,6 +20,8 @@ _BODY = {
     },
 }
 _ITEM_PROPS = {
+    "shape": {"type":"string","enum":["rectangle","ellipse","polygon"]},
+    "points": {"type":"array","items":{"type":"array","items":{"type":"number"},"minItems":2,"maxItems":2},"description":"多边形顶点，框内 0 到 1 坐标"},
     "name": {"type": "string", "description": "图层名（简短中文，便于引用）"},
     "label": {"type": "string", "enum": ["object", "character", "text"]},
     "bbox": _BBOX,
@@ -266,3 +268,7 @@ TOOL_LABELS = {
     "set_camera": "调整机位", "set_lighting": "调整灯光", "set_bodies": "估算体块", "set_caption": "写 Caption", "create_page": "新建页面",
     "switch_page": "切换页面", "view_page": "查看页面", "ask_user": "提问",
 }
+
+
+TOOLS.append({'type':'function','function':{'name':'update_segments','description':'修改成稿中未固定的段落；保留其他段落与顺序。使用 workbench 中的段落 id。','parameters':{'type':'object','properties':{'segments':{'type':'array','items':{'type':'object','properties':{'id':{'type':'string'},'text':{'type':'string'},'name':{'type':'string'}},'required':['id','text']}}},'required':['segments']}}})
+TOOL_LABELS['update_segments']='修改成稿段落'

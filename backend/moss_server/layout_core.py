@@ -158,7 +158,7 @@ def _sanitize_layout_draft(draft: dict, width: int | None = None, height: int | 
 
 # ---------- 编辑器元数据（图层 / 景深 / 透视）----------
 # 这些字段只给编辑器用：草稿与历史里保留，编译前剥离，不进入官方 schema。
-EDITOR_ITEM_KEYS = ("id", "name", "hidden", "locked", "depth", "color", "body", "group")
+EDITOR_ITEM_KEYS = ("id", "name", "hidden", "locked", "depth", "color", "body", "group", "shape", "points")
 EDITOR_ROOT_KEYS = ("perspective", "prompt_options", "camera", "lighting")
 DEPTH_TIERS = ("auto", "fg", "mg", "bg")
 
@@ -594,6 +594,8 @@ def prepare_layout_for_compile(draft: dict, view: Any = None) -> dict:
     items = []
     for it, ph in zip(visible, phrases):
         clean = {k: v for k, v in it.items() if k not in EDITOR_ITEM_KEYS}
+        if it.get('shape') in ('ellipse','polygon'):
+            clean['caption'] = _append_sentence(clean.get('caption',''), it['shape'] + ' shaped region')
         if ph:
             clean["caption"] = _append_sentence(clean["caption"], ph)
         items.append(clean)

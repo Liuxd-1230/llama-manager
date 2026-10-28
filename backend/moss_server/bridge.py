@@ -46,19 +46,13 @@ def local_provider() -> SimpleNamespace:
 
 
 def _api_key(provider) -> str:
-    for name in provider_manager.provider_env_names(provider):
-        value = (os.environ.get(name) or "").strip()
-        if value:
-            return value
-    return ""
+    return provider_manager.resolve_api_key(provider)
 
 
 def _openai_base(provider) -> str:
     base = (provider.base_url or "").rstrip("/")
     if not base:
         raise ProviderError(f"提供商 {provider.name} 未配置 base_url")
-    if provider.kind == "anthropic":
-        raise ProviderError("Anthropic 协议不受提示词工坊支持，请改用 OpenAI 兼容提供商")
     if base.rstrip("/") == "https://api.deepseek.com":
         return base
     if not base.endswith("/v1"):
@@ -72,6 +66,10 @@ def resolve(provider_id: str | None = None) -> dict[str, Any]:
         # llama-server exposes /v1/chat/completions and /v1/models; no auth.
         return {"provider": provider, "base_url": provider.base_url + "/v1", "api_key": ""}
     provider = provider_manager.get_provider(provider_id) if provider_id else None
+    if provider_id and provider is None:
+        raise ProviderError('所选提供商已被移除，请重新选择模型服务')
+    if provider is not None and not provider.enabled:
+        raise ProviderError('所选提供商已停用，请启用或重新选择模型服务')
     if provider is None:
         enabled = [item for item in provider_manager.list_providers() if item.get("enabled")]
         if not enabled:

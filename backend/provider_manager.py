@@ -5,11 +5,13 @@ import json
 import os
 import re
 import uuid
+from urllib.parse import urlsplit
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .secrets import read_secret, write_secret
 from .env_manager import APP_DATA_DIR, env_source, env_value, set_user_env
 
 
@@ -63,12 +65,16 @@ def provider_env_names(provider: ProviderConfig) -> list[str]:
     return [specific, *([standard] if standard else [])]
 
 
+def requires_api_key(provider: ProviderConfig) -> bool:
+    return urlsplit(provider.base_url).hostname not in ('localhost','127.0.0.1','::1')
+
+
 def resolve_api_key(provider: ProviderConfig) -> str:
     for name in provider_env_names(provider):
         value = env_value(name)
         if value:
             return value
-    return ""
+    return read_secret("provider:" + provider.id)
 
 
 def _write_raw(items: list[dict]) -> None:
@@ -89,7 +95,7 @@ def _migrate_legacy_keys(items: list[dict]) -> list[dict]:
             provider = ProviderConfig(**item)
             env_name = provider_env_names(provider)[0]
             try:
-                set_user_env(env_name, key)
+                write_secret("provider:" + provider.id, key)
                 changed = True
             except Exception:
                 _MIGRATION_ERRORS.add(provider.id)
@@ -133,14 +139,15 @@ def _public(provider: ProviderConfig) -> dict:
     active_env = next((name for name in env_names if env_value(name)), "")
     item.update({
         "api_key_env": env_names[0],
-        "api_key_set": bool(active_env),
-        "api_key_source": env_source(active_env) if active_env else "",
+        "requires_api_key": requires_api_key(provider),
+        "api_key_set": bool(active_env) or bool(read_secret("provider:" + provider.id)),
+        "api_key_source": env_source(active_env) if active_env else "dpapi" if read_secret("provider:" + provider.id) else "",
     })
     if provider.id in _MIGRATION_ERRORS:
         item["enabled"] = False
         item["api_key_set"] = False
         item["api_key_source"] = ""
-        item["migration_error"] = "旧 API Key 迁移失败，请修复 ~/llama-manager/.env 权限后重试"
+        item["migration_error"] = "旧 API Key 加密迁移失败，请检查 Windows 当前用户的加密存储后重试"
     if item["default_model"] and item["default_model"] not in item["models"]:
         item["models"] = [item["default_model"], *item["models"]]
     return item

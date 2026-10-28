@@ -4,7 +4,7 @@ import { LABEL_TEXT } from "../types";
 import { clone, deepEqual, itemName } from "./doc";
 import { lightingSummaryZh, presetById } from "./lighting";
 
-export type ChangeKind = "kind" | "caption" | "canvas" | "summary" | "camera" | "lighting" | "add" | "remove" | "update" | "order";
+export type ChangeKind = "segment" | "kind" | "caption" | "canvas" | "summary" | "camera" | "lighting" | "add" | "remove" | "update" | "order";
 
 export interface Change {
   key: string;
@@ -25,8 +25,18 @@ export function diffDocs(base: Doc, next: Doc): Change[] {
   const out: Change[] = [];
   if (base.kind !== next.kind)
     out.push({ key: "kind", kind: "kind", title: `页面类型改为 ${next.kind === "layout" ? "Layout" : "Caption"}` });
-  if ((base.caption.caption || "") !== (next.caption.caption || ""))
-    out.push({ key: "caption", kind: "caption", title: "Caption 文本", before: base.caption.caption, after: next.caption.caption });
+  const oldSegments=base.caption.segments || [];
+  const newSegments=next.caption.segments || [];
+  if (oldSegments.length || newSegments.length) {
+    const before=new Map(oldSegments.map(s=>[s.id,s]));
+    const after=new Map(newSegments.map(s=>[s.id,s]));
+    for(const id of new Set([...before.keys(),...after.keys()])) {
+      const a=before.get(id),b=after.get(id);
+      if(!deepEqual(a,b)) out.push({key:`seg:${id}`,kind:'segment',itemId:id,title:`段落「${b?.name || a?.name || '成稿'}」`,before:a?.text,after:b?.text});
+    }
+  } else if ((base.caption.caption || '') !== (next.caption.caption || '')) {
+    out.push({key:'caption',kind:'caption',title:'成稿文本',before:base.caption.caption,after:next.caption.caption});
+  }
   const a = base.layout;
   const b = next.layout;
   if (a.width !== b.width || a.height !== b.height)
@@ -80,6 +90,12 @@ export function applyChanges(target: Doc, base: Doc, next: Doc, accepted: Set<st
   const on = (k: string) => accepted.has(k) && changes.some((c) => c.key === k);
   if (on("kind")) out.kind = next.kind;
   if (on("caption")) out.caption = clone(next.caption);
+  if (changes.some(c=>c.kind==='segment' && on(c.key))) {
+    const after=new Map((next.caption.segments || []).map(s=>[s.id,s]));
+    let segments=(out.caption.segments || []).filter(s=>s.locked || !on(`seg:${s.id}`) || after.has(s.id)).map(s=>on(`seg:${s.id}`) && !s.locked ? clone(after.get(s.id)!) : s);
+    for(const segment of next.caption.segments || []) if(on(`seg:${segment.id}`) && !segments.some(s=>s.id===segment.id)) segments.push(clone(segment));
+    out.caption={caption:segments.map(s=>s.text).join('\n'),segments};
+  }
   const L = out.layout;
   const N = next.layout;
   if (on("canvas")) {

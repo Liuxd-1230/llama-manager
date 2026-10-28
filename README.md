@@ -1,212 +1,88 @@
-# 🦙 llama.cpp Run Manager
+# Atelier
 
-可视化管理 llama.cpp server 的模型档案、启动、日志、对话、评测和更新编译。
+Atelier 是面向 Windows 的本地创作与模型工作台。模型下载、推理配置、对话、提示词、构图与 ComfyUI 出图在同一处衔接。
 
-## 提示词工坊
+根目录 `DESIGN.md` 是项目 UI/UX 准则；本次视觉选择见 `docs/atelier-design.md`。
 
-第六个工作区「提示词」由 [MOSS Prompt Studio](https://github.com/xiang6150592/-moss-prompt-editor)（v2.4，作者 xiang6150592）吸收而来：画框式 Layout 编排、Caption 撰写、3D 镜头调度、灯光预设、AI 起稿与提示词编译。该仓库当前未附带开源许可证，代码仅个人学习使用，版权归原作者所有；后端位于 `backend/moss_server/`（挂载在 `/api/moss/*`），官方编译脚本在 `backend/moss_vendor/`，用户数据（SQLite、附件、技能）存于 `~/llama-manager/moss/`。AI 讨论共用主界面的模型提供商（在工坊「设置」中选择，密钥沿用主界面配置的环境变量）。
+## 工作区
 
-## 功能
-
-### 模型档案
-- 档案 = 模型文件 + mmproj + 启动参数 + 采样 + 提示词，是整个产品的核心对象
-- 档案卡片展示 GGUF 头元数据（架构、层数、MoE 专家数、原生上下文长度）
-- 一键「启动 / 切换」：加载档案并启动 llama-server，运行中切换会自动重启
-- 「设为当前」只切换编辑目标不启动；当前档案跨重启记忆，配置页名称自动跟随
-- 复制、删除、导入导出，落地页即模型列表；运行中卡片直达引擎自带 WebUI
-
-### 推理引擎
-- **三引擎**: llama.cpp（含 PrismML 分支）、KVMem（KV 缓存虚拟化，llama-kvmem-server）、**NInfer**（.ninfer 工件，ninfer-serve，自带 KVMem 环 + MTP/dflash 投机解码）
-- **按引擎自适应**: 配置页只显示当前引擎适用的参数（NInfer 为设备池/主机池/预填块/投机档位面板）；启动命令面板实时探测引擎二进制，档案卡片按引擎显示徽章
-- **模型感知资源预估**: 按 GGUF 头/.ninfer 清单的 KV 几何与 MoE 专家数实时估算显存与内存占用（系数经 Bonsai-27B/Hermes-35B 真机标定），8GB 卡红黄绿预警
-- **思考分层**: llama.cpp → `--reasoning on`，KVMem → `--enable-thinking`，NInfer → `--default-reasoning-effort`（对话页六档思考梯子）；DeepSeek 为对称的请求级开关
-
-### 配置管理
-- **路径配置**: 引擎目录、模型文件、mmproj 文件（独立文件浏览器，支持盘符切换）
-- **聊天模板**: 指定自定义 jinja 模板文件（--chat-template-file），llama.cpp 与 KVMem 通用
-- **命令导入**: 粘贴完整 llama-server / llama-kvmem-server 启动命令，自动解析回填所有字段；未识别的参数原样进入「附加参数」
-- **命名配置**: 保存/加载/删除多个命名配置（默认 default）
-- **导入导出**: JSON 格式配置文件导入导出
-
-### 基础设置
-- 上下文长度 (-c)、GPU 卸载层数 (-ngl)、CPU 线程数 (-t)、并行数 (-np)
-- MoE CPU 卸载 (--n-cpu-moe)：将专家权重卸载到 CPU，释放显存
-- KV 缓存量化 K/V (--cache-type-k/v)：f16, bf16, q8_0, q4_0 等
-- 思维链 (--enable-thinking)
-- 内存映射 (--mmap)、锁定内存 (--mlock)
-- KV 缓存卸载到 GPU (--no-kv-offload)
-- Flash Attention (--flash-attn)
-- Unified KV 缓存 (--kv-unified)
-- GPU 显存余量限制 (--fit-target)
-- 逻辑批大小 (-b)、物理批大小 (-ub)
-- 上下文自动切换 (--context-shift)
-- 缓存 RAM 上限 (--cache-ram)
-
-### MTP 投机解码
-- 投机类型 (--spec-type)：draft-mtp
-- 最大/最小草稿 token 数 (--spec-draft-n-max/n-min)
-- 最小接受概率 (--spec-draft-p-min)：默认 0.75（有损），设为 1.0 可无损
-- 分裂概率阈值 (--spec-draft-p-split)
-
-### 采样器
-- 温度、Top-K、Top-P（滑块 + 数字输入）
-- Min-P（可开关）、重复惩罚（可开关）、存在惩罚（可开关）
-
-### 服务器控制
-- 启动/停止 llama-server
-- 实时 WebSocket 日志流
-- 本地模式 (127.0.0.1) / 局域网模式 (0.0.0.0)
-
-### 对话
-- 本地 llama.cpp、DeepSeek、OpenAI Chat/Responses、Anthropic 和 OpenAI 兼容 API
-- 原生工具调用 Web Search（Tavily 或 Brave），支持多轮搜索和可见工具轨迹
-- 真正的流式输出、停止生成、单轮重生成与回答候选切换
-- Markdown、GFM、LaTeX、安全代码块和文件附件导入（支持 PDF，详见「对话附件」）
-- 思考分层控制：配置页设服务端默认，对话页开关按请求覆盖
-- 会话、消息、候选回答、分支关系和工具轨迹持久化到本地 SQLite
-
-### 评测与实验
-- 内置模板与 JSONL/CSV 数据集导入，可把真实任务沉淀为回归样本
-- 精确、关键词、正则、JSON Schema 与显式授权命令评分器
-- 可选独立 Judge 模型，不会默认复用被测模型
-- 对比质量、吞吐、延迟和显存峰值，并展示 Pareto 前沿
-- **实验对比视图**: 勾选多个实验并排柱状对比，逐指标标注最优（同一数据集跨引擎横评）
-
-### NInfer 聊天页
-- 运行页内嵌的轻量聊天界面（引擎二进制不自带 WebUI 时由管理器托管，`--cors` 跨域直连引擎）
-- 侧栏会话（搜索/分组/重命名/导出 Markdown），历史持久化到管理器数据库
-- 流式输出 + 思考过程折叠（自动标注耗时）、KaTeX 公式、HTML/SVG 沙箱预览（自适应高度 + 全屏）
-- 附件（文本注入上下文 / PDF 服务端抽取 / 视觉模型图片门控）、等待动画、重新生成保留历史版本（多候选切换）
-- 顶栏实时显示当前会话上下文占用对照设备池（绿/黄/红预警超池降速）
-
-### 对话附件
-- 文本、Markdown、代码文件直接读取，PDF 由服务端 pypdf 抽取文本
-- 单文件上限 30MB / 15 万字符，超出自动截断并提示
-- 长上下文引擎（KVMem 工作区 / 256K 原生模型）可直接吃下整份文档
-
-### 全局任务中心
-- 评测统一为持久 Job
-- GPU、llama-server 和文件系统资源互斥，支持取消、失败重试与检查点
-- 应用重启后将未完成任务标记为 interrupted，不接管旧子进程
-
-### 更新管理
-- 检测 llama.cpp 更新 (git fetch)
-- git pull（支持强制重置）
-- cmake 编译（命令可自定义）
-
-### 下载
-- 一键克隆 llama.cpp 仓库
-
-## 安装
-
-```bash
-cd ~/llama-manager
-pip install -r requirements.txt
-```
+- **工作台**：接续创作项目、查看作品与持久化任务。
+- **创作**：项目 → 系列 → 分页，切换成稿、构图和出图；支持分段、固定文字、逐段采纳改稿、对照翻译、撤销与版本记录。
+- **模型**：管理 llama.cpp、KVMem 与 NInfer 档案；配置模型、MMProj、采样和服务参数，查看运行与日志。
+- **下载**：解析 Hugging Face / 镜像链接，筛选文件，使用指定目录或 HF 缓存下载；支持暂停、续传、重试、并发、历史和 Token。
+- **素材**：离线标签与角色词库、自定义角色、画师、LoRA、作品、记事本、Preset 与 MCP。
+- **对话**：保留流式输出、附件、搜索、候选回答与历史。
+- **设置**：共享模型连接、外观、创作偏好和引擎维护。
 
 ## 启动
 
-**Windows 一键启动（推荐）：**
-- 双击 `start.bat` — 显示控制台日志，自动打开浏览器
-- 双击 `start-hidden.vbs` — 静默后台启动，自动打开浏览器
-- 双击 `stop.bat` — 停止服务
+需要 Windows 10/11、Python 3.11+。正常使用不需要 Node.js。
 
-**手动启动：**
-```bash
-cd ~/llama-manager
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 9090
+```powershell
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 9090
 ```
 
-然后浏览器打开 `http://localhost:9090`
+也可双击 `start.bat`，浏览器访问 http://localhost:9090 。
 
-## API Key 与搜索
+## 从提示词到出图
 
-Key 不通过网页输入或保存在 provider JSON 中。系统环境变量优先于 `~/llama-manager/.env`：
+1. 在设置中配置已有模型服务，或在模型页启动本地档案。密钥可以通过环境变量提供，或用 Windows DPAPI 加密保存。
+2. 创建项目，写成稿或安排构图。MOSS、Anima 与普通文本是独立的编译目标；Anima 的语义解析需要可用的文本模型。
+3. 在素材库保存并引用角色、画师和 LoRA。同系列新页继承素材引用；Preset 可提供系统提示与采样参数。
+4. 出图视图连接**已运行的 ComfyUI**，导入 API 格式工作流并绑定提示词和参数。Anima 预设会填入可编辑 JSON，请核对本机模型文件名、节点及采样器后导入。
+5. 引用 LoRA 时，选择工作流中对应的 `LoraLoader` 节点；权重和触发词与提示词、提交参数联动。
+6. 每次生成保留文档与工作流快照。结果可下载、收藏、比较或返回原稿再编辑。
 
-```dotenv
-DEEPSEEK_API_KEY=
-OPENAI_API_KEY=
-ANTHROPIC_API_KEY=
-TAVILY_API_KEY=
-BRAVE_SEARCH_API_KEY=
-```
+Atelier 不安装、启动或停止外部 ComfyUI。显存冲突时先提示；只有确认后才暂停 Atelier 受管的本地引擎，之后由用户决定何时恢复。正在执行的外部 ComfyUI 中断需到 ComfyUI 操作，以免影响别的任务。
 
-自定义厂商使用 `LLAMA_MANAGER_PROVIDER_<ID>_API_KEY`，其中 `<ID>` 会转换为大写下划线形式。旧版 `providers.json` 中的 Key 会在启动时迁移到用户 `.env`；只有写入并收紧文件权限成功后才会删除旧字段。
+图片反推支持已配置的视觉 API 与本地视觉 GGUF。为本地档案添加模型和 MMProj 后，可在反推窗口选择并加载。未加入 Florence、ONNX 打标、独立机器翻译链或多语言界面。
 
-Web Search 只使用设置中明确选择的 Tavily 或 Brave，不抓取搜索结果网页，也不会在失败时自动切换厂商。
+### Agent 如何修改原稿
 
-## 目录结构
+Agent 通过 `update_summary`、`add_items`、`update_items` 等工具修改文档，再生成可采纳的改动提案。采纳后才保存并更新画布；开启自动采纳时仍经过版本和锁定检查。优先使用模型原生工具调用，不支持时可退回约定的结构化标签协议。
 
-```
-llama-manager/
-├── backend/
-│   ├── main.py               # FastAPI 路由 + WebSocket
-│   ├── storage.py            # SQLite WAL + 显式迁移
-│   ├── jobs.py               # 持久任务与资源锁
-│   ├── evaluation.py         # 数据集评分、Judge、遥测与 Pareto
-│   ├── api_models.py         # Pydantic API 契约与附件抽取参数
-│   ├── routers/              # 会话、任务和评测路由
-│   ├── provider_manager.py   # Provider 元数据与环境 Key
-│   ├── search_manager.py     # Tavily / Brave 搜索适配
-│   ├── chat_state.py         # 进程内候选上下文图
-│   ├── models.py              # Pydantic 数据模型
-│   ├── config_manager.py      # 模型档案 CRUD + GGUF 元数据 + 模型扫描
-│   ├── process_manager.py     # llama-server 进程管理
-│   ├── update_manager.py      # git + cmake 编译
-│   ├── download_manager.py    # llama.cpp 仓库克隆
-│   └── ...
-├── frontend-src/              # React + Vite + TypeScript 源码
-├── frontend/                  # 提交到仓库的生产构建产物
-├── config/
-│   └── *.json                 # 命名配置文件
-├── requirements.txt
-└── README.md
-```
+没有实际改动或成功工具记录，却声称已修改的回复会触发执行核验、一次重试及失败提示。普通回复中的“执行成功”文字不会直接变成文档操作。修改构图或描述不会改变已经生成的图片，需要重新出图。
 
-## 使用流程
+### 自定义聊天模板
 
-### 基本使用
-1. 填写 llama.cpp 目录路径 → 点击"检测"确认找到 llama-server
-2. 选择模型文件（点击"浏览"打开文件浏览器，支持盘符切换）
-3. 调整基础设置和采样器参数
-4. 切换到"服务器"页 → 点击"启动"
-5. 在日志页查看实时输出
+llama.cpp / KVMem 档案可在配置页选择 `.jinja` 等聊天模板文件，保存档案后通过 `--chat-template-file` 使用；重新启动模型后生效。目前保存的是文件路径，没有内置的模板正文编辑、读取或一键复制功能。请先将模板内容保存为本地文件，再选择它。
 
-### 模型档案
-1. 打开「模型」页查看所有已保存的档案卡片（含模型元数据与关键参数）
-2. 点击「启动 / 切换」一键加载档案并启动 llama-server，运行中切换会自动重启
-3. 「编辑」跳转配置页调整参数后保存；「设为当前」只切换编辑目标不启动服务；「复制」基于现有档案快速派生新档案
-4. 右上角「新建档案」把当前配置保存为新档案；运行页的 WebUI 区域满高显示，支持全屏（Esc 退出）
+## 数据与迁移
 
-### 配置管理
-1. 在配置页输入配置名称
-2. 点击"保存配置"保存当前设置
-3. 使用下拉框切换已保存的配置
-4. 点击"删除"删除非默认配置
+- 默认目录：`%LOCALAPPDATA%\Atelier`；可设置 `ATELIER_DATA_DIR` 使用其他目录。
+- 首次启动从 `~/llama-manager` 备份迁移，聊天和工坊数据合并进入 `atelier.db`；旧目录不删除。备份路径记录在新目录的 `migration.json`。
+- 自动识别相邻 HF Mirror Downloader 项目或其 LocalAppData 目录的历史与 Token，导入前保留数据库备份。
+- 模型文件和 HF 缓存保持原路径。迁移失败会停止切换，原始数据与备份保留。
+- 密钥不通过列表 API 返回。环境变量优先于应用加密存储；现有 `.env` 配置继续支持。
+- 下载可手动恢复断点；服务重启后，其他未完成任务标记为已中断，不自动重放生成或工具调用。
 
-## 配置 JSON 格式
+切换数据目录或重启排查前，请保留当前数据的独立备份并核对实际使用的目录。浏览器仍显示的内容不等于已有完整备份；只恢复当前原稿或已加载消息，也不代表全部历史版本和任务记录已恢复。
 
-配置文件保存在 `~/llama-manager/config/` 目录下，可手动编辑或通过 UI 导入导出。
+配置、调优档案前请先阅读 `docs/profile-guide.md`。
 
-## 技术栈
+## 开发与验证
 
-- **后端**: Python, FastAPI, WebSocket, aiosqlite, httpx, NumPy
-- **前端**: React, Vite, TypeScript, TanStack Query, Motion, CSS Modules
-- **进程管理**: asyncio.subprocess
+前端源码在 `frontend-src`，生产文件提交在 `frontend`；后端入口只负责生命周期与路由，领域服务位于 `backend/routers`、`backend/atelier` 和现有引擎模块。
 
-## 前端开发
-
-普通用户不需要 Node.js，`start.bat` 会直接加载已提交的 `frontend/`。修改前端源码时使用 pnpm：
-
-```bash
+```powershell
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.venv\Scripts\python.exe -m unittest discover -s tests
+.venv\Scripts\python.exe -m pytest tests/hf_download -q
 cd frontend-src
-pnpm install
-pnpm generate:api
-pnpm dev
-pnpm test
-pnpm build
-pnpm test:e2e
+npm run generate:api
+npx vitest run
+npx tsc -b
+npm run build
+npx playwright test
 ```
 
-Vite 开发服务器会代理 `/api` 和 WebSocket；生产构建使用 `/static/` base 并写入仓库根目录的 `frontend/`。
-OpenAPI 契约由 `scripts/export_openapi.py` 导出，再用 `openapi-typescript` 生成 `src/generated/api.ts`。
+API 使用 `/api/v1`，文档在 `/docs`。下载、Agent 和生成任务持久化，任务事件使用 SSE；引擎日志使用 WebSocket。浏览器测试默认连接 `http://127.0.0.1:9092`；可用 `E2E_BASE_URL` 覆盖，务必为验收后端设置独立的 `ATELIER_DATA_DIR`。
+
+业务状态与模块职责见 [业务约定](docs/atelier-architecture.md)，真实联调、自动回归和验证边界见 [验证记录](docs/atelier-validation.md)。品牌与微动效的具体选择见 [设计参考卡](docs/atelier-design.md)；根目录 `DESIGN.md` 保留为最高项目设计准则。
+
+本轮交付范围、验证结果与已知限制见 [更新记录](docs/atelier-release-notes.md)。截图、录像、测试输出和本机数据备份保留在本地，不随源码提交。
+
+## 来源
+
+本项目提取并适配 HF Mirror Downloader、[ImageForge](https://github.com/Liuxd-1230/ImageForge)、[Penna](https://github.com/storyAura/Penna)，并保留已有 MOSS Prompt Studio 集成。来源、原始许可与数据署名见 `THIRD_PARTY_NOTICES.md` 和 `licenses/`。

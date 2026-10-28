@@ -13,8 +13,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://127.0.0.1:9090',
-      '/ws': { target: 'ws://127.0.0.1:9090', ws: true },
+      '/api': {target:process.env.ATELIER_DEV_API || 'http://127.0.0.1:9090',changeOrigin:false},
+      '/ws': { target: (process.env.ATELIER_DEV_API || 'http://127.0.0.1:9090').replace(/^http/, 'ws'), ws: true },
     },
   },
   test: {

@@ -12,7 +12,7 @@ import aiosqlite
 from .env_manager import APP_DATA_DIR
 
 
-DATABASE_PATH = APP_DATA_DIR / "manager.db"
+DATABASE_PATH = APP_DATA_DIR / "atelier.db"
 
 MIGRATIONS: list[list[str]] = [[
     """CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -127,8 +127,8 @@ class Database:
         except (aiosqlite.DatabaseError, OSError):
             if self.path.exists():
                 backup = self.path.with_name(f"{self.path.name}.corrupt-{int(time.time())}")
-                shutil.move(self.path, backup)
-            await self._migrate()
+                shutil.copy2(self.path, backup)
+            raise RuntimeError("Atelier 数据库初始化失败，原数据库已保留，请检查备份与磁盘状态") from None
 
     async def _migrate(self) -> None:
         connection = await self._connect()

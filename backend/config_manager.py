@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import List
 from .models import AppConfig, ModelInfo
 
-CONFIG_DIR = Path.home() / "llama-manager" / "config"
+from .paths import APP_DATA_DIR
+CONFIG_DIR = APP_DATA_DIR / "config"
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -54,13 +55,17 @@ def initial_profile_name() -> str:
     return "default"
 
 
-def save_config(config: AppConfig, name: str = "default") -> Path:
+def save_config(config: AppConfig, name: str = "default", *, make_current: bool = True) -> Path:
     global _current_config, _current_name
-    _current_config = config
-    _current_name = _sanitize_name(name)
-    path = CONFIG_DIR / f"{_current_name}.json"
-    path.write_text(json.dumps(config.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
-    _persist_current()
+    safe_name = _sanitize_name(name)
+    path = CONFIG_DIR / f"{safe_name}.json"
+    temp = path.with_suffix('.tmp')
+    temp.write_text(json.dumps(config.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
+    temp.replace(path)
+    if make_current:
+        _current_config = config
+        _current_name = safe_name
+        _persist_current()
     return path
 
 

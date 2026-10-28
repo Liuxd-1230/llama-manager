@@ -1,336 +1,383 @@
+# DESIGN.md — 有生命力的数字产品设计准则
+
+> 适用于网站、桌面应用、工具、知识站、仪表盘和交互式作品。
+>
+> 目标不是让每个项目长得一样，而是让每个项目都**清晰、耐看、有性格、有节奏，且真正好用**。
+>
+> 关键词：**温润、精确、编辑感、呼吸感、细腻动效、克制而不寡淡**。
+>
+> **默认视觉锚点：Claude 的温暖界面 + Anthropic 官网的编辑式艺术感。** 复杂信息组织参考 Linear，高频操作参考 Raycast。它们是具体可查的参考，不是只用名称形容风格。
+
+## 0. 如何使用本文件
+
+本文件是供设计与编程 AI 长期遵循的**设计判断准则**，不是必须照抄的主题模板。
+
+**优先级：** 用户明确指定的目标与参考图 → 产品任务、内容和使用场景 → 现有设计系统与品牌约束 → 本文件 → 通用组件默认样式。
+
+- 已有项目：先理解并保留有效的布局、交互和品牌语言，做有针对性的提升；**不以“美化”为由重构功能**。
+- 新项目：先确定界面类型、主要任务、内容密度、视觉焦点，再开始实现。
+- 没有明确视觉参考：优先使用第 1 章的 **Claude × Anthropic 编辑式方向**，以 Linear / Raycast 补足复杂布局与交互；根据产品内容改变视觉重点，不机械复制页面。
+- 有明确参考：先分析并提取其版式、字阶、配色、控件和动效；以参考图的实际效果为准，不凭“像某某产品”自行脑补。若用户另选风格，以用户参考优先，本文的 Claude 方向退居补充。
+- 所有数值均为**合理起点而非铁律**；只有在有明确设计意图、且整体一致时才偏离。
+
+## 1. 视觉参考：不是一句“做成 Claude 风格”
+
+**这一章是默认设计方向的组成部分，不能被 AI 在实现时省略成“现代、简约、高级”。**
+
+设计时应当真正访问相关网页、设计文章、代码或用户提供的截图。若无法访问，说明限制，并以本章明确写出的特征作为暂代依据；**不得声称已对照真实界面**。注意不同版本、平台与浅/深色模式可能存在显著差异，参考图始终优先于抽象描述。
+
+### 1.1 Claude：产品界面的温润与细节（主视觉参考）
+
+- 产品界面：<https://claude.ai/>
+- 非官方高保真实现参考：<https://github.com/Caho1/open-claude-ui>
+
+**从 Claude 学什么**
+
+- **低对比表面层级**：主画布、侧栏、输入区域、浮层之间用细小的明度与材质差别建立关系，而不是把每层都画成重卡片。
+- **温暖而清晰的颜色**：略带暖意的浅色背景、深灰正文、有限的陶土色强调。整体不刺眼，也不把所有文字压成浅灰。
+- **自然的排版**：标题与正文有节制的字号、字重和字体反差；输入、导航、列表仍强调清晰，不是满屏大衬线字。
+- **有呼吸感的组件**：稳定的行高、舒适的点击区域、贴合内容的圆角、轻细边界和低存在感阴影。
+- **精细交互**：选中、悬停、聚焦、展开、关闭等状态顺畅、轻盈且有明确反馈；输入法和键盘操作可靠。
+
+**别学错**：不是抄一个米白底 + 橙按钮；不是每个页面都加大圆角；不是把专有标识、字体、资产和界面代码直接搬进自己的产品。
+
+**读代码时看哪里**：`open-claude-ui` 的表面设计变量、控件尺寸、边框/阴影、下拉菜单、输入组件、弹窗、导航及动效实现。该仓库是社区逆向与重建项目，**不是 Anthropic 官方设计系统**；项目关于还原精度的说明应当通过真实截图独立核对。
+
+### 1.2 Anthropic 官网：编辑式艺术气质（艺术表达主参考）
+
+- 品牌与网站：<https://www.anthropic.com/>
+- Anthropic 官方品牌 Skill：<https://github.com/anthropics/skills/blob/main/skills/brand-guidelines/SKILL.md>
+
+**从 Anthropic 网站学什么**
+
+- **像设计出版物一样组织首屏**：标题、图片、说明、留白之间有主次，有时允许大胆比例和经过安排的不对称，而不是四个指标卡平均排开。
+- **排版是构图的一部分**：字形、字体混搭、行宽、换行位置、标题与小字的比例共同决定情绪。
+- **让图文关系有叙事**：图片、图形、数字、边界线应当帮助解释产品内容；没有内容时不凭空补抽象光斑。
+- **节奏变化**：章节之间可以有开阔、紧密、开阔的起伏；不是全站每处间距相同。
+- **精致而不冷淡**：可以有少量大胆的视觉亮点、意外的构图和精心挑选的素材，其余区域依然克制。
+
+**官方品牌 Skill 的已知色彩参照**（是品牌材料规范，不代表官网每一处网页 CSS）：
+
+| 用途 | 参考色 |
+|---|---|
+| 深色/主要文字 | `#141413` |
+| 浅色底 | `#FAF9F5` |
+| 中灰 | `#B0AEA5` |
+| 浅灰底 | `#E8E6DC` |
+| 橙色强调 | `#D97757` |
+| 辅助蓝 / 绿 | `#6A9BCC` / `#788C5D` |
+
+官方品牌 Skill 也给出了 Poppins / Lora 的品牌排版建议；**那并不等于 Claude 网页端的实际字体配置**。中文产品应另行处理中文字形、混排和可读性。使用官方页面与用户截图时，以实际可观察视觉效果优先；避免未经授权地打包商业字体或品牌资产。
+
+### 1.3 Linear：复杂界面中的对齐、疏密与秩序（功能布局参考）
+
+- 产品：<https://linear.app/>
+- 官方重设计文章：<https://linear.app/now/how-we-redesigned-the-linear-ui>
+- 2026 年 UI 更新：<https://linear.app/now/behind-the-latest-design-refresh>
+
+**从 Linear 学什么**
+
+- 主导航、工具栏、筛选区、主体和详情区的明确分工。
+- 高信息密度列表的固定列对齐、稳定的行高和次要信息降权。
+- 不同页面间可预测的主操作位置；侧栏在不抢视线的同时能被快速扫描。
+- 精细的图标尺寸、按钮关系与低噪音分隔，尽量减少重复导航和多余边框。
+- 同一套规则如何适应列表、设置、详情、分屏和窄窗口，而不是只优化单张截图。
+
+**别学错**：不需要复制 Linear 的品牌颜色，也不应让阅读网站、创作页面都变成任务管理器。
+
+### 1.4 Raycast：快速操作、图标与轻盈反馈（交互参考）
+
+- 产品：<https://www.raycast.com/>
+- 官方设计说明：<https://www.raycast.com/blog/a-fresh-look-and-feel>
+- 官方操作说明：<https://manual.raycast.com/navigation>
+
+**从 Raycast 学什么**
+
+- 搜索框是高优先级操作时，应拥有对应的视觉面积和显著性。
+- 命令面板结果的图标、名称、补充说明、快捷键之间有明确的扫描顺序。
+- 键盘上下移动、Enter 执行、Esc 关闭、操作面板与焦点状态形成完整的操作闭环。
+- 菜单、通知、选择和快捷操作提供短促、清楚、不拖泥带水的反馈。
+- 图标不以数量取胜，而以稳定语义、统一尺度和视觉对齐提高识别速度。
+
+**别学错**：不需要照搬 Raycast 的深色主题或所有快捷键；只有高频命令场景才需要完整命令面板。
+
+### 1.5 辅助规范和 Skill：解决具体问题，不反客为主
+
+| 来源 | 职责 | 链接 |
+|---|---|---|
+| Anthropic `frontend-design` | 视觉方案、排版、取舍；须受本文件具体参考约束 | <https://github.com/anthropics/claude-code/blob/main/plugins/frontend-design/skills/frontend-design/SKILL.md> |
+| Impeccable | 审查、布局精修、删掉多余装饰、检查细节 | <https://github.com/pbakaus/impeccable> |
+| Vercel `web-design-guidelines` | 页面交互、可读性和可用性检查 | <https://github.com/vercel-labs/agent-skills> |
+| Atlassian Spacing | 基础间距、分组与节奏 | <https://atlassian.design/foundations/spacing> |
+| IBM Carbon Icons | 图标尺寸、对齐与图标一致性 | <https://www.carbondesignsystem.com/building-blocks/foundations/icons/guidelines> |
+| shadcn/ui / Base UI / Lucide | 成熟组件行为、无样式交互基础、统一图标 | <https://ui.shadcn.com/> · <https://base-ui.com/> · <https://lucide.dev/> |
+
+**Skill 不等于审美参考，也不能替代真实截图。** 用户给出的图片和目标产品的实际页面始终更有约束力。
+
+### 1.6 参考如何组合，避免混搭失控
+
+| 页面类型 | 首选视觉表达 | 次级参考 | 艺术表现的安全区域 |
+|---|---|---|---|
+| 工具、桌面工作台 | Claude 温润层次 | Linear 布局 + Raycast 操作 | 首页、关键状态、细线和数字排版 |
+| 资料站、知识站、博客 | Anthropic 编辑排版 | Claude 表面质感 | 章节首屏、图文关系、交互演示 |
+| 数据管理、模型管理 | Claude 颜色与控件 | Linear 列表与详情 | 真实图表、性能数字、摘要区 |
+| 创作工具、编辑器 | 中性而安静的 Claude 式界面 | Raycast 快捷操作 | 画布、作品、预览与状态变化 |
+| 品牌官网、作品集 | Anthropic 官网叙事 | Claude 的低噪音细节 | 字体、图像、构图、章节转场 |
+
+原则：**一个视觉主参考 + 最多两个功能性辅助参考。** 不把不同产品的配色、圆角和字体随机拼贴；可借鉴它们解决问题的方法，却保持统一的项目身份。
+
+### 1.7 开始编码前必须落地的「参考卡」
+
+每个新项目要结合产品场景，从参考中选择并记录下面内容（精简到一屏文字即可）：
+
+```text
+主视觉参考：Claude / Anthropic 官网 / 用户指定参考
+辅助布局：Linear / 不适用
+辅助交互：Raycast / 不适用
+色彩基调：具体色值、强调色、表面层级
+字体策略：标题 / 正文 / 中文 / 数字
+页面骨架：导航、内容、详情的位置与比例
+密度策略：展示 / 标准 / 紧凑
+艺术抓手：至少一个可见的构图或字体亮点 + 一个有意义的动态/视觉细节
+禁止变形：哪些现有功能、布局、品牌身份不能改变
+验证方式：与哪些实际参考截图在什么视口对照
+```
+
+**重点：艺术抓手不能全部写成“简约”“精致”这种形容词。** 要有可验证的视觉结果，例如“章节大标题与窄幅正文形成强烈尺度反差”“导航悬停时细线由左向右生长”“关键真实曲线和状态读数形成紧凑的视觉组合”。
+
+## 2. 审美立场：有艺术感，不是装饰堆砌
+
+界面应像经过设计师反复推敲的作品，而不是组件库默认样式的拼接；也不要为了证明自己有创意而牺牲易用性。
+
+1. **一个页面有一个视觉主角。** 可以是标题、图像、交互对象、图表或正在进行的任务。不要让每张卡、每个数字、每个按钮都争抢注意力。
+2. **制造有控制的对比。** 大与小、疏与密、静与动、衬线与无衬线、规则网格与局部错位。没有对比会死板；到处对比会吵闹。
+3. **先让信息本身美起来。** 优先利用真实内容、数据、状态、图形与排版产生个性；装饰只能锦上添花。
+4. **允许惊喜，但让惊喜有位置。** 首页、章节开场、关键结果和空状态可以更有表现力；表单、设置、长列表要优先清楚、快速、安静。
+5. **温润不等于永远米白。** 风格可随产品采用冷静、明亮、深色、鲜活、工业或学术气质；始终保持层级与细节的精致。
+6. **不要追求所有页面一模一样。** 统一的是设计规则，不是每页完全相同的结构。不同任务应有不同节奏。
+
+**自检问题：** 去掉品牌 Logo 后，页面还有明确的视觉性格吗？把颜色全部换成灰阶后，层级、构图与节奏还成立吗？
+
+## 3. 开工前：先决定空间和注意力
+
+在写组件之前，用极简的文字或草图回答：
+
+- 用户来到这个页面要完成什么？最重要的一个操作是什么？
+- 用户第一眼应该看到什么，第二眼看到什么？
+- 内容是阅读、查找、浏览、编辑、比较、监控，还是探索？
+- 哪些信息必须常驻，哪些只在需要时出现？
+- 页面应该偏「沉浸与展示」「均衡与日用」还是「高密度与效率」？
+- 有哪些真实内容可以成为视觉亮点（而不必发明装饰）？
+
+按任务选择骨架，而不是全站套用「顶部大标题 + 四张统计卡 + 三列卡片」：
+
+| 类型 | 优先结构 | 艺术表达位置 |
+|---|---|---|
+| 工具 / 工作台 | 导航 + 主任务区 + 按需详情 | 标题、实时状态、关键工具与细节动效 |
+| 内容 / 知识站 | 清晰导航 + 舒适阅读列 + 图表/注释 | 编辑排版、章节开场、图文关系 |
+| 数据 / 管理 | 可扫描列表/表格 + 筛选 + 详情 | 重点指标、微型可视化、状态语言 |
+| 创作 / 编辑器 | 作品画布优先 + 就近工具 + 属性区 | 画布、工具反馈、作品预览 |
+| 品牌 / 展示 | 有张力的首屏 + 精选叙事模块 | 字体、摄影/插画、构图与过渡 |
+
+**规则：** 能直接完成任务就不要增加一层页面；能就地展开就不要强制弹窗；能用文字说明就不要添加神秘图标。
+
+## 4. 布局：秩序之中有呼吸
+
+### 4.1 对齐与比例
+
+- 先确定统一的内容边界、对齐基线和列结构。尽量让标题、工具栏、表头、列表和详情共享可辨认的对齐关系。
+- 阅读型正文不宜无限拉宽；可从 **640–760px** 的阅读列开始。工具型页面可利用更宽空间，但要为列表、侧栏和详情分配明确宽度。
+- 不把所有内容强行居中。根据任务允许左对齐、局部错列、不同宽度的组合，但必须能解释视觉重心。
+- 采用网格辅助对齐，而不是把网格变成监狱。**一次经过设计的打破规则，比随机错位更有力量。**
+- 独立滚动区域要克制；避免侧栏、主区、面板同时出现三个难以理解的滚动条。
+
+### 4.2 间距系统
+
+基础间距建议：`4 / 8 / 12 / 16 / 24 / 32 / 48 / 64px`。可按品牌比例整体调整。
+
+- 4–8：图标与标签、紧密关联内容。
+- 12–16：同一组件内部、普通控件间。
+- 24–32：相邻内容组与小章节。
+- 48–64 及以上：页面章节、视觉转场、重要留白。
+
+**决定间距的是关系，不是数字。** 同组元素要明显比跨组元素靠近；不要每个间隔都设为 24px，更不要通过无限加大间距假装高级。
+
+### 4.3 疏密与节奏
+
+按场景支持三种**空间状态**，不强制每个项目都实现切换按钮：
+
+- **展示**：有呼吸感，适合首页、章节入口、作品展示。
+- **标准**：日常操作默认选择，文字清楚、视线流畅。
+- **紧凑**：列表、数据表、记录、长目录等高频扫描场景。
+
+让页面内部形成节奏：**宽松的开场 → 紧凑的任务内容 → 适当的阶段间隔**。大片留白可以存在，但要有构图意义，不能只因为内容没做完。
+
+## 5. 排版：用字体做设计，而不是只放大标题
+
+- 中文正文优先清晰的无衬线字体；英文可选一款性格鲜明但易读的字体。中文和英文字重、基线、行高需协调。
+- 重要标题可以**选择性**采用高质量衬线字体，创造编辑感；工具栏、导航、表单与数据仍以清楚的无衬线为主。不要每个标题都用宋体。
+- 推荐建立角色而非死板字号：展示标题、页面标题、分组标题、正文、辅助文字、标签、数字/代码。
+- 可参考的桌面起点：展示标题 **36–56px**（视内容调整）、页面标题 **26–34px**、小标题 **17–22px**、正文 **14–16px**、辅助文字 **12–14px**。移动端按布局调整，不机械同比缩放。
+- 段落需要舒适行高；中文长文建议略疏，密集列表可以紧一些。标题不宜行距松散。
+- **增强对比而非普遍变小变灰。** 主信息足够醒目，次信息柔和但仍可读；不要把整页文字都做成浅灰色 12px。
+- 数字列右对齐或按小数位对齐；编号、时长、路径、代码可以使用等宽或表格数字特性，但不要把普通中文说明全部等宽化。
+- 不把英文全大写、小号编号、斜杠和中点当作廉价的“设计感”。它们必须承担实际组织信息的作用。
+
+## 6. 颜色、表面与材质
+
+先定义**语义颜色**，再选择色值：`canvas / surface / surface-muted / text / text-secondary / border / accent / success / warning / danger / focus`。
+
+默认探索方向可采用偏暖的纸面中性色、深灰文字与一种具有质感的强调色；**这是参考气质，不是跨项目强制配色**。
+
+- 主次层级优先靠字重、留白、位置和明度体现，不靠给每一块内容上不同底色。
+- 强调色集中给主操作、明确状态、交互焦点或少数视觉亮点；不把所有按钮都染成强调色。
+- 层次优先选择：留白 → 轻微底色差 → 细边框 → 柔和阴影；不要同时叠满。
+- 深色模式需重新设计表面层级、文字对比和阴影，而非简单反转颜色。
+- 允许局部使用鲜明色块、渐变、肌理或摄影，但必须与品牌和内容相关，并且可被明确解释。
+- 保证可读对比度；重要正文优先满足 WCAG AA 对比要求，不能为了“灰得高级”让信息难以看清。
+
+## 7. 组件：好用、安静，有自己的细节
+
+### 导航
+- 清晰区分主导航、当前路径与页内导航；不要把它们混成三层重复入口。
+- 选中状态可以用背景、文字权重、侧边细线或组合表达，但视觉强度要低于页面主内容。
+- 侧栏宽度按内容而定，折叠后仍需保留可理解的图标/提示。
+
+### 列表与表格
+- 高信息密度优先列表或表格，**不要自动改成大卡片墙**。
+- 用户最关心的列更突出；列宽、数字、状态与操作位置稳定。
+- 悬停时才出现次要行操作，但触屏、键盘及可访问场景必须仍可找到。
+- 对长文字、缺失值、空状态、加载、错误和极端数据做真实处理。
+
+### 卡片与详情
+- 只有当内容确实构成一个独立对象或交互单元时才使用卡片。
+- 详情面板避免变成从上到下均匀排列的标签—数值表；允许挑出一两个核心信息加强表现，其他内容保持整洁。
+- 信息分组主要使用间距；边框只用于确有必要的边界。
+
+### 表单与弹窗
+- 标签、说明、错误、输入与反馈之间有清晰的空间和层级关系。
+- 破坏性操作必须准确解释后果；按钮顺序、措辞和焦点行为保持一致。
+- 弹窗不应承担可以在页面内完成的全部操作。
+
+### 图标
+- 全项目优先统一一套图标语言（如 Lucide），不混用实心、线性、拟物和 Emoji。
+- 尺寸起点：辅助 **16px**，导航/操作 **18–20px**，较重要入口 **20–24px**。保证线宽与视觉中心一致。
+- **图标必须帮助识别。** 模糊语义的图标配文字；重复文字含义的装饰图标可直接去掉。
+- 图标本身小，不代表可点击区域也小；常用交互目标应有足够触控面积。
+
+## 8. 动效：让界面有生命，而不是一直在动
+
+动作应至少承担以下一种职责：**回应操作、说明空间关系、引导注意、呈现状态变化、增加有分寸的愉悦感**。
+
+- 普通悬停/按下：可从 **120–180ms** 调整；面板、弹窗等空间变化可从 **180–280ms** 调整，依据实测手感选择。
+- 优先使用透明度、轻微位移、遮罩揭示、线条长度和状态过渡；尽量避免导致整页重排的动画。
+- 可以形成一两种**标志性微动效**：例如链接下划线从一侧生长、当前项侧线渐显、菜单轻盈进入、章节内容温和出现。
+- 不要给所有卡片统一加悬停上浮，也不要让每段文字依次飞入。
+- 动效节奏需要变化：高频操作快速直接，重要场景转场可以更从容。
+- 支持 `prefers-reduced-motion`，键盘操作和低性能设备上也必须保持稳定。
+
+## 9. 艺术化的具体抓手（可选，但不能全部省略）
+
+不要把“有艺术感”简化为换色值。每个主要产品至少应该从下面挑选 **2–3 种有意义的表达手段**，形成自己的视觉辨识度：
+
+1. **字体主角**：有性格的主标题与克制的功能文字形成对比。
+2. **编辑式构图**：合理的偏置、非等宽列、大小比例变化，而不是全屏完美对称。
+3. **节奏性留白**：密集信息与开阔区域交替，让页面有呼吸。
+4. **精细线条**：轻盈分隔线、悬停生长线、刻度、连接关系或带意义的边缘强调。
+5. **内容驱动的图形**：真实状态曲线、模型/设备示意、工程剖面、知识图解等，而不是随机波形。
+6. **有性格的状态反馈**：加载、成功、切换、拖动、选中都显得细心设计过。
+7. **精心选择的视觉素材**：图像、插画、照片、图表与页面布局相互呼应，并有合法来源。
+8. **局部强对比**：在关键区域使用更大胆的字号、色块或版式，其他区域收敛。
+
+**重要：艺术表达应依附于内容与任务。** 不制造虚假仪表数据，不把装饰图形伪装成有意义的性能曲线；既不能过度炫技，也不能因为怕出错而做成毫无个性的灰白表格。
+
+## 10. 交互一致性与基本质量
+
+- 明确 `default / hover / focus-visible / active / selected / disabled / loading / error / success` 状态。
+- 键盘导航、Esc 关闭、焦点管理、悬停提示、空状态、窄屏、长内容应真实可用。
+- 颜色不能是唯一状态信号；需要文字、形状或图标辅助。
+- 窄屏时重新组织主次区域：次要面板可以变抽屉、筛选可以折叠、表格可保留横向滚动；不要单纯把所有内容缩小。
+- 控件响应准确，绝不做一排看起来能点但实际无效的按钮。
+- 图片、字体、动画不得显著拖慢页面；优先流畅和稳定，不为效果牺牲性能。
+
+## 11. 推荐工程实现方式（不绑定技术栈）
+
+- 使用统一的**设计变量**管理颜色、字号、间距、圆角、边框、阴影、动画时间等；组件引用变量，避免散落的魔法数字。
+- 成熟的交互基础组件优先复用；外观可以自由调整。React 可参考 shadcn/ui、Base UI，图标可参考 Lucide；其他技术栈选择等价工具。
+- 做出少量高质量基础组件并在全站复用，但不要为了统一而强迫所有页面使用同一种卡片模板。
+- 保留真实语义结构、状态管理、可维护性和现有业务逻辑。
+- 在设计文档中记录**选择理由**而不仅是参数，例如“为何这是首屏唯一强调色”“为何模型列表比首页更紧凑”。
+
+可选的语义变量示例（这是**受 Claude / Anthropic 温润色彩启发的可直接运行默认方案**，并非官方网页 CSS；项目应结合参考图与品牌调整）：
+
+```css
+:root {
+  --canvas: #faf9f5;
+  --surface: #ffffff;
+  --surface-muted: #f3f1ec;
+  --text-primary: #292824;
+  --text-secondary: #6b675f;
+  --border-subtle: #e4e0d8;
+  --accent: #d97757;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-control: 10px;
+  --radius-panel: 16px;
+  --duration-fast: 150ms;
+  --duration-panel: 220ms;
+}
+```
+
+## 12. AI 工作流程：先看到，再判断，再改进
+
+1. **读懂现状与参考。** 检查页面、代码、组件、品牌约束和用户给出的截图；按第 1.7 节写出参考卡。已有优秀之处先保留。
+2. **写下设计意图。** 每页用 1–2 句话说明主要任务、视觉焦点、布局结构和选用的艺术手段。
+3. **先构图，后细节。** 先决定占比、阅读路径、疏密与主次，再做字体、颜色、圆角、图标和微动效。
+4. **运行真实页面。** 不以编译通过或代码想象代替浏览器实际效果。
+5. **相同尺寸截图比对。** 除了修改前后对比，还需与第 1 章选定的真实参考页面对照；同时检查正常、悬停、选中、弹窗、详情、长文本、窄屏、深色（若支持）等状态。
+6. **针对问题修正。** 优先解决视觉重心、信息层级、错位、过空或过挤，再处理细小装饰。
+7. **去掉多余东西。** 如果移除某个边框、卡片、图标、动效后更清楚、更好看，就移除。
+8. **再加一点个性。** 如果页面整齐但乏味，检查是否缺少字体对比、局部构图变化、真实数据表达或有记忆点的微动效；不要退回平庸默认模板。
+
+### 最终验收的六个问题
+
+- **清楚吗？** 用户能在几秒内理解页面功能和主操作吗？
+- **有节奏吗？** 重要与次要、疏与密、静与动是否有层次？
+- **有性格吗？** 除去 Logo，是否还留有让人记住的视觉细节？
+- **统一吗？** 页面之间有共同的字体、颜色、间距、图标和反馈规则吗？
+- **舒服吗？** 长时间使用是否易读、易操作，不因艺术化产生负担？
+- **真实吗？** 图形、状态与按钮是否具有真实含义和实际行为？
+
+如上述任何一项明显不成立，应继续修正，不能仅以“现代、简约、高级”作为验收结论。
+
+## 13. 反模式：避免机械套用，但不要把形式一概封杀
+
+以下表现需要警惕：
+
+- 到处是同样大小的卡片、统计数字和无关图标。
+- 为了“高级感”把文字做得过小过灰、间距无限放大。
+- 为了“艺术感”随意错位、加渐变、随机线条、玻璃材质和无意义插画。
+- 不论产品是什么，都使用同一套暖白背景、陶土橙按钮、巨型衬线标题。
+- 不论页面做什么，都放相同的首屏介绍、四个指标和三列功能卡。
+- 任何界面都套用同一种无差别动效和圆角。
+- 只看静态截图，忽略点击、输入、滚动、键盘和窗口变化。
+- 为了设计规范过于保守，最终只剩规整、无聊、毫无记忆点的页面。
+
+**反模式不是禁用名单。** 只要有内容依据、品牌理由和真实使用价值，渐变、鲜明配色、不对称、玻璃效果、卡片、插画都可以被恰当地使用。
+
 ---
-name: Llama Manager
-description: A translucent Chinese-language workspace for local inference profiles and server operations.
-colors:
-  light-bg: '#e9edf5'
-  light-bg-elevated: '#f8f9fd'
-  light-glass: rgba(255,255,255,.72)
-  light-glass-strong: rgba(255,255,255,.94)
-  light-glass-soft: rgba(255,255,255,.46)
-  light-glass-edge: rgba(255,255,255,.85)
-  light-line: rgba(36,40,64,.12)
-  light-line-strong: rgba(36,40,64,.25)
-  light-text: '#222337'
-  light-text-2: '#484b62'
-  light-text-3: '#64677c'
-  light-accent: '#b3344c'
-  light-accent-fill: '#f58f9e'
-  light-accent-hover: '#f27d8e'
-  light-accent-fg: '#32131e'
-  light-accent-soft: rgba(203,73,100,.10)
-  light-blue: '#3267c4'
-  light-blue-soft: rgba(50,103,196,.12)
-  light-green: '#197247'
-  light-green-soft: rgba(25,114,71,.10)
-  light-yellow: '#916000'
-  light-yellow-soft: rgba(145,96,0,.10)
-  light-red: '#b83443'
-  light-red-soft: rgba(184,52,67,.10)
-  light-input: rgba(255,255,255,.62)
-  light-input-hover: '#fff'
-  light-option-bg: '#fff'
-  light-option-fg: '#222337'
-  light-log-bg: '#181b2c'
-  light-log-text: '#e4e8f3'
-  light-flow-1: rgba(124,145,224,.30)
-  light-flow-2: rgba(241,156,166,.35)
-  light-flow-3: rgba(168,188,232,.30)
-  light-flow-4: rgba(194,174,236,.25)
-  dark-bg: '#10111c'
-  dark-bg-elevated: '#181a29'
-  dark-glass: rgba(36,37,56,.72)
-  dark-glass-strong: rgba(38,39,58,.95)
-  dark-glass-soft: rgba(255,255,255,.045)
-  dark-glass-edge: rgba(255,255,255,.13)
-  dark-line: rgba(255,255,255,.10)
-  dark-line-strong: rgba(255,255,255,.24)
-  dark-text: '#f0eff8'
-  dark-text-2: '#c3c3d5'
-  dark-text-3: '#a0a1b7'
-  dark-accent: '#ffa1b0'
-  dark-accent-fill: '#ffa1b0'
-  dark-accent-hover: '#ffb5c1'
-  dark-accent-fg: '#32131e'
-  dark-accent-soft: rgba(255,161,176,.10)
-  dark-blue: '#9cbcff'
-  dark-blue-soft: rgba(156,188,255,.12)
-  dark-green: '#78d9a4'
-  dark-green-soft: rgba(120,217,164,.10)
-  dark-yellow: '#ebc978'
-  dark-yellow-soft: rgba(235,201,120,.10)
-  dark-red: '#ffa2ac'
-  dark-red-soft: rgba(255,162,172,.10)
-  dark-input: rgba(255,255,255,.055)
-  dark-input-hover: rgba(255,255,255,.09)
-  dark-option-bg: '#26273a'
-  dark-option-fg: '#f0eff8'
-  dark-log-bg: '#111320'
-  dark-log-text: '#e1e3ef'
-  dark-flow-1: rgba(90,91,185,.18)
-  dark-flow-2: rgba(186,79,116,.17)
-  dark-flow-3: rgba(76,99,173,.14)
-  dark-flow-4: rgba(133,81,181,.15)
-  light-violet-accent: '#7040c8'
-  light-violet-accent-fill: '#7040c8'
-  light-violet-accent-hover: '#6033b3'
-  light-violet-accent-fg: '#fff'
-  light-violet-accent-soft: rgba(112,64,200,.10)
-  light-ocean-accent: '#285fb9'
-  light-ocean-accent-fill: '#285fb9'
-  light-ocean-accent-hover: '#21509d'
-  light-ocean-accent-fg: '#fff'
-  light-ocean-accent-soft: rgba(40,95,185,.10)
-  light-amber-accent: '#945315'
-  light-amber-accent-fill: '#efb77a'
-  light-amber-accent-hover: '#eaa962'
-  light-amber-accent-fg: '#352110'
-  light-amber-accent-soft: rgba(148,83,21,.10)
-  dark-violet-accent: '#c2a9ff'
-  dark-violet-accent-fill: '#c2a9ff'
-  dark-violet-accent-hover: '#d1bfff'
-  dark-violet-accent-fg: '#261342'
-  dark-ocean-accent: '#9abfff'
-  dark-ocean-accent-fill: '#9abfff'
-  dark-ocean-accent-hover: '#b1ceff'
-  dark-ocean-accent-fg: '#122642'
-  dark-amber-accent: '#f0bf88'
-  dark-amber-accent-fill: '#f0bf88'
-  dark-amber-accent-hover: '#f7cea2'
-  dark-amber-accent-fg: '#352110'
-typography:
-  headline:
-    fontFamily: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif
-    fontSize: 30px
-    lineHeight: 1.3
-    letterSpacing: -.025em
-    fontWeight: 750
-  featured-title:
-    fontFamily: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif
-    fontSize: 26px
-    lineHeight: 1.4
-    letterSpacing: -.025em
-    fontWeight: 650
-  card-title:
-    fontFamily: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif
-    fontSize: 18px
-    lineHeight: 1.4
-    letterSpacing: -.025em
-    fontWeight: 650
-  panel-title:
-    fontFamily: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif
-    fontSize: 14px
-    lineHeight: 1.5
-    letterSpacing: '0'
-    fontWeight: 650
-  body:
-    fontFamily: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif
-    fontSize: 14px
-    lineHeight: 1.5
-    letterSpacing: '0'
-  label:
-    fontFamily: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif
-    fontSize: 12px
-    lineHeight: 1.5
-    letterSpacing: '0'
-    fontWeight: 550
-  resource-value:
-    fontFamily: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif
-    fontSize: 26px
-    lineHeight: 1.5
-    letterSpacing: -.03em
-    fontWeight: 650
-  command:
-    fontFamily: '"SFMono-Regular", Consolas, monospace'
-    fontSize: 12px
-    lineHeight: 1.5
-rounded:
-  small: 10px
-  panel: 16px
-  model-card: 18px
-  shell: 20px
-  workspace-dialog: 22px
-  badge: 7px
-  parameter-chip: 5px
-spacing:
-  control-gap: 8px
-  compact: 12px
-  shell-gap: 16px
-  grid-gap: 18px
-  panel-inset: 20px
-  section: 24px
-  featured-inset: 28px
-  page-inset: 30px
-components:
-  button-primary:
-    backgroundColor: '{colors.light-accent-fill}'
-    textColor: '{colors.light-accent-fg}'
-    rounded: '{rounded.small}'
-    padding: 0 14px
-  button-default:
-    backgroundColor: '{colors.light-glass-soft}'
-    textColor: '{colors.light-text-2}'
-    rounded: '{rounded.small}'
-    padding: 0 14px
-  button-danger:
-    backgroundColor: '{colors.light-red-soft}'
-    textColor: '{colors.light-red}'
-    rounded: '{rounded.small}'
-    padding: 0 14px
-  input:
-    backgroundColor: '{colors.light-input}'
-    textColor: '{colors.light-text}'
-    rounded: '{rounded.small}'
-    padding: 0 12px
-    height: 40px
-  panel:
-    backgroundColor: '{colors.light-glass}'
-    textColor: '{colors.light-text}'
-    rounded: '{rounded.panel}'
-    padding: 20px
-  badge:
-    backgroundColor: '{colors.light-glass-soft}'
-    textColor: '{colors.light-text-2}'
-    rounded: '{rounded.badge}'
-    padding: 3px 9px
-  model-card:
-    backgroundColor: '{colors.light-glass}'
-    textColor: '{colors.light-text}'
-    rounded: '{rounded.model-card}'
-    padding: 22px
-  button-primary-hover:
-    backgroundColor: '{colors.light-accent-hover}'
-    textColor: '{colors.light-accent-fg}'
-  badge-good:
-    backgroundColor: '{colors.light-green-soft}'
-    textColor: '{colors.light-green}'
-    rounded: '{rounded.badge}'
-    padding: 3px 9px
----
 
-# Design System: Llama Manager
+## 一句话执行原则
 
-## Overview
+**先用成熟产品的秩序保证好用，再用排版、构图、节奏、真实内容和细腻交互赋予作品生命；让每一处与众不同都有理由，也让每一处克制都不显得乏味。**
 
-**Creative North Star: "Liquid Inference Workspace"**
 
-The approved world is a contemporary translucent desktop application: liquid glass, coral light, a floating shell, and spacious task hierarchy. Model identity and precise resource composition provide character. The user explicitly rejected an old-fashioned conservative dashboard direction.
+## 14. 有度量依据的轻构成图形
 
-This records the implemented refinement, not a replacement identity. Chinese UI, both themes, and four accent choices remain. The North Star is descriptive documentation language, not a new brand claim. PRODUCT.md holds confirmed product facts and separately marked audience assumptions; neither inferred personas nor commercial claims become visual rules.
+当几何图形承担品牌或内容表达时，先从真实标志、物件或数据取得坐标与比例，再把构造线、尺寸标注和最终图形组织为清楚的阅读顺序；度量应能解释形态，不能只是装饰性的工程符号。让构成有一个明确的展示位置，并把日常操作区留给内容与任务。
 
-**Key Characteristics:**
-- Floating glass shell and stronger translucent overlays.
-- Readable work surfaces with distinct model hierarchy.
-- Theme-aware accents and semantic status colors.
-- Truthful estimates and a shared resource scale.
-- Immediate content, short feedback, and protected focus.
-
-Evidence: `frontend-src/src/styles/tokens.css`, `styles/global.css`, `App.module.css`, `components/ui.module.css`, `components/ResourceUsage.tsx` and its CSS, `components/Modal.tsx`, `components/SettingsDrawer.tsx` and its CSS, `features/models/ModelsPage.tsx` and `models.module.css`, `features/pages.module.css`, `features/config/ConfigPage.tsx`, and `features/chat/ChatPage.tsx` and `chat.module.css`. File paths after the first share the `frontend-src/src/` root. Direction authority: `.impeccable/direction.md` and PRODUCT.md.
-
-## Colors
-
-The frontmatter preserves source CSS strings exactly. `light-` and `dark-` keys describe theme values; accent-specific keys describe selector overrides. Component frontmatter records the light coral baseline; live controls bind to semantic CSS variables. No color value in this document replaces the source tokens. Sidecar tonal ramps are synthesized OKLCH preview metadata; they are not additional application tokens.
-
-### Primary
-Coral is the default. Light coral and amber separate accent ink from action fill; violet and ocean use their stronger fill. Dark themes replace accent, fill, hover, and foreground with lighter counterparts. Each alternative retains its base selector's soft accent tint. Use the active foreground rather than assuming white labels. Appearance-picker swatches are previews, not the normative action colors.
-
-### Secondary
-Information blue supports links and graph composition. Success green identifies running state and successful actions. Warning amber and error red communicate safety, missing files, and failure; semantic warning is separate from the user's amber accent preference.
-
-### Neutral
-Cool/deep backgrounds and elevated surfaces support the workspace. Glass, strong glass, soft glass, and edge tokens distinguish shells, overlays, and local groupings. Three text levels, two line strengths, input/option colors, and dedicated log colors keep operational content readable. Four ambient flow tokens create static blurred fields behind the shell.
-
-**The Paired Accent Rule.** Use active accent ink for text and pair active fill, hover, and foreground for filled actions.
-
-## Typography
-
-The multilingual sans-serif stack in the frontmatter is the incumbent operational font. Code and commands use the recorded monospace stack; the server address uses Consolas with a monospace fallback. There is no separate display face or invented modular scale.
-
-### Hierarchy
-- **Headline:** page title; mobile size is 26px.
-- **Featured title:** current/running profile; size becomes 22px at 900px and below.
-- **Card title:** comparable profile identity.
-- **Panel title:** compact section headings.
-- **Body:** operational text and conversation; buttons use weight 550.
-- **Label:** field captions and badges; regular supporting copy also uses 12px without requiring label weight.
-- **Command:** technical insets and logs.
-- **Resource value:** estimated GB total with tabular numerals.
-
-Local roles include 13px page descriptions/resource headings, 22px dialog titles, 15px settings header text, and 16px/600 model facts with tabular numerals.
-
-**The Model Identity Rule.** Distinguish actual current/running profiles through featured type and visible badges; ordinary saved profiles retain the card-title role.
-
-## Layout
-
-Desktop shell: 100px rail, flexible workspace, 68px top bar, 16px gap, and 18px outer padding. The workspace scrolls independently; pages use 30px padding. At 1120px and below: 84px rail, 12px gap, 14px shell padding, 24px page padding; server address is hidden.
-
-At 680px and below: one column with 60px top bar, flexible content, and 66px bottom navigation; 8px gaps/padding; page inset 18px 14px. All six workspace labels stay visible at 11px with 17px SVG icons. Settings retains its accessible icon control. At 360px and below the brand tightens. Mobile toasts use an 88px bottom offset above navigation.
-
-Model cards auto-fill with `minmax(min(100%,390px),1fr)`, an 18px gap, and 22px padding. Featured cards span the grid, use 28px padding and two body columns (1:.9) separated by 48px. At 900px they stack with a 24px gap. At 680px card padding is 18px, grid gap 14px, search takes the row, and actions wrap.
-
-Configuration split is 1.35:.65 with a 340px aside minimum and 24px gap. The aside pairs the resource estimate with the live command. It stacks and loses stickiness at 1180px. Forms collapse at 760px. The configuration/save bar is sticky on desktop and static at 680px. Drawer provider controls stack at 560px.
-
-Chat uses toolbar, independently scrolling messages, and composer rows. At 680px toolbar groups wrap, composer becomes two columns, textarea minimum is 72px, and send occupies the second column beneath it. Content is visible immediately; no staggered entrance sequence.
-
-## Elevation & Depth
-
-Depth combines tonal layers, translucent edges, diffuse shadows, and blur. Top bar, rail, chat container, dialogs, drawer, and toasts use structural glass. Work panels/model cards use translucent fills and boundaries without adding backdrop blur to every card. The workspace blends elevated background at 84%. Ambient fields are static with 50px blur. The chat container removes its earlier shadow in the final cascade.
-
-### Shadow Vocabulary
-Exact light/dark panel and shell shadows are in the sidecar. Panel shadows support the top bar and local floating surfaces. Shell shadows support dialogs, drawer, toast, and the top bar after scrolling beyond 16px. Primary action lift is `0 3px 8px rgba(28,14,28,.10)`; input focus adds `0 3px 10px var(--accent-soft)` to its border and keyboard outline. Shared glass filtering is `blur(24px) saturate(1.3)`. Dialog backdrops use 12px blur; settings backdrops use 5px.
-
-**The Structural Glass Rule.** Use blur for floating surfaces; separate core work through fill, border, and spacing.
-
-## Shapes
-
-Soft rectangles use the recorded radius hierarchy. Navigation has 12px corners, mobile shell surfaces have 16px corners, and badges/parameter chips are compact rectangles. Resource tracks have 4px corners and 12px height; their 2px marker extends to 18px. Ordinary borders are 1px. Featured state changes tint and boundary, not card geometry.
-
-## Components
-
-### Buttons
-Normal actions have 38px minimum height, 14px horizontal padding, 7px icon gap, small corners, and weight 550. Small actions use 32px minimum and 10px padding; icon widths match 38px/32px. The later mobile base rule gives buttons a 40px minimum. Primary/default/danger/success variants use semantic pairs. Hover changes fill/boundary; press scales to .98; disabled opacity is .5 with a not-allowed cursor. Icon-only actions expose an accessible label from their title.
-
-Destructive or draft-discard actions use the implemented explicit dialog or two-stage confirmation button with a 3000ms arming timeout.
-
-### Chips
-Badges use a 24px minimum, 3px 9px padding, and good/bad/warn semantic pairs. Parameter chips use 5px 8px padding. Keep text labels so state does not depend on color alone.
-
-### Cards / Containers
-Shared panels use a glass fill, subtle line, and 20px body padding. Headers have 58px minimum height and 12px 20px padding; mobile headers use 14px and bodies 16px 14px. Model cards show identity, engine/context/file facts, missing-file state, and named parameter details. Unknown resources show an explanation rather than fabricated values. Featured cards use a 115-degree accent wash fading at 65%; running state uses a green boundary. Preserve visible current/running badges.
-
-### Inputs / Fields
-Fields use 12px captions and 8px internal gap. Inputs/selects are 40px tall with 12px horizontal padding. Textareas have 100px minimum and 12px padding. Use theme input/hover/option surfaces, accent caret, and accent focus border. Keyboard outline is 2px offset by 2px; switches place their outline 3px from the track.
-
-### Navigation
-Rail links have 66px minimum height, 20px SVG icons, and visible labels. Selected links pair accent ink/soft fill with an inset highlight. Hover raises text contrast and uses soft glass. Mobile keeps six labeled workspace links in bottom navigation.
-
-### Resource Estimate
-This graphic estimates resources; it is not runtime GPU telemetry. The existing capacity assumption is 8 GB with a 7.4 GB safety line. Domain is `max(8, estimatedTotalGb)`. Segment widths use `max(0, partGb / domain * 100)%`; marker position is `7.4 / domain * 100%` on the same scale. Above 8 GB, composition and marker stay proportional. Text and legend show values; overage includes explicit error-colored warning text. The accessible graphic label states estimate, safety line, and capacity. Noncompact estimates explain model-based assumptions and defer actual usage to running results.
-
-### Advanced Disclosures
-Named native details/summary sections group KVMem/NInfer, sampling/speculative decoding, and prompts/extra arguments. Section names and content summaries remain visible; expanded bodies have 24px bottom separation. Core model/path controls and save actions stay visible. Disclosure does not remove parameter values or keyboard access.
-
-### Overlays, Motion, and Errors
-Portaled dialogs/drawers have accessible names, `role=dialog`, `aria-modal`, initial focus, focus containment, Tab/Shift+Tab cycling, Escape dismissal, and return focus to the previous connected control. Backdrop dismissal only responds to the backdrop. Confirmation actions disable while pending.
-
-Shared state transitions are 180ms with the source easing; graph widths use 220ms ease-out. Drawer entry is 80px with spring stiffness 360/damping 34; its backdrop and toast use .18s feedback. Drawer/toast explicitly use reduced-motion branches with no initial displacement and zero duration. Global CSS reduces duration to .01ms, one animation iteration, and automatic scroll behavior. Existing caveat: ChatPage's JavaScript auto-scroll still explicitly requests smooth behavior; the CSS override is not evidence of a JS preference branch. This pass does not canonize that omission or change source.
-
-Configuration failures retain edits and show actionable alerts. Dirty loads ask for discard or cancel. Provider failures retain the draft with retry feedback. Chat guards duplicate requests, retains the composer until send is accepted, and then preserves the prompt as a turn after clearing the composer; failures appear on the affected answer. Do not claim failed chat generation restores the composer. Toasts use a polite live status region.
-
-## Do's and Don'ts
-
-### Do:
-- **Do** preserve glass/coral, both themes, and four accent treatments.
-- **Do** use paired semantic colors and visible focus.
-- **Do** prioritize actual model identity and current/running state.
-- **Do** share the estimate domain with the safety marker and explain assumptions.
-- **Do** retain labeled mobile navigation and reachable composer controls.
-- **Do** preserve confirmations, draft lifecycle, and actionable errors.
-
-### Don't:
-- **Don't** replace the approved world with a conservative dashboard.
-- **Don't** invent live GPU readings, performance numbers, audience research, or commercial claims.
-- **Don't** blur every work card or continuously animate the ambient background.
-- **Don't** remove parameters or hide save operations through disclosure.
-- **Don't** invent a display-face role or model imagery.
-
-Not canonized: pre-existing explicit smooth chat auto-scroll and text-glyph plus/minus/warning indicators. They are carried implementation caveats, not reusable system rules; this bounded documentation pass does not repair source.
+**轻构成规则。** 构造图形的艺术强度集中在一个入口或关键状态；密集操作界面保持安静。动态只用于说明构成、响应明确操作或呈现状态，首次展示后停留，重播由用户触发，并为系统及显式减少动态偏好提供完整静态结果。

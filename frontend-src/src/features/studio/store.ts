@@ -1,3 +1,4 @@
+import { api as sharedApi } from "../../api";
 import { create } from "zustand";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { api, putKeepalive, runAgent, type AgentEvent } from "./api";
@@ -74,6 +75,10 @@ interface QueueItem {
 }
 
 interface State {
+  projectId: string;
+  mobilePanel: "editor" | "agent";
+  agentOpen: boolean;
+  inspectorOpen: boolean;
   ready: boolean;
   bootError: string;
   series: Series[];
@@ -86,6 +91,7 @@ interface State {
   selection: string[];
   tool: Tool;
   drawLabel: ItemLabel;
+  drawShape: "rectangle" | "ellipse" | "polygon" | "pen";
   showWire: boolean;
   freeCam: boolean;
   compileOpen: boolean;
@@ -122,6 +128,7 @@ const S = {
   coalesceAt: 0,
   checkpointAt: {} as Record<string, number>,
   abort: null as AbortController | null,
+  starting: false,
   toastId: 1,
 };
 
@@ -136,6 +143,10 @@ function loadMovePrefs(): { moveScope: MoveScope; moveHold: CamHold } {
 }
 
 export const useStore = create<State>(() => ({
+  projectId: "project_default",
+  mobilePanel: "editor",
+  agentOpen: true,
+  inspectorOpen: false,
   ready: false,
   bootError: "",
   series: [],
@@ -148,6 +159,7 @@ export const useStore = create<State>(() => ({
   selection: [],
   tool: "select",
   drawLabel: "object",
+  drawShape: "rectangle",
   showWire: true,
   freeCam: false,
   compileOpen: false,
@@ -265,11 +277,13 @@ export async function boot() {
     const se = series.find((x) => x.id === st.seriesId) || series[0];
     const page = se.pages.find((p) => p.id === st.pageId) || se.pages[0];
     set({
+      projectId: ws.project_id || "project_default",
       series, seriesId: se.id, pageId: page.id, doc: clone(page.doc), settings, skills,
       autoApprove: !!st.autoApprove, quick: Array.isArray(st.quick) && st.quick.length ? st.quick : DEFAULT_QUICK,
       showWire: st.showWire !== false, cameraPanelOpen: st.cameraPanelOpen !== false, ready: true,
     });
     await loadSessions(se.id, st.sessionId);
+    if (!get().streaming) { const active = await api.activeAgent(get().sessionId).catch(() => null); if (active?.job_id) void run("", {}, active.job_id); }
   } catch (e) {
     set({ bootError: errText(e) });
   }
@@ -350,7 +364,7 @@ export function flushSaveOnExit() {
   const s = get();
   if (!s.doc || !s.pageId || s.saveState === "saved") return;
   clearTimeout(S.saveTimer);
-  putKeepalive(`/api/pages/${s.pageId}`, { doc: s.doc });
+  putKeepalive(`/api/v1/pages/${s.pageId}`, { doc: s.doc });
 }
 
 // ---------- 系列 / 分页 ----------
@@ -455,6 +469,8 @@ export function addItem(bbox: number[], label?: ItemLabel, extra?: Partial<Layou
   // 移过机位后画的世界框：bbox 是基准机位下的位置，可能在画布外，不能夹到画布里
   const world = !!extra?.body && (extra.body.anchor || "world") === "world" && cameraMoved(L);
   const it: LayoutItem = {
+    ...(get().drawShape === "polygon" ? { points: [[.1,0],[1,.15],[.9,1],[0,.85]] as [number,number][] } : {}),
+    shape: (get().drawShape === "pen" ? "polygon" : get().drawShape) as LayoutItem["shape"],
     id, label: lab, caption: "", bbox: world ? (bbox.map((v) => Math.round(v)) as LayoutItem["bbox"]) : clampBBox(bbox, L.width, L.height), color, depth: "auto",
     ...(lab === "text" ? { text: "" } : {}),
     ...(extra || {}),
@@ -798,11 +814,14 @@ export async function compileNow(open = true) {
   if (!s.doc) return;
   set({ compiling: true, compileOpen: open || s.compileOpen });
   try {
-    const draft = s.doc.kind === "layout" ? s.doc.layout : s.doc.caption;
     const view = s.doc.kind === "layout"
       ? { ...compileView(s.doc.layout), compiled: s.compileResult?.prompt || "" }
       : undefined;
-    const r = await api.compile(draft, view);
+    const target = s.doc.compile_target || 'moss';
+    const r = await sharedApi<CompileResult & { diagnostics?: string[] }>('/api/v1/compile', { method: 'POST', body: JSON.stringify({ doc: s.doc, target, view, asset_ids: s.doc.asset_ids || [] }) }, 300000);
+    r.checks = r.checks || ('diagnostics' in r ? r.diagnostics as string[] : []) || [];
+    r.prefix = r.prefix || ''; r.negative = r.negative || '';
+
     set({ compileResult: r, compileError: "", compileStale: get().doc !== s.doc });
   } catch (e) {
     set({ compileError: errText(e), compileResult: null, compileStale: get().doc !== s.doc });
@@ -931,16 +950,18 @@ export async function resolveProposal(messageId: string, pageId: string, status:
   if (!msg || !prop) return;
   const isCurrent = pageId === s.pageId && !!s.doc;
   let applied: Doc | undefined;
+  let expected: Doc | undefined;
   if (status !== "rejected") {
     const base = normalizeDoc(prop.base);
     const proposed = normalizeDoc(prop.proposed);
     const target = isCurrent ? s.doc! : normalizeDoc(s.series.flatMap((x) => x.pages).find((p) => p.id === pageId)?.doc);
+    expected = target;
     const all = status === "accepted" && deepEqual(target, base);
     applied = all ? proposed : applyChanges(target, base, proposed, keys || new Set(diffKeys(base, proposed)));
   }
   if (isCurrent) await flushSave();
   try {
-    const r = await api.resolveProposal(messageId, { page_id: pageId, status, applied_doc: applied });
+    const r = await api.resolveProposal(messageId, { page_id: pageId, status, applied_doc: applied, expected_doc: expected });
     patchMessage(r.message);
     if (r.page) {
       const doc = normalizeDoc(r.page.doc);
@@ -962,7 +983,7 @@ const diffKeys = (a: Doc, b: Doc) => diffDocs(a, b).map((c) => c.key);
 export function send(text: string, opts: SendOpts = {}) {
   const s = get();
   if (!text.trim() && !opts.attachments?.length) return;
-  if (s.streaming) {
+  if (s.streaming || S.starting) {
     set({ queue: [...s.queue, { id: newId("q"), text, opts }] });
     return;
   }
@@ -1005,14 +1026,15 @@ export function setQuick(q: QuickAction[]) {
   persistState();
 }
 
-export function setUi(patch: Partial<Pick<State, "showWire" | "cameraPanelOpen" | "compileOpen" | "tool" | "drawLabel" | "freeCam" | "modal" | "director" | "workspace">>) {
+export function setUi(patch: Partial<Pick<State, "showWire" | "cameraPanelOpen" | "compileOpen" | "tool" | "drawLabel" | "drawShape" | "freeCam" | "modal" | "director" | "workspace" | "mobilePanel" | "agentOpen" | "inspectorOpen">>) {
   set(patch);
   if ("showWire" in patch || "cameraPanelOpen" in patch) persistState();
 }
 
-async function run(text: string, opts: SendOpts) {
+async function run(text: string, opts: SendOpts, resumeJobId?: string) {
   const s0 = get();
-  if (!s0.doc) return;
+  if (!s0.doc || S.starting) return;
+  S.starting = true;
   await flushSave();
   const s = get();
   const sid = s.sessionId;
@@ -1029,11 +1051,12 @@ async function run(text: string, opts: SendOpts) {
   };
   const keep = (s.messages[sid] || []).filter((m) => !opts.replaceFromSeq || m.seq < opts.replaceFromSeq);
   set({
-    messages: { ...s.messages, [sid]: [...keep, temp] },
+    messages: resumeJobId ? s.messages : { ...s.messages, [sid]: [...keep, temp] },
     streaming: { sessionId: sid, text: "", reasoning: "", steps: [], pending: null, model: "", notices: [], ask: null, error: "" },
   });
   const ctrl = new AbortController();
   S.abort = ctrl;
+  S.starting = false;
   const upd = (fn: (st: Streaming) => Partial<Streaming>) =>
     set((st) => (st.streaming ? { streaming: { ...st.streaming, ...fn(st.streaming) } } : {}));
   let final: Message | null = null;
@@ -1047,6 +1070,9 @@ async function run(text: string, opts: SendOpts) {
         break;
       case "reasoning":
         upd((st) => ({ reasoning: st.reasoning + e.delta }));
+        break;
+      case "text_reset":
+        upd(() => ({ text: "", pending: null }));
         break;
       case "text":
         upd((st) => ({ text: st.text + e.delta }));
@@ -1084,7 +1110,7 @@ async function run(text: string, opts: SendOpts) {
       page_id: s.pageId, doc, view, message: text, selection: opts.selection || [], skill_ids: opts.skillIds || [],
       attachments: (opts.attachments || []).map((a) => a.id), replace_from_seq: opts.replaceFromSeq ?? null,
       quick: opts.quick ?? null, mode: opts.mode ?? null,
-    }, onEvent, ctrl.signal);
+    }, onEvent, ctrl.signal, resumeJobId);
   } catch (e) {
     if (!ctrl.signal.aborted) {
       const msg = errText(e);

@@ -1,4 +1,4 @@
-.chat { flex: 1 1 auto; height: auto; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-elevated); box-shadow: none; overflow: hidden }
+.chat { flex: 1 1 auto; height: auto; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) 0 auto; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-elevated); box-shadow: none; overflow: hidden }
 .toolbar { min-width: 0; min-height: 52px; padding: 8px 12px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: nowrap; align-items: center; gap: 12px }
 .toolbar .sessionGroup select { flex: 0 1 280px; width: 280px; min-width: 150px; max-width: 280px }
 .toolbar > span { min-width: 0; overflow-wrap: anywhere }
@@ -17,7 +17,7 @@
 .panelField select { flex: 0 0 auto; width: 100%; min-width: 0; max-width: none }
 .keyWarn { display: inline-flex; align-items: center; color: var(--yellow); cursor: help }
 .knowledgePicker { position: relative }.knowledgePicker summary { height: 36px; padding: 0 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--input); display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text-2); list-style: none; white-space: nowrap }.knowledgePicker>div { position: absolute; z-index: 12; top: 40px; right: 0; width: 250px; max-height: 260px; overflow: auto; border: 1px solid var(--glass-edge); border-radius: var(--radius); background: var(--glass-strong); box-shadow: var(--shadow-panel); padding: 7px }.knowledgePicker label { min-height: 40px; padding: 5px 7px; display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; column-gap: 7px; cursor: pointer }.knowledgePicker label input { grid-row: 1 / 3; accent-color: var(--accent) }.knowledgePicker label span,.knowledgePicker label small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }.knowledgePicker label small { color: var(--text-3); font-size: 10px }
-.messages { overflow: auto; padding: 26px clamp(20px, 6vw, 90px); display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth }
+.messages { overflow: auto; padding: 26px clamp(20px, 6vw, 90px); display: flex; flex-direction: column; gap: 20px; scroll-behavior: auto }
 .empty { flex: 1; display: grid; place-items: center; color: var(--text-3); text-align: center }
 .turn { display: contents }
 .user { align-self: flex-end; max-width: min(76%, 820px); padding: 10px 14px; border-radius: 6px 6px 2px 6px; background: var(--accent-soft); border: 0; white-space: pre-wrap; animation: msgRise 180ms cubic-bezier(.16, 1, .3, 1) }
@@ -39,6 +39,8 @@
 .attachment button { border: 0; background: transparent; color: var(--text-3); cursor: pointer; display: grid; place-items: center }
 .composeRow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: stretch; gap: 8px }
 .composeRow textarea { min-height: 42px; max-height: 150px; resize: none }
+.jumpRow{position:relative;height:0;z-index:2;display:flex;justify-content:center}
+.jumpRow>button{position:absolute;bottom:12px;border-radius:20px;box-shadow:var(--shadow-panel);background:var(--bg-elevated)}
 .markdown { min-width: 0; overflow-wrap: anywhere }
 .markdown > :first-child { margin-top: 0 }.markdown > :last-child { margin-bottom: 0 }
 .markdown p { margin: 0 0 10px }.markdown h1 { font-size: 20px }.markdown h2 { font-size: 17px }.markdown h3 { font-size: 15px }
@@ -71,10 +73,10 @@
 
 .prefillWait { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 12px }
 .prefillDots { display: inline-flex; gap: 4px }
-.prefillDots i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: prefillBounce 1.2s ease-in-out infinite }
+.prefillDots i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: prefillPulse 1.2s ease-in-out infinite }
 .prefillDots i:nth-child(2) { animation-delay: .15s }
 .prefillDots i:nth-child(3) { animation-delay: .3s }
-@keyframes prefillBounce { 0%, 60%, 100% { transform: translateY(0); opacity: .35 } 30% { transform: translateY(-4px); opacity: 1 } }
+@keyframes prefillPulse { 0%, 60%, 100% { opacity: .45 } 30% { opacity: 1 } }
 .userFiles { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px }
 .userFile { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-2); background: rgba(255,255,255,.14); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .userFileThumb { width: 26px; height: 26px; object-fit: cover; border-radius: 4px }
@@ -91,3 +93,39 @@
 
 .composer { padding:14px 18px }.composeRow textarea { min-height:52px }.chat { box-shadow:none }.messages { padding:24px }.empty p { color:var(--text);font-size:22px;font-weight:650;margin:18px 0 8px }.empty small { font-size:13px }.empty svg { color:var(--accent) }
 @media(max-width:680px) { .toolbar { padding:10px;gap:10px;flex-wrap:wrap }.toolGroup { flex-wrap:wrap;row-gap:6px }.sessionGroup { flex:1 1 100% }.toolbar .sessionGroup select { flex:1 1 100px;width:auto;max-width:100% }.modelPanel { width:min(300px, calc(100vw - 28px)) }.messages { padding:14px }.composer { padding:12px }.composeRow { grid-template-columns:auto minmax(0,1fr);gap:8px }.composeRow textarea { min-height:72px }.composeRow > button:last-child { grid-column:2;justify-self:end }.genStats { white-space:normal }.actions { flex-wrap:wrap } }
+
+/* Working conversation: quiet chrome, one shared composer and disclosures. */
+.chat{border:0;border-radius:0;background:var(--bg)}
+.chatTitle{font-size:14px;line-height:1.5;font-weight:600;margin:0 8px 0 0;flex:none}
+.toolbar{flex-wrap:wrap;padding:8px 20px;background:var(--bg);gap:8px}.toolbar .sessionGroup select{border:0;background:transparent}.toolbar .sessionGroup{min-width:0}.modelGroup{margin-left:auto}.capsule{border:0;background:transparent;border-radius:6px;max-width:310px}.ctxGauge{border:0;background:transparent;padding:0 6px;font-size:11px}
+.advancedOptions{display:none;flex-basis:100%;padding:10px 0 3px;border-top:1px solid var(--line)}.advancedOptions[data-open='true']{display:flex}
+.messages{padding:24px max(24px,calc((100% - 800px)/2));gap:26px}.user{max-width:86%;border-radius:var(--radius-message) var(--radius-message) 4px var(--radius-message);background:var(--input);padding:12px 16px;animation:none;font-size:14px;line-height:1.7}.assistant{width:100%;animation:none}.assistantBody{border:0;padding:0}.assistant[data-streaming='true']{animation:liveArrival 160ms var(--ease-out)}
+.composer{margin:0 max(24px,calc((100% - 800px)/2)) 18px;padding:12px 14px;flex:none}.composeRow{display:grid;grid-template-columns:32px minmax(0,1fr) auto;align-items:end;gap:10px}.composeRow textarea{border:0;box-shadow:none;background:transparent;min-height:64px;padding:8px 0;border-radius:0;font-size:14px}.composeRow textarea:focus{outline:0;box-shadow:none}.composeRow>button:last-child{margin-bottom:4px;border-radius:10px}.actions{opacity:.75}.actions:hover,.actions:focus-within{opacity:1}
+@keyframes liveArrival{from{opacity:.65}to{opacity:1}}
+@media(max-width:680px){.toolbar{gap:6px;padding:8px 12px}.sessionGroup{flex:1 1 140px}.toolbar .sessionGroup select{min-width:70px;width:130px;flex:1}.modelGroup{order:3;max-width:calc(100% - 40px);margin-left:0}.capsule{max-width:100%;font-size:12px;padding-left:4px}.capsule b{max-width:90px;overflow:hidden;text-overflow:ellipsis}.ctxGauge{font-size:10px;margin-left:auto}.advancedOptions{order:5;flex-wrap:wrap}.composer{margin:0 12px 12px;padding:8px 10px}.composeRow{grid-template-columns:28px minmax(0,1fr) auto;gap:6px}.composeRow>button:last-child{grid-column:auto;justify-self:auto;font-size:0;width:34px;min-width:34px;padding:0}.messages{padding:18px 16px}.user{max-width:91%}.assistant{width:100%}}
+.optionsReveal{display:grid;grid-template-rows:0fr;flex-basis:100%;transition:grid-template-rows var(--duration-panel) var(--ease-out)}.optionsReveal[data-open='true']{grid-template-rows:1fr}.optionsReveal>.advancedOptions{display:flex;min-height:0;overflow:hidden;flex-wrap:wrap;align-items:center;gap:14px;padding:0;border:0;opacity:0;transition:opacity var(--duration-fast),padding var(--duration-panel) var(--ease-out)}.optionsReveal[data-open='true']>.advancedOptions{padding:12px 0 4px;opacity:1}
+.userFile{background:var(--control-bg);font-size:var(--type-small)}.assistantBody{font-size:var(--type-reading);line-height:1.85}.composeRow textarea{font-size:var(--type-body)}.ctxGauge,.ctxNums{font-size:var(--type-small)}.modelPanel{box-shadow:var(--shadow-overlay);border-radius:var(--radius)}
+@media(max-width:680px){.optionsReveal{order:5}.ctxGauge{font-size:var(--type-small)}}
+@media(prefers-reduced-motion:reduce){.optionsReveal,.optionsReveal>.advancedOptions{transition:none!important}}[data-motion='reduced'] .optionsReveal,[data-motion='reduced'] .optionsReveal>.advancedOptions{transition:none!important}
+
+/* One reading measure, with spacing that remains legible in long conversations. */
+.messages{gap:32px;scroll-padding-block:24px}.messages>article,.messages>div{flex-shrink:0}
+.markdown{font-family:var(--font-body);font-size:var(--type-reading);line-height:1.85}
+.markdown p{margin:0 0 1em}.markdown :is(h1,h2,h3,h4){font-family:var(--font-body);font-weight:650;line-height:1.5;margin:1.7em 0 .65em;letter-spacing:0}
+.markdown h1{font-size:22px}.markdown h2{font-size:19px}.markdown :is(h3,h4){font-size:16px}
+.markdown :is(ul,ol){margin:.75em 0 1.2em;padding-left:1.7em}.markdown li{padding-left:.15em;margin:.35em 0}.markdown li>p{margin:.4em 0}
+.markdown blockquote{border-color:var(--line-strong);padding:0 0 0 16px;margin:1.25em 0}.markdown hr{border:0;border-top:1px solid var(--line);margin:1.7em 0}
+.markdown table{display:block;max-width:100%;overflow-x:auto;margin:1.2em 0;font-size:var(--type-body)}.markdown th{font-weight:600;background:var(--input)}.markdown :is(td,th){padding:9px 12px;min-width:100px}
+.markdown :not(pre)>code{font-size:.88em;color:var(--text);background:var(--input)}.codeBlock{margin:1.2em 0;background:var(--input);border-radius:var(--radius)}.codeBlock pre{font-size:var(--type-small);line-height:1.7;padding:16px}.codeBlock summary{min-height:40px;padding:0 12px}.codeTools{display:flex;gap:4px}.codeTools button{width:30px;height:30px}
+.composer .composeRow textarea{background:transparent;border:0;box-shadow:none;min-height:64px;max-height:220px;line-height:1.65;field-sizing:content;resize:none}.composer .composeRow textarea:focus{background:transparent;box-shadow:none}.composer .composeRow>button:last-child{border-radius:var(--radius-sm)}
+.actions{flex-wrap:wrap;gap:2px}.actions>span:last-child{margin-left:auto;font-size:var(--type-small)}.counter{font-size:var(--type-small)}
+@media(max-width:680px){.messages{gap:26px}.markdown h1{font-size:20px}.markdown h2{font-size:18px}.actions>span:last-child{width:100%;margin:4px 0 0}.composer .composeRow textarea{min-height:56px}}
+
+@media(max-width:680px){
+  .toolbar{gap:6px;row-gap:4px}.chatTitle{display:none}
+  .toolbar .sessionGroup{flex:1 1 calc(100% - 42px);min-width:0;flex-wrap:nowrap}
+  .toolbar .sessionGroup select{width:auto;min-width:80px;max-width:none;flex:1}
+  .toolbar>button:last-of-type{order:2}.modelGroup{order:3;flex:1 1 calc(100% - 112px);max-width:none}
+  .capsule{height:32px;width:100%;max-width:none}.capsule b{max-width:72px}.capsule .effortChip{display:none}
+  .ctxGauge{order:4;margin-left:auto;max-width:106px}.ctxFill{display:none}.optionsReveal{order:5}
+}

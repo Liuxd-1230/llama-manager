@@ -1,5 +1,9 @@
+import { AtelierGlyph } from "../../components/AtelierBrand";
+import { useLocation } from "react-router-dom";
 import "./styles/base.css";
 import "./styles/app.css";
+import "./styles/refinement.css";
+import { useCompactWorkspace } from '../../hooks/useCompactWorkspace';
 import { AlertTriangle, CheckCircle2, Info, Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { api } from "./api";
@@ -9,6 +13,7 @@ import { DocPanel } from "./components/DocPanel";
 import { ComfyWorkspace } from "./components/ComfyWorkspace";
 import { Modals } from "./components/Modals";
 import { Stage } from "./components/Stage";
+import { CreativeBar } from "./components/CreativePanels";
 import { TopBar } from "./components/TopBar";
 import { DialogHost } from "./dialog";
 import { cameraMoved } from "./lib/camera";
@@ -17,6 +22,7 @@ import {
   assistAgent, boot, compileNow, duplicateItems, flushSave, flushSaveOnExit, groupSelection, nudgeInView, openDirector, redo, removeItems, reorder, select,
   setUi, undo, ungroupSelection, updateItems, useStore,
 } from "./store";
+import { isComposingKey } from "../../hooks/useImeGuard";
 import type { BBox } from "./types";
 
 function isTyping(e: KeyboardEvent) {
@@ -27,6 +33,8 @@ function isTyping(e: KeyboardEvent) {
 function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (isComposingKey(e)) return;
+      if (!window.location.hash.startsWith('#/studio')) return;
       const s = useStore.getState();
       if (!s.doc) return;
       const mod = e.ctrlKey || e.metaKey;
@@ -168,14 +176,34 @@ function App() {
   const bootError = useStore((s) => s.bootError);
   const director = useStore((s) => s.director && s.doc?.kind === "layout");
   const workspace = useStore((s) => s.workspace);
+  const kind = useStore((s) => s.doc?.kind);
+  const agentOpen = useStore(s=>s.agentOpen);
+  const mobilePanel = useStore(s=>s.mobilePanel);
+  const inspectorOpen = useStore(s=>s.inspectorOpen);
+  const compact = useCompactWorkspace();
+  const agentVisible = compact ? mobilePanel === 'agent' : agentOpen;
   useShortcuts();
+  const routerLocation = useLocation();
   useEffect(() => {
-    void boot();
+    if (!ready) return;
+    const panel = new URLSearchParams(routerLocation.search).get('panel');
+    if (panel === 'skills') setUi({modal:'skills'});
+    if (panel === 'image') setUi({workspace:'image'});
+  }, [ready, routerLocation.search]);
+  useEffect(() => {
+    const refresh = () => { void api.settings().then(settings => useStore.setState({settings})).catch(()=>undefined); };
+    window.addEventListener('atelier-providers-changed',refresh);
+    return () => window.removeEventListener('atelier-providers-changed',refresh);
+  }, []);
+  useEffect(() => {
+    // Project activation already saved, selected and loaded this workspace.
+    // A second boot here could overwrite the user's first edit with stale data.
+    if (!useStore.getState().ready) void boot();
   }, []);
   if (!ready)
     return (
       <div className="boot">
-        <div className="brand-mark big">M</div>
+        <div className="brand-mark big"><AtelierGlyph drawing/></div>
         {bootError ? (
           <>
             <div className="boot-err"><AlertTriangle size={14} />无法连接本地服务：{bootError}</div>
@@ -189,10 +217,11 @@ function App() {
   return (
     <div className="app">
       <TopBar />
-      {workspace === "image" ? <ComfyWorkspace /> : <div className="main">
-        <DocPanel />
-        <Stage />
-        <AgentPanel />
+      <CreativeBar />
+      {workspace === "image" ? <ComfyWorkspace /> : <div className={`main ${kind === "caption" ? "caption-main" : ""}`} data-agent-open={agentVisible} data-inspector-open={inspectorOpen && !agentVisible}>
+        {kind !== "caption" && <div className="inspector-slot" id="creation-inspector" inert={compact && (!inspectorOpen || agentVisible)} onKeyDown={event=>{if(compact && event.key==='Escape' && !isComposingKey(event.nativeEvent)){event.stopPropagation();setUi({inspectorOpen:false});document.querySelector<HTMLButtonElement>('[data-inspector-toggle]')?.focus()}}}><DocPanel /></div>}
+        <div className="stage-slot" inert={compact && agentVisible}><Stage /></div>
+        <div className="agent-slot" id="creation-agent" aria-hidden={!agentVisible} inert={!agentVisible}><AgentPanel /></div>
       </div>}
       {director && <DirectorView />}
       <Modals />
@@ -204,6 +233,7 @@ function App() {
 
 /** Host wrapper: scopes the studio palette (.studio-root) to the host theme. */
 export function PromptStudioPage() {
+  const mobilePanel=useStore(s=>s.mobilePanel);
   useEffect(() => {
     // Settings now live only in the global drawer; keep the store fresh.
     const refresh = () => { void api.settings().then(settings => useStore.setState({ settings })).catch(() => undefined) }
@@ -212,7 +242,7 @@ export function PromptStudioPage() {
   }, [])
 
   return (
-    <div className="studio-root" style={{ height: "100%" }}>
+    <div className="studio-root" data-mobile-panel={mobilePanel} style={{ height: "100%" }}>
       <App />
     </div>
   );

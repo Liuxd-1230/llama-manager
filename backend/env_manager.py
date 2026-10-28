@@ -8,7 +8,7 @@ from pathlib import Path
 from dotenv import dotenv_values, load_dotenv, set_key
 
 
-APP_DATA_DIR = Path.home() / "llama-manager"
+from .paths import APP_DATA_DIR
 USER_ENV_PATH = APP_DATA_DIR / ".env"
 
 

@@ -1,6 +1,9 @@
-.overlay { position: fixed; z-index: 70; inset: 0; background: rgba(33, 29, 22, .36); backdrop-filter: blur(4px); display: grid; place-items: center; padding: 30px }
-.modal { width:min(820px,100%); padding:0; overflow:hidden }.dialog { width:100%; height:min(640px,78dvh); display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden }
-.dialog > div:last-child { min-height: 0; padding: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden }
+.modal{width:min(820px,100%);padding:0;overflow:hidden;max-height:calc(100dvh - 32px)}
+.modal>div{display:grid;grid-template-rows:auto minmax(0,1fr);height:min(640px,calc(100dvh - 40px));min-height:0}
+.modal :global(header){margin:0;padding:14px 18px;border-bottom:1px solid var(--line)}
+.dialog{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;min-height:0;overflow:hidden}
+.system{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}.system p{flex:1 0 100%;font-size:var(--type-small);line-height:1.7;color:var(--red);margin:0;overflow-wrap:anywhere}
+.empty{margin:24px 14px;color:var(--text-2);font-size:var(--type-body)}
 .header, .footer { min-height: 54px; padding: 0 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line) }
 .footer { border-bottom: 0; border-top: 1px solid var(--line); justify-content: flex-end }
 .path { padding: 10px 14px; display: flex; gap: 8px; border-bottom: 1px solid var(--line) }
@@ -8,3 +11,5 @@
 .entry { width: 100%; height: 38px; border: 0; border-radius: var(--radius-sm); background: transparent; display: flex; align-items: center; gap: 9px; padding: 0 10px; cursor: pointer; text-align: left }
 .entry:hover, .selected { background: var(--accent-soft); color: var(--accent) }
 .entry small { margin-left: auto; color: var(--text-3) }
+.path{min-width:0}.path input{min-width:0;flex:1;font-family:var(--font-mono);font-size:var(--type-small)}.list{min-height:0}.entry{height:auto;min-height:38px;padding-block:8px;font-size:var(--type-body)}.entry>svg{flex:none}.entry>span{min-width:0;overflow-wrap:anywhere}.entry:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}.entry small{white-space:nowrap;font-size:var(--type-small)}
+@media(max-width:600px){.modal{width:100%}.system,.path{padding:10px}.entry{min-height:44px}.modal :global(header){padding:12px 14px}}

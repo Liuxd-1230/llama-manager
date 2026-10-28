@@ -198,7 +198,7 @@ class ChoiceTests(unittest.IsolatedAsyncioTestCase):
         client.__aexit__.return_value = False
         with mock.patch.object(comfy.httpx, "AsyncClient", return_value=client):
             out = await comfy.fetch_choices("http://127.0.0.1:1")
-        self.assertEqual(out, {"samplers": [], "schedulers": []})
+        self.assertEqual(out, {"samplers": [], "schedulers": [], "models": {}})
 
     async def test_unknown_node_yields_empty(self):
         response = mock.Mock(status_code=200, json=mock.Mock(return_value={}))

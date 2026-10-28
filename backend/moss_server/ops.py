@@ -106,6 +106,12 @@ def find_item(items: list[dict], ref: Any) -> int:
 
 def _apply_fields(it: dict, inp: dict, w: int, h: int, *, is_new: bool) -> list[str]:
     changed: list[str] = []
+    if inp.get('shape') in ('rectangle','ellipse','polygon'):
+        it['shape']=inp['shape']
+    if isinstance(inp.get('points'),list) and len(inp['points'])>=3:
+        points=inp['points']
+        if any(not isinstance(p,list) or len(p)!=2 or any(not isinstance(v,(int,float)) or not 0<=v<=1 for v in p) for p in points): raise ToolError('顶点坐标必须在 0 到 1 之间')
+        it['points']=copy.deepcopy(points)
     if "label" in inp and inp["label"] in LABELS and inp["label"] != it.get("label"):
         it["label"] = inp["label"]
         changed.append("类型")
@@ -585,11 +591,28 @@ class Workbench:
             raise ToolError("；".join(errs) or "没有设置任何体块")
         return "已设置体块：" + "；".join(out) + ("。失败：" + "；".join(errs) if errs else "")
 
+    def t_update_segments(self, segments: Any = None, **_: Any) -> str:
+        if not isinstance(segments,list): raise ToolError('segments 必须是数组')
+        d=self.doc()
+        existing=copy.deepcopy(d.get('caption',{}).get('segments') or [{'id':'initial','name':'画面','text':d.get('caption',{}).get('caption','')}])
+        by_id={segment['id']:segment for segment in existing}
+        for patch in segments:
+            if not isinstance(patch,dict) or patch.get('id') not in by_id: raise ToolError('请使用当前成稿中的段落 id')
+            segment=by_id[patch['id']]
+            if segment.get('locked'): raise ToolError('固定段落不能修改')
+            for key in ('text','name'):
+                if key in patch: segment[key]=str(patch[key])
+        d['caption']={'caption':'\n'.join(segment.get('text','') for segment in existing),'segments':existing}
+        return '已提交分段修改'
+
     def t_set_caption(self, caption: Any = None, activate: Any = True, **_: Any) -> str:
         if not isinstance(caption, str) or not caption.strip():
             raise ToolError("caption 不能为空")
         d = self.doc()
-        d["caption"] = {"caption": caption.strip()}
+        segments = d.get('caption',{}).get('segments') or []
+        if any(segment.get('locked') for segment in segments):
+            raise ToolError('成稿包含固定段落，不能整页替换；请让用户先解除固定或针对未固定段落讨论修改')
+        d["caption"] = {"caption": caption.strip(), "segments": [{"id":"agent_caption", "name":"成稿", "text":caption.strip()}]}
         if activate is not False:
             d["kind"] = "caption"
         return f"已写入 Caption（{len(caption.strip())} 字符）"
@@ -665,7 +688,7 @@ def describe_doc(doc: dict, name: str, pid: str, view: Optional[dict] = None, br
         cap = d["caption"].get("caption") or ""
         if brief:
             return f"页面「{name}」(id={pid}) Caption：{cap[:160]}"
-        return json.dumps({"page": name, "page_id": pid, "kind": "caption", "caption": cap}, ensure_ascii=False)
+        return json.dumps({"page": name, "page_id": pid, "kind": "caption", "caption": cap, "segments":d["caption"].get("segments",[])}, ensure_ascii=False)
     L = d["layout"]
     items = L.get("items") or []
     if brief:

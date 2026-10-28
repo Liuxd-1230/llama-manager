@@ -40,6 +40,20 @@ class ComfyError(RuntimeError):
     pass
 
 
+def parameter_state(workflow: dict) -> tuple[dict, dict]:
+    """Numeric and enum defaults belong to the bound workflow, never a UI seed."""
+    defaults = {}
+    nodes = workflow.get('nodes') or {}
+    for field, binding in (workflow.get('bindings') or {}).items():
+        if field in ('positive', 'negative') or field not in FIELDS:
+            continue
+        value = (nodes.get(str(binding.get('node'))) or {}).get('inputs', {}).get(binding.get('input'))
+        if isinstance(value, (int, float, str)) and not isinstance(value, bool):
+            defaults[field] = value
+    overrides = {key: value for key, value in (workflow.get('params') or {}).items() if key in defaults}
+    return defaults, {**defaults, **overrides}
+
+
 def comfy_base(settings: dict) -> str:
     return (settings.get("comfy_url") or COMFY_DEFAULT).rstrip("/")
 
@@ -220,7 +234,7 @@ async def fetch_choices(base: str) -> dict:
     /object_info is a large payload; only the sampler node's widget domains are
     extracted. ComfyUI versions differ, so every step degrades to an empty list.
     """
-    out: dict[str, list[str]] = {"samplers": [], "schedulers": []}
+    out = {"samplers": [], "schedulers": [], "models": {}}
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(f"{base}/object_info")
@@ -239,6 +253,9 @@ async def fetch_choices(base: str) -> dict:
 
     out["samplers"] = widget_domain("KSampler", "sampler_name")
     out["schedulers"] = widget_domain("KSampler", "scheduler")
+    for class_type, widget in [('UNETLoader','unet_name'),('CLIPLoader','clip_name'),('VAELoader','vae_name'),('CheckpointLoaderSimple','ckpt_name'),('LoraLoader','lora_name')]:
+        values = widget_domain(class_type, widget)
+        if values: out['models'][f'{class_type}.{widget}'] = values
     return out
 
 

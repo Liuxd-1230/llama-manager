@@ -1,9 +1,13 @@
+import { ConversationComposer, ConversationDisclosure, ConversationTool } from "../../../components/ConversationSurface";
+import { AtelierGlyph } from '../../../components/AtelierBrand';
 import {
   AlertTriangle, ArrowUp, AtSign, Bot, Check, CheckCheck, ChevronDown, ChevronRight, Copy, History, ImagePlus, Loader2,
   MessageSquarePlus, MousePointerClick, Pencil, RotateCcw, Settings2, Sparkles, Square, Trash2, Wrench, X, Zap, Info,
   CircleHelp, ListPlus, Eraser, Wand2, BrainCircuit,
 } from "lucide-react";
-import React, { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useImeGuard, isComposingKey } from "../../../hooks/useImeGuard";
+import { usePinnedScroll } from "../../../hooks/usePinnedScroll";
+import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { api, attachmentUrl } from "../api";
 import { confirmDialog, promptDialog } from "../dialog";
@@ -69,9 +73,10 @@ function SessionTabs() {
       </button>
       <button type="button" className="btn btn-ghost btn-sm btn-icon" title="清空当前对话（/clear）" disabled={!hasMsgs}
         onClick={() => void askClear()}><Eraser size={14} /></button>
-      <button ref={hist.ref} type="button" className="btn btn-ghost btn-sm btn-icon" title="对话历史" onClick={hist.toggle}><History size={15} /></button>
+      <button ref={hist.ref} type="button" className="btn btn-ghost btn-sm btn-icon" title="Agent 对话" onClick={hist.toggle}><History size={15} /></button>
+      <button type="button" className="btn btn-ghost btn-sm btn-icon" title="收起 Agent" aria-label="收起 Agent" onClick={()=>{setUi({agentOpen:false,mobilePanel:'editor'});document.querySelector<HTMLButtonElement>('[data-agent-toggle]')?.focus()}}><X size={15}/></button>
       <Popover anchor={hist.ref.current} open={hist.open} onClose={hist.close} align="right" width={280}>
-        <div className="menu-label">本系列的全部对话</div>
+        <div className="menu-label">本系列的 Agent 对话</div>
         {[...s.sessions].reverse().map((x) => (
           <div key={x.id} className="hist-row">
             <MenuItem active={x.id === s.sessionId} meta={x.closed ? "已关闭" : ""} onClick={() => { hist.close(); void openSession(x.id); }}>{x.title}</MenuItem>
@@ -95,7 +100,7 @@ function ChangeRow({ ch, checked, onToggle, pending }: { ch: Change; checked: bo
     <div className={cx("change", `k-${ch.kind}`)}>
       <div className="change-row">
         {pending && <input type="checkbox" checked={checked} onChange={onToggle} />}
-        <span className={cx("change-kind", ch.kind)}>{{ add: "新增", remove: "删除", update: "修改", order: "图层", summary: "描述", caption: "文本", canvas: "画布", camera: "机位", lighting: "灯光", kind: "类型" }[ch.kind]}</span>
+        <span className={cx("change-kind", ch.kind)}>{{ segment: "分段", add: "新增", remove: "删除", update: "修改", order: "图层", summary: "描述", caption: "文本", canvas: "画布", camera: "机位", lighting: "灯光", kind: "类型" }[ch.kind]}</span>
         <span className="change-title ellipsis" title={ch.title}>{ch.title.replace(/^(新增|修改|删除)\s*/, "")}</span>
         {hasDetail && (
           <button type="button" className="btn btn-ghost btn-xs btn-icon" onClick={() => setOpen(!open)} title="查看文字差异">
@@ -136,7 +141,7 @@ function ProposalCard({ messageId, p }: { messageId: string; p: Proposal }) {
           <button type="button" className="btn btn-ghost btn-xs" onClick={() => void selectPage(p.page_id)} title="切换到这一页">查看</button>
         )}
         <div className="spacer" />
-        <span className={cx("status-pill", p.status)}>{{ pending: "待确认", accepted: "已采纳", rejected: "已拒绝", partial: "部分采纳" }[p.status]}</span>
+        <span className={cx("status-pill", p.status)}>{{ pending: "待采纳", accepted: "已写入", rejected: "已驳回", partial: "部分写入" }[p.status]}</span>
       </div>
       <div className="proposal-list">
         {changes.length ? changes.map((c) => (
@@ -177,7 +182,7 @@ function AskCard({ ask, active }: { ask: Ask; active: boolean }) {
         {active && (
           <div className="ask-other">
             <input className="input input-sm" placeholder="其他想法…" value={other} onChange={(e) => setOther(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && other.trim()) answer(other.trim()); }} />
+              onKeyDown={(e) => { if (!isComposingKey(e.nativeEvent) && e.key === "Enter" && other.trim()) answer(other.trim()); }} />
             {ask.multi && (
               <button type="button" className="btn btn-sm btn-primary" disabled={!picked.length && !other.trim()}
                 onClick={() => answer([...picked, other.trim()].filter(Boolean).join("；"))}>发送</button>
@@ -195,11 +200,7 @@ function StepChips({ steps, pending }: { steps: Step[]; pending?: { label: strin
   return (
     <div className="steps">
       {steps.map((st, i) => (
-        <span key={i} className={cx("step", !st.ok && "fail")} title={st.result || ""}>
-          {st.ok ? <Wrench size={10} /> : <AlertTriangle size={10} />}
-          <b>{st.label || st.name}</b>
-          {st.brief && <span className="ellipsis">{st.brief}</span>}
-        </span>
+        <ConversationTool key={i} label={st.label || st.name} brief={st.brief} result={st.result || ''} failed={!st.ok} />
       ))}
       {pending && <span className="step running"><Loader2 size={10} className="spin" /><b>{pending.label}</b></span>}
     </div>
@@ -272,19 +273,8 @@ const AssistantMsg = memo(function AssistantMsg({ m, isLast, latestAsk }: { m: M
 });
 
 function ReasoningBlock({ text, live }: { text: string; live?: boolean }) {
-  const [open, setOpen] = useState(false);
   if (!text.trim()) return null;
-  return (
-    <div className="reasoning" data-live={live || undefined}>
-      <button type="button" className="reasoning-head" onClick={() => setOpen((v) => !v)}>
-        <BrainCircuit size={11} />
-        <span>思考过程</span>
-        <span className="reasoning-len">{text.length} 字</span>
-        <ChevronDown size={11} className={open ? "rot" : ""} />
-      </button>
-      {open && <div className="reasoning-body">{text}</div>}
-    </div>
-  );
+  return <ConversationDisclosure label="思考过程" detail={live ? '进行中' : `${text.length} 字`} busy={live}>{text}</ConversationDisclosure>;
 }
 
 function StreamingMsg() {
@@ -306,6 +296,7 @@ function StreamingMsg() {
 function Welcome() {
   const kind = useStore((st) => st.doc?.kind);
   const keySet = useStore((st) => !!st.settings?.api_key_set);
+  const localService = useStore((st) => st.settings?.provider_id === "local");
   const hasContent = useStore((st) => !!st.doc && (st.doc.kind === "caption" ? !!st.doc.caption.caption.trim()
     : st.doc.layout.items.length > 0 || !!st.doc.layout.summary.caption.trim()));
   const tips = kind === "caption"
@@ -313,9 +304,8 @@ function Welcome() {
     : ["起稿：黄昏天台上的少女和一只黑猫，竖图", "主体放大一点，往左移，给标题留出顶部空间", "这页太挤了，有什么调整建议？先别改"];
   return (
     <div className="welcome">
-      <div className="welcome-mark"><Sparkles size={18} /></div>
+      <div className="welcome-mark"><AtelierGlyph /></div>
       <div className="welcome-title">和 Agent 一起改稿</div>
-      <p>它能看到当前页的每个框、图层、机位和你刚才的手动修改，会用工具直接改，改动先放进待确认卡片。同一系列的分页共享这段对话。</p>
       {hasContent && (
         <button type="button" className="tip tip-main" onClick={() => assistAgent()} title="把当前整体描述、框和机位交给 Agent 补全（不改构图）">
           <Wand2 size={13} />{kind === "caption" ? "补全当前 Caption" : "补全当前页的提示词"}
@@ -324,8 +314,8 @@ function Welcome() {
       <div className="welcome-tips">
         {tips.map((t) => <button key={t} type="button" className="tip" onClick={() => (t.startsWith("起稿：") ? quickDraft(t.slice(3)) : send(t))}>{t}</button>)}
       </div>
-      {!keySet && (
-        <div className="notice warn"><AlertTriangle size={12} />还没配置 API Key。画框、编辑和编译不受影响；<button type="button" className="link" onClick={openGlobalSettings}>去设置</button></div>
+      {!keySet && !localService && (
+        <div className="notice warn"><AlertTriangle size={12} />未配置 API Key；编辑与编译仍可用。<button type="button" className="link" onClick={openGlobalSettings}>去设置</button></div>
       )}
     </div>
   );
@@ -338,21 +328,12 @@ function MessageList() {
     sessions: useStore((st) => st.sessions),
   };
   const list = useStore((st) => st.messages[st.sessionId] || EMPTY_MSGS);
-  const box = useRef<HTMLDivElement>(null);
-  const stick = useRef(true);
-  const streamText = s.streaming?.text.length || 0;
-  useLayoutEffect(() => {
-    const el = box.current;
-    if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [list.length, streamText, s.streaming?.steps.length, s.sessionId, s.streaming]);
+  const feed = usePinnedScroll(s.streaming || list, s.sessionId);
   const lastAi = [...list].reverse().find((m) => m.role === "assistant");
   const lastUser = [...list].reverse().find((m) => m.role === "user");
   const sess = s.sessions.find((x) => x.id === s.sessionId);
   return (
-    <div ref={box} className="messages" onScroll={(e) => {
-      const el = e.currentTarget;
-      stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-    }}>
+    <div className="messages-shell"><div ref={feed.containerRef} className="messages" {...feed.bind}>
       {sess?.summary && (
         <details className="memory">
           <summary><History size={11} />更早的对话已压缩成摘要</summary>
@@ -368,7 +349,7 @@ function MessageList() {
         ),
       )}
       {s.streaming?.sessionId === s.sessionId && <StreamingMsg />}
-    </div>
+    </div>{feed.showJump && <button type="button" className="messages-jump" onClick={feed.jumpToLatest}>回到最新消息</button>}</div>
   );
 }
 
@@ -394,6 +375,7 @@ function QuickBar() {
 }
 
 function Composer() {
+  const ime = useImeGuard();
   const s = {
     streaming: useStore((st) => st.streaming),
     queue: useStore((st) => st.queue),
@@ -493,7 +475,7 @@ function Composer() {
         </div>
       )}
       <QuickBar />
-      <div className={cx("composer", s.streaming && "busy")}
+      <ConversationComposer className={cx("composer", s.streaming && "busy")}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files.length) void upload(e.dataTransfer.files); }}>
         {(selItems.length > 0 || skillIds.length > 0 || atts.length > 0) && (
@@ -518,6 +500,9 @@ function Composer() {
         <AutoTextarea
           ref={ta}
           className="composer-input"
+          aria-label="给创作 Agent 的消息"
+          onCompositionStart={ime.onCompositionStart}
+          onCompositionEnd={ime.onCompositionEnd}
           minRows={2}
           maxRows={9}
           value={text}
@@ -525,6 +510,7 @@ function Composer() {
           onChange={(e) => onChange(e.target.value, e.target.selectionStart)}
           onPaste={(e) => { const fs = Array.from(e.clipboardData.files); if (fs.length) { e.preventDefault(); void upload(fs); } }}
           onKeyDown={(e) => {
+            if (ime.isComposing(e.nativeEvent)) return;
             if (at && matches.length && (e.key === "Enter" || e.key === "Tab")) { e.preventDefault(); pickSkill(matches[0]); return; }
             if (cmds.length && (e.key === "Enter" || e.key === "Tab") && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); runCmd(cmds[0].cmd); return; }
             if (e.key === "Escape") setAt(null);
@@ -536,7 +522,7 @@ function Composer() {
           {cmds.map((c) => <MenuItem key={c.cmd} icon={c.icon} meta={"/" + c.cmd} onClick={() => runCmd(c.cmd)}>{c.label}</MenuItem>)}
         </Popover>
         <Popover anchor={ta.current} open={!!at && matches.length > 0} onClose={() => setAt(null)} above width={260}>
-          <div className="menu-label">引用 Skill（本轮附加它的规则）</div>
+          <div className="menu-label">引用 Skill</div>
           {matches.map((k) => <MenuItem key={k.id} icon={<AtSign size={13} />} meta={k.kind} onClick={() => pickSkill(k)}>{k.name}</MenuItem>)}
         </Popover>
         <div className="composer-foot">
@@ -563,7 +549,7 @@ function Composer() {
             </button>
           )}
         </div>
-      </div>
+      </ConversationComposer>
     </div>
   );
 }
@@ -574,12 +560,12 @@ export function AgentPanel() {
   const kind = useStore((st) => st.doc?.kind);
   const autoApprove = useStore((st) => st.autoApprove);
   return (
-    <aside className="panel right agent">
+    <aside className="panel right agent" aria-label="创作 Agent">
       <SessionTabs />
       <div className="agent-ctx">
         <span className="ctx-path ellipsis" title="Agent 看到的上下文">
           <b>{seName}</b><span className="muted"> / </span>{pageName}
-          <span className="badge">{kind === "caption" ? "Caption" : "Layout"}</span>
+          <span className="badge">{kind === "caption" ? "文稿" : "构图"}</span>
         </span>
         <div className="spacer" />
         <label className="row hint" title="Agent 的改动直接生效（仍可撤销 / 在记录里回滚）">

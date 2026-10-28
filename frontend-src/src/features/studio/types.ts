@@ -14,6 +14,8 @@ export interface Body {
 }
 
 export interface LayoutItem {
+  shape?: "rectangle" | "ellipse" | "polygon";
+  points?: [number, number][];
   label: ItemLabel;
   caption: string;
   bbox: BBox;
@@ -123,9 +125,14 @@ export interface LayoutDraft {
 
 export interface CaptionDraft {
   caption: string;
+  segments?: PromptSegment[];
 }
 
+export interface PromptSegment { id: string; name: string; text: string; locked?: boolean; translation?: string }
+
 export interface Doc {
+  asset_ids?: string[];
+  compile_target?: "plain" | "moss" | "anima";
   kind: DocKind;
   layout: LayoutDraft;
   caption: CaptionDraft;
@@ -287,6 +294,9 @@ export interface CompileResult {
   checks: string[];
   prefix: string;
   negative: string;
+  source_doc?: Doc;
+  source_hash?: string;
+  asset_snapshot?: Record<string, unknown>[];
 }
 
 export interface ResolutionTemplate {

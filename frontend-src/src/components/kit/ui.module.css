@@ -1,8 +1,8 @@
-.button { min-height:36px; padding:0 16px; border:1px solid var(--line-strong); border-radius:4px; display:inline-flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; background:transparent; color:var(--text); transition:background var(--transition),border-color var(--transition),color var(--transition); font-weight:550; flex-shrink:0; font-size:13.5px }
-.button:hover:not(:disabled) { background:var(--glass-soft); border-color:var(--text-2) }.button:active:not(:disabled) { transform:translateY(1px) }.button:disabled { opacity:.45; cursor:not-allowed }
+.button { min-height:36px; padding:0 16px; border:1px solid transparent; border-radius:6px; display:inline-flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; background:var(--input); color:var(--text); transition:background 160ms ease,border-color 160ms ease,color 160ms ease,box-shadow 180ms ease; font-weight:550; flex-shrink:0; font-size:13.5px }
+.button:hover:not(:disabled) { background:var(--input-hover); border-color:transparent }.button:active:not(:disabled) { transform:translateY(1px) }.button:disabled { opacity:.45; cursor:not-allowed }
 .primary { background:var(--accent-fill); border-color:var(--accent-fill); color:var(--accent-fg); box-shadow:none }.primary:hover:not(:disabled) { background:var(--accent-hover); border-color:var(--accent-hover); color:var(--accent-fg) }
 .danger { background:transparent; border-color:color-mix(in srgb,var(--red) 45%,var(--line)); color:var(--red) }.danger:hover:not(:disabled) { border-color:var(--red); background:var(--red-soft) }.success { background:transparent; border-color:color-mix(in srgb,var(--green) 45%,var(--line)); color:var(--green) }.success:hover:not(:disabled) { border-color:var(--green); background:var(--green-soft) }
-.iconButton { width:36px; padding:0; border-color:transparent }.iconButton:hover:not(:disabled) { border-color:var(--line-strong) }.small { min-height:30px; padding:0 11px; font-size:12.5px }.small.iconButton { width:34px; min-height:34px }
+.iconButton { width:36px; padding:0; border-color:transparent;background:transparent }.iconButton:hover:not(:disabled) { border-color:transparent;background:var(--input-hover) }.small { min-height:30px; padding:0 11px; font-size:12.5px }.small.iconButton { width:34px; min-height:34px }
 .field { display:grid; gap:8px; min-width:0 }.label { color:var(--text-2); font-size:12px; font-weight:550 }
 .input,.select,.textarea { width:100%; min-width:0; border:1px solid var(--line); border-radius:4px; background:var(--input); color:var(--text); caret-color:var(--accent); transition:border-color var(--transition),background var(--transition),box-shadow var(--transition) }
 .input,.select { height:38px; padding:0 12px }.textarea { min-height:100px; resize:vertical; padding:12px }.input::placeholder,.textarea::placeholder { color:var(--text-3) }
@@ -18,5 +18,11 @@
 .dialogHeader { display:flex; align-items:center; gap:10px; margin:-2px 0 16px; min-height:30px }
 .dialogHeaderTitle { flex:1; min-width:0; display:inline-flex; align-items:center; gap:8px; font-family:var(--font-serif); font-size:17.5px; font-weight:600; color:var(--text) }
 .dialogFooter { display:flex; align-items:center; gap:8px; margin-top:18px }
+.modalBackdrop{animation:overlayReveal 150ms ease-out}
+.dialog{border-radius:10px;animation:dialogReveal 180ms cubic-bezier(.16,1,.3,1)}
+@keyframes overlayReveal{from{opacity:0}to{opacity:1}}
+@keyframes dialogReveal{from{clip-path:inset(0 0 3% 0);opacity:.8}to{clip-path:inset(0);opacity:1}}
 .switch[data-warm] input:checked + .track { background:var(--warm, var(--yellow)) }
 @media(max-width:680px) { .panelHeader { padding:14px; min-height:52px }.panelBody { padding:16px 14px }.button { min-height:38px }.toast { bottom:88px;right:16px }.dialog { padding:22px } }
+/* Operational type roles; display headings keep their editorial scale. */
+.button,.input,.select,.textarea{font-size:var(--type-body)}.field>span,.hint,.badge{font-size:var(--type-small)}.panelTitle,.dialogHeaderTitle{font-family:var(--font-body);font-size:var(--type-section);font-weight:550}.dialogTitle{font-family:var(--font-body);font-size:var(--type-section)}.badge{letter-spacing:0;text-transform:none}.panel{box-shadow:none}.toast{box-shadow:var(--shadow-overlay)}

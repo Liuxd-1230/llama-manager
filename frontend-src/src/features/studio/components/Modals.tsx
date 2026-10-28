@@ -58,7 +58,7 @@ function SkillsModal() {
   const dirty = draft && sk && (draft.name !== sk.name || draft.description !== sk.description || draft.system_prompt !== sk.system_prompt);
   return (
     <Modal className="studio-root" wide title="Skills" icon={<Sparkles size={16} />} onClose={() => setUi({ modal: null })}>
-      <div className="skills">
+      <p className="hint">Skill 指导写法；Preset 保存指令与参数。可同时引用。</p><div className="skills">
         <div className="skills-list">
           {(["layout", "caption", "context"] as SkillKind[]).map((k) => (
             <div key={k}>
@@ -102,7 +102,7 @@ function SkillsModal() {
                 try { await api.updateSkill(sk.id, sk.builtin ? { system_prompt: draft.system_prompt } : draft); await reload(sk.id); toast("已保存", "ok"); } catch (e) { toast(err(e), "err"); }
               }}>保存</button>
             </div>
-            <p className="hint">Agent 会自动带上当前页类型的「使用中」Skill 和改稿风格；输入框里 @ 可以临时引用其它 Skill。Skill 里要求的输出格式会被工具协议取代。</p>
+            <p className="hint">自动引用「使用中」Skill；输入 @ 可临时添加。输出格式以工具协议为准。</p>
           </div>
         )}
       </div>
@@ -161,7 +161,7 @@ function ArchiveModal() {
               </div>
               <div className="row wrap">
                 <button type="button" className="btn btn-sm btn-primary" onClick={async () => {
-                  if (!(await confirmDialog("用这条档案替换当前页？", "当前内容会先存进操作记录，可以回滚或撤销。"))) return;
+                  if (!(await confirmDialog("用这条档案替换当前页？", "当前内容会先保存为文档版本，可以恢复或撤销。"))) return;
                   await replaceCurrentDoc(normalizeDoc(cur.doc), "archive", `载入档案「${cur.title}」`);
                   setUi({ modal: null });
                 }}>载入到当前页</button>
@@ -173,7 +173,7 @@ function ArchiveModal() {
                 <button type="button" className="btn btn-sm btn-ghost btn-danger" onClick={async () => { if (await confirmDialog(`删除「${cur.title}」？`, undefined, { danger: true, okText: "删除" })) { await api.deleteArchive(cur.id); await load(); } }}><Trash2 size={13} /></button>
               </div>
             </>
-          ) : <div className="empty">档案库可以保存整页文档（含框、描述、机位）和编译结果，在任何系列里复用。</div>}
+          ) : <div className="empty">保存整页文档与编译结果，可跨系列复用。</div>}
         </div>
       </div>
     </Modal>
@@ -201,10 +201,10 @@ function RevisionsModal() {
     if (list?.length && !sel) void api.revision(list[0].id).then(setSel);
   }, [list]);
   return (
-    <Modal className="studio-root" wide title={`操作记录 · ${page?.name || ""}`} icon={<History size={16} />} onClose={() => setUi({ modal: null })}>
+    <Modal className="studio-root" wide title={`文档版本 · ${page?.name || ""}`} icon={<History size={16} />} onClose={() => setUi({ modal: null })}>
       <div className="archive">
         <div className="archive-side">
-          <p className="hint" style={{ margin: "0 0 8px" }}>每条记录是该操作<b>之前</b>的页面状态。Agent 改动、载入、回滚都会自动留档；手动编辑每两分钟留一次。</p>
+          <p className="hint" style={{ margin: "0 0 8px" }}>保存操作前的页面状态，可预览和恢复。Agent 改动、载入、回滚自动留档；手动编辑每两分钟留档。</p>
           <div className="archive-list">
             {list === null ? <div className="empty"><Loader2 size={14} className="spin" /></div> : !list.length ? <div className="empty">还没有记录</div> : list.map((r) => (
               <button key={r.id} type="button" className={cx("archive-row rev-row-item", sel?.id === r.id && "on")} onClick={() => void api.revision(r.id).then(setSel)}>
@@ -236,7 +236,7 @@ function RevisionsModal() {
                   useStore.setState({ doc, undo: st.doc ? [...st.undo, st.doc] : st.undo, redo: [], compileStale: true, saveState: "saved" });
                   setUi({ modal: null });
                   toast("已回滚（可撤销）", "ok");
-                }}><RotateCcw size={13} />回滚到此版本</button>
+                }}><RotateCcw size={13} />恢复此版本</button>
               </div>
             </>
           ) : <div className="empty">选择左侧的一条记录查看</div>}
@@ -413,9 +413,9 @@ function DraftModal() {
           </div>
         </div>
         <div className="draft-opts">
-          <label className="assist-opt"><input type="checkbox" checked={p.camera} onChange={(e) => up({ camera: e.target.checked })} /><span>同时设置机位（按描述里的俯拍 / 仰拍 / 景别打开摄像机）</span></label>
-          <label className="assist-opt"><input type="checkbox" checked={p.lighting} onChange={(e) => up({ lighting: e.target.checked })} /><span>同时设置灯光（选合适的打光预设，灯光描述写进提示词）</span></label>
-          <label className="assist-opt"><input type="checkbox" checked={p.autoAccept} onChange={(e) => up({ autoAccept: e.target.checked })} /><span>直接画到画布并编译（关掉则在 Agent 面板里逐条采纳）</span></label>
+          <label className="assist-opt"><input type="checkbox" checked={p.camera} onChange={(e) => up({ camera: e.target.checked })} /><span>设置机位</span></label>
+          <label className="assist-opt"><input type="checkbox" checked={p.lighting} onChange={(e) => up({ lighting: e.target.checked })} /><span>设置灯光</span></label>
+          <label className="assist-opt"><input type="checkbox" checked={p.autoAccept} onChange={(e) => up({ autoAccept: e.target.checked })} /><span>自动采纳并编译（关闭后需确认改动）</span></label>
         </div>
       </div>
     </Modal>

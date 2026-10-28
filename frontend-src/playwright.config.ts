@@ -7,6 +7,8 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 6_000 },
   fullyParallel: false,
+  // One backend owns the active project/profile; browser scenarios share it.
+  workers: 1,
   reporter: 'line',
   use: {
     baseURL: process.env.E2E_BASE_URL || 'http://127.0.0.1:9092',

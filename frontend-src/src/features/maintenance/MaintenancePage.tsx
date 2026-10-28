@@ -34,7 +34,7 @@ export function MaintenancePage({ config, setConfig, toast }: { config: AppConfi
   const probeMirrors = async () => {
     setProbing(true)
     try {
-      const result = await api<{ mirrors: MirrorCandidate[] }>('/api/mirrors', {}, 20000)
+      const result = await api<{ mirrors: MirrorCandidate[] }>('/api/v1/mirrors', {}, 20000)
       setMirrors(result.mirrors || [])
       const best = (result.mirrors || []).find(item => item.ok)
       if (best && !localStorage.getItem('github-mirror')) { setMirror(best.prefix); localStorage.setItem('github-mirror', best.prefix) }
@@ -45,15 +45,15 @@ export function MaintenancePage({ config, setConfig, toast }: { config: AppConfi
   // Reconcile busy flags with server truth: without this a finished or failed
   // task leaves the buttons permanently disabled until a page reload.
   useInterval(() => {
-    void api<{ is_compiling: boolean }>('/api/update/compile/logs').then(result => setCompiling(Boolean(result.is_compiling))).catch(() => {})
-    void api<{ is_downloading: boolean }>('/api/download/status').then(result => setDownloading(Boolean(result.is_downloading))).catch(() => {})
+    void api<{ is_compiling: boolean }>('/api/v1/update/compile/logs').then(result => setCompiling(Boolean(result.is_compiling))).catch(() => {})
+    void api<{ is_downloading: boolean }>('/api/v1/download/status').then(result => setDownloading(Boolean(result.is_downloading))).catch(() => {})
   }, 3000)
-  const download = async () => { if (!downloadDir) return toast('请输入下载目录'); setDownloading(true); await api('/api/download/start', { method: 'POST', body: JSON.stringify({ target_dir: downloadDir }) }); toast('下载已启动') }
-  const stopDownload = async () => { await api('/api/download/stop', { method: 'POST' }); setDownloading(false) }
-  const check = async () => { const result = await api<{ has_update: boolean; current_commit: string; remote_commit: string; error?: string }>(`/api/update/check?llama_cpp_dir=${encodeURIComponent(config.llama_cpp_dir)}&mirror=${encodeURIComponent(mirror)}`, {}, 300000); setUpdateInfo(result.error ? `检查失败：${result.error}` : result.has_update ? `有更新：${result.current_commit} → ${result.remote_commit}` : `已是最新：${result.current_commit}`) }
-  const pull = async (force = false) => { const result = await api<{ success?: boolean; output?: string; error?: string }>('/api/update/pull', { method: 'POST', body: JSON.stringify({ force, mirror }) }, 600000); setUpdateInfo(result.output || result.error || '操作完成'); setPullOutput(result.output || result.error || '') }
-  const compile = async () => { setCompiling(true); await api('/api/config', { method: 'POST', body: JSON.stringify(config) }); await api('/api/update/compile', { method: 'POST' }); toast('编译已启动') }
-  const stopCompile = async () => { await api('/api/update/compile/stop', { method: 'POST' }); setCompiling(false) }
+  const download = async () => { if (!downloadDir) return toast('请输入下载目录'); setDownloading(true); await api('/api/v1/download/start', { method: 'POST', body: JSON.stringify({ target_dir: downloadDir }) }); toast('下载已启动') }
+  const stopDownload = async () => { await api('/api/v1/download/stop', { method: 'POST' }); setDownloading(false) }
+  const check = async () => { const result = await api<{ has_update: boolean; current_commit: string; remote_commit: string; error?: string }>(`/api/v1/update/check?llama_cpp_dir=${encodeURIComponent(config.llama_cpp_dir)}&mirror=${encodeURIComponent(mirror)}`, {}, 300000); setUpdateInfo(result.error ? `检查失败：${result.error}` : result.has_update ? `有更新：${result.current_commit} → ${result.remote_commit}` : `已是最新：${result.current_commit}`) }
+  const pull = async (force = false) => { const result = await api<{ success?: boolean; output?: string; error?: string }>('/api/v1/update/pull', { method: 'POST', body: JSON.stringify({ force, mirror }) }, 600000); setUpdateInfo(result.output || result.error || '操作完成'); setPullOutput(result.output || result.error || '') }
+  const compile = async () => { setCompiling(true); await api('/api/v1/config', { method: 'POST', body: JSON.stringify(config) }); await api('/api/v1/update/compile', { method: 'POST' }); toast('编译已启动') }
+  const stopCompile = async () => { await api('/api/v1/update/compile/stop', { method: 'POST' }); setCompiling(false) }
   return <div className={page.stack}>
     {error && <p role="alert" className={page.error}>{error}</p>}
     {confirmReset && <ConfirmDialog title="重置 llama.cpp 源码？" description={`目录：${config.llama_cpp_dir || '尚未设置'}。此操作会丢弃该目录中已跟踪文件的本地修改，并重置到拉取的版本。请先备份需要保留的修改。`} confirmLabel="丢弃修改并重置" pending={pending === '重置'} onClose={() => setConfirmReset(false)} onConfirm={() => { void attempt('重置', () => pull(true)).then(success => { if (success) setConfirmReset(false) }) }}/>}

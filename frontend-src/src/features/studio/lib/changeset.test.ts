@@ -47,3 +47,13 @@ describe('diffDocs / applyChanges', () => {
     expect(merged.layout.items[0].caption).toBe('old')
   })
 })
+
+
+describe('segmented proposals',()=>{
+  it('applies one segment while preserving a fixed passage',()=>{
+    const base=doc([]);base.kind='caption';base.caption={caption:'fixed\nold',segments:[{id:'a',name:'固定',text:'fixed',locked:true},{id:'b',name:'光线',text:'old'}]};
+    const next=structuredClone(base);next.caption.segments![0].text='unwanted';next.caption.segments![1].text='new';next.caption.caption='unwanted\nnew';
+    const merged=applyChanges(base,base,next,new Set(['seg:a','seg:b']));
+    expect(merged.caption.caption).toBe('fixed\nnew');expect(merged.caption.segments![0].locked).toBe(true);
+  });
+});

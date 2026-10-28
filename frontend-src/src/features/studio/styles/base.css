@@ -5,19 +5,19 @@
   /* 中性（派生自宿主，随主题自动翻转） */
   --desk: var(--bg);
   --desk-2: var(--bg);
-  --panel: color-mix(in oklab, var(--bg-elevated) 95%, #d9822b);
+  --panel: var(--bg-elevated);
   --panel-2: var(--bg);
-  --paper: color-mix(in oklab, var(--bg-elevated) 92%, #d9822b);
+  --paper: var(--bg-elevated);
   --paper-shade: color-mix(in oklab, var(--paper) 94%, var(--text));
-  --well: color-mix(in oklab, var(--bg-elevated) 92%, #d9822b);
-  --line: var(--line);
+  --well: var(--bg-elevated);
+
   --line-2: var(--line-strong);
   --field: var(--input);
-  --warm-paper: #f5e2b8;
-  --ink: color-mix(in oklab, var(--text) 95%, var(--warm-paper));
-  --ink-2: color-mix(in oklab, var(--text-2) 95%, var(--warm-paper));
-  --ink-3: color-mix(in oklab, var(--text-3) 94%, var(--warm-paper));
-  --ink-4: color-mix(in oklab, var(--text-3) 94%, var(--warm-paper));
+  --warm-paper: var(--bg-elevated);
+  --ink: var(--text);
+  --ink-2: var(--text-2);
+  --ink-3: var(--text-3);
+  --ink-4: var(--text-3);
   /* The accent trio is redefined below, so reading the host value must be
      anchored at :root — a bare var(--accent) here is self-referential and
      resolves to invalid (transparent). */
@@ -28,20 +28,20 @@
      scope can read it without shadowing itself. */
   --accent-fg: var(--host-on-accent, #fdfaf3);
   --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
-  --accent-ring: var(--accent-soft);
+  --accent-ring: var(--focus-ring);
   /* 状态色（studio 自有常量，无宿主对应物） */
-  --warm: #d9822b;
-  --warm-ink: #a85f17;
-  --warm-soft: rgba(217, 130, 43, 0.14);
+  --warm: var(--yellow);
+  --warm-ink: var(--yellow);
+  --warm-soft: var(--yellow-soft);
   --warm-bright: #eaa45e;
   --warm-glow: #ffc677;
-  --ok: #3b8a5a;
-  --ok-soft: rgba(59, 138, 90, 0.12);
-  --ok-ink: #22603b;
+  --ok: var(--green);
+  --ok-soft: var(--green-soft);
+  --ok-ink: var(--green);
   --ok-bright: #8fd3a8;
-  --err: #c4483b;
-  --err-soft: rgba(196, 72, 59, 0.1);
-  --err-ink: #8e2f25;
+  --err: var(--red);
+  --err-soft: var(--red-soft);
+  --err-ink: var(--red);
   --err-deep: #5a2620;
   /* 暗表面与反转面（两主题恒定） */
   --inv: #181613;

@@ -4,7 +4,9 @@ const pages = [
   ['模型', '#/models'],
   ['配置', '#/config'],
   ['运行', '#/run'],
-  ['提示词工坊', '#/studio'],
+  ['创作', '#/studio'],
+  ['下载', '#/downloads'],
+  ['素材', '#/assets'],
   ['维护', '#/maintenance'],
   ['对话', '#/chat'],
 ] as const
@@ -17,7 +19,7 @@ test('six workspaces, themes, hairline header and settings stay usable', async (
 
   for (const [title, hash] of pages) {
     await page.goto(`/${hash}`)
-    if (title === '提示词工坊') {
+    if (title === '创作') {
       // Studio is a full-bleed workspace mounted without the standard page header.
       await expect(page.locator('.studio-root')).toBeVisible()
     } else {
@@ -29,8 +31,9 @@ test('six workspaces, themes, hairline header and settings stay usable', async (
   await page.getByTitle('切换主题').click()
   await expect.poll(() => page.locator('html').getAttribute('data-theme')).toBe('dark')
   await page.getByRole('button', { name: '设置', exact: true }).click()
+  await page.getByRole('button', { name: '模型服务', exact: true }).click()
   await expect(page.locator('aside header strong', { hasText: '设置' })).toBeVisible()
-  await page.getByRole('button', { name: '外观' }).click()
+  await page.getByRole('dialog', { name: '设置', exact:true }).getByRole('button', { name: '外观', exact:true }).click()
   await expect(page.getByRole('button', { name: /浅色/ })).toBeVisible()
   await expect(page.locator('input[type="password"]')).toHaveCount(0)
   await page.getByRole('button', { name: /浅色/ }).click()
@@ -39,6 +42,8 @@ test('six workspaces, themes, hairline header and settings stay usable', async (
 
   await page.goto('/#/config')
   const main = page.locator('main')
+  await expect(page.getByRole('heading',{name:'配置',exact:true})).toBeVisible()
+  await expect(page.getByText('模型与运行目录',{exact:true})).toBeVisible()
   const topbar = page.locator('header').first()
   const restingBackground = await topbar.evaluate(element => getComputedStyle(element).backgroundColor)
   await main.evaluate(element => element.scrollTo(0, 500))
@@ -60,11 +65,12 @@ test('chat displays tool activity, safe markdown, LaTeX and candidates', async (
   await page.getByRole('button', { name: /发送/ }).click()
   await expect(page.getByText('工具调用')).toBeVisible()
   await page.getByText('工具调用').click()
+  await page.getByRole('button', { name: 'web_search 结果', exact: true }).click()
   await expect(page.getByText('资料已找到')).toBeVisible()
   await expect(page.locator('strong').filter({ hasText: '答案' })).toBeVisible()
   await expect(page.locator('.katex')).toBeVisible()
-  await expect(page.getByRole('button', { name: /刷新/ })).toBeVisible()
-  await page.getByRole('button', { name: /刷新/ }).click()
+  await expect(page.getByRole('button', { name: /重新生成/ })).toBeVisible()
+  await page.getByRole('button', { name: /重新生成/ }).click()
   await expect(page.getByText('2/2')).toBeVisible()
   await expect(page.getByTitle('复制代码')).toBeVisible()
   await expectNoOverflow(page)
@@ -81,7 +87,7 @@ test('refresh waits until the completed answer has been persisted', async ({ pag
   let notifyPersistence!: () => void
   const blocked = new Promise<void>(resolve => { releasePersistence = resolve })
   const started = new Promise<void>(resolve => { notifyPersistence = resolve })
-  await page.route('**/api/conversations/*/turns/*', async route => {
+  await page.route('**/api/v1/conversations/*/turns/*', async route => {
     notifyPersistence()
     await blocked
     await route.fulfill({ json: {} })
@@ -90,17 +96,17 @@ test('refresh waits until the completed answer has been persisted', async ({ pag
   await page.getByLabel('消息内容').fill('保存后刷新')
   await page.getByRole('button', { name: '发送', exact: true }).click()
   await started
-  const refresh = page.getByRole('button', { name: '刷新', exact: true })
+  const refresh = page.getByRole('button', { name: '重新生成', exact: true })
   await expect(refresh).toBeDisabled()
   releasePersistence()
   await expect(refresh).toBeEnabled()
 })
 
 async function mockChat(page: Page) {
-  await page.route('**/api/chat/providers', route => route.fulfill({ json: { providers: [{ id: 'local', name: '本地 llama.cpp', kind: 'local', enabled: true }] } }))
-  await page.route('**/api/search/settings', route => route.fulfill({ json: { provider: 'tavily', providers: [{ id: 'tavily', name: 'Tavily', env_var: 'TAVILY_API_KEY', configured: true, source: 'process' }] } }))
-  await page.route('**/api/chat/models', route => route.fulfill({ json: { data: [{ id: 'test-model' }] } }))
-  await page.route('**/api/chat', route => {
+  await page.route('**/api/v1/chat/providers', route => route.fulfill({ json: { providers: [{ id: 'local', name: '本地 llama.cpp', kind: 'local', enabled: true }] } }))
+  await page.route('**/api/v1/search/settings', route => route.fulfill({ json: { provider: 'tavily', providers: [{ id: 'tavily', name: 'Tavily', env_var: 'TAVILY_API_KEY', configured: true, source: 'process' }] } }))
+  await page.route('**/api/v1/chat/models', route => route.fulfill({ json: { data: [{ id: 'test-model' }] } }))
+  await page.route('**/api/v1/chat', route => {
     const events = [
       { type: 'start', candidate_id: 'candidate-backend' },
       { type: 'reasoning_delta', delta: '先查询资料。' },

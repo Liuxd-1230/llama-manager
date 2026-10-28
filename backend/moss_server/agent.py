@@ -6,6 +6,7 @@ import asyncio
 import base64
 import copy
 import json
+import re
 from typing import Any, AsyncIterator, Optional
 
 from . import db, llm
@@ -19,11 +20,19 @@ from .skills import load_skills
 
 MAX_STEPS = 10
 
+
+def _claims_modification(text: str) -> bool:
+    # Server-owned audit phrases copied into plain prose are not tool calls.
+    ledger = r'(?m)^\s*\[(?:执行的操作|改动「)[^\n]*(?:→成功|用户已采纳)'
+    claim = r'(?m)^\s*(?:好的[，,。]\s*)?(?:我)?(?:已经|已)(?:修改|更新|添加|替换|调整|删除)|(?m:^\s*(?:改动|修改)已完成)'
+    return bool(re.search(ledger, text) or re.search(claim, text))
+
+
 SYSTEM_BASE = """你是「MOSS 提示词工作台」的 Agent，和用户一起讨论、编写、修改 MOSS-Image 的 Layout（分区布局）和 Caption（散文）提示词。
 
 ## 工作方式
 - 你能看到工作台的实时状态（每轮在 <workbench> 中给出）：当前页面、同系列其他页面、用户选中的框、用户自上次以来的手动改动。
-- 修改只能通过工具完成，不要在回复里贴整段 JSON。你的改动会以「待确认改动」卡片给用户逐条采纳或驳回。
+- 修改只能通过真实工具调用完成，不能在回复里仿写「[执行的操作]」「用户已采纳」等系统记录。未调用工具时不能声称已修改；采纳状态由用户界面决定。不要在回复里贴整段 JSON。你的改动会以「待确认改动」卡片给用户逐条采纳或驳回。
 - 用户只是讨论、提问时，直接回答，不要调用修改工具。意图不明确、有多种合理方向时，用 ask_user 给选项。
 - 改动尽量小：只改用户提到的或必须联动的部分。用户手动改过的地方视为用户的决定，不要改回去。
 - 锁定（locked）的框只读；隐藏（hidden）的框保留不动。
@@ -99,8 +108,11 @@ def _turn_text(m: dict) -> str:
         if meta.get("attachments"):
             t += f"\n[附图 {len(meta['attachments'])} 张]"
         return t
-    lines = [m.get("content") or ""]
+    content = m.get("content") or ""
     steps = meta.get("steps") or []
+    if _claims_modification(content) and not steps and not meta.get('proposals'):
+        content = '（此历史回复没有实际工具或改动提案记录，不能作为页面已更新的依据。）'
+    lines = [content]
     if steps:
         lines.append("[执行的操作] " + "；".join(
             f"{s.get('name')}({s.get('brief', '')})→{'成功' if s.get('ok') else '失败'}" for s in steps[:12]))
@@ -127,7 +139,8 @@ def _image_part(att_id: str) -> Optional[dict]:
 def build_messages(*, session: dict, history: list[dict], wb: Workbench, page_id: str, doc: dict,
                    view: Optional[dict], user_text: str, selection: list[str], skill_ids: list[str],
                    attachments: list[str], protocol: str, mode: Optional[str] = None) -> tuple[list[dict], list[str]]:
-    s = load_settings()
+    from ..atelier.providers import request_settings
+    s = request_settings()
     meta = session.get("meta") or {}
     kind = db.normalize_doc(doc)["kind"]
     system = SYSTEM_BASE
@@ -217,7 +230,8 @@ async def run_agent(*, session_id: str, page_id: str, doc: dict, view: Optional[
     if not page:
         yield sse({"type": "error", "message": "页面不存在"})
         return
-    s = load_settings()
+    from ..atelier.providers import request_settings
+    s = request_settings()
     from .bridge import resolve, ProviderError
     try:
         resolve(s.get("provider_id"))
@@ -246,7 +260,16 @@ async def run_agent(*, session_id: str, page_id: str, doc: dict, view: Optional[
     msgs, _manual = build_messages(session=session, history=history, wb=wb, page_id=page_id, doc=doc, view=view,
                                    user_text=message, selection=selection, skill_ids=skill_ids,
                                    attachments=attachments, protocol=protocol, mode=mode)
-    tools = [t for t in TOOLS if t["function"]["name"] != "ask_user"] if mode == "draft" else TOOLS
+    from ..atelier import mcp, store
+    for identifier in doc.get('asset_ids',[]):
+        try: asset=store.get_object(identifier)
+        except KeyError: continue
+        if asset['kind']=='preset':
+            s={**s,'temperature':float(asset['data'].get('temperature',.7)),'top_p':float(asset['data'].get('top_p',.95))}
+        if asset['kind'] in ('character','preset','artist','tag','notebook','lora'):
+            msgs.insert(1,{'role':'system','content':'User-selected creative reference; explicit requests override defaults: '+json.dumps({'kind':asset['kind'],'name':asset['name'],'data':asset['data']},ensure_ascii=False)})
+    tools = [t for t in TOOLS if t["function"]["name"] != "ask_user"] if mode == "draft" else list(TOOLS)
+    tools = [*tools, *(await mcp.tool_schemas())]
     meta.setdefault("seen", {})[page_id] = copy.deepcopy(doc)
 
     visible: list[str] = []
@@ -256,6 +279,7 @@ async def run_agent(*, session_id: str, page_id: str, doc: dict, view: Optional[
     error: Optional[str] = None
     stopped = True
     repaired = False
+    execution_repaired = False
     try:
         step = 0
         while step < MAX_STEPS:
@@ -263,7 +287,7 @@ async def run_agent(*, session_id: str, page_id: str, doc: dict, view: Optional[
             filt = TagFilter() if protocol == "tags" else None
             done: dict = {}
             try:
-                async for kind, val in llm.stream_chat(msgs, tools=tools if protocol == "tools" else None):
+                async for kind, val in llm.stream_chat(msgs, tools=tools if protocol == "tools" else None, temperature=s.get("temperature",.7), top_p=s.get("top_p")):
                     if kind == "model":
                         if val != model_used:
                             model_used = val
@@ -303,6 +327,20 @@ async def run_agent(*, session_id: str, page_id: str, doc: dict, view: Optional[
                 calls = parse_tool_tags(content)
             if not calls:
                 changed = wb.changed_pages()
+                missing_action = not changed and not any(st.get('ok') for st in steps) and (_claims_modification(content) or mode == 'draft')
+                if missing_action:
+                    # Never parse a prose pseudo-call into an operation. Ask for
+                    # real tool output once; do not repeat successful side effects.
+                    visible.clear()
+                    yield sse({'type':'text_reset'})
+                    if execution_repaired:
+                        error = '模型未执行实际修改，画面未改变。请重试或更换支持工具调用的模型。'
+                        break
+                    execution_repaired = True
+                    yield sse({'type':'notice','message':'尚未执行修改，正在重试工具调用…'})
+                    msgs.append({'role':'assistant','content':content})
+                    msgs.append({'role':'user','content':'系统核对：刚才没有实际工具调用，页面没有任何修改。请使用提供的真实工具完成请求；不要仿写操作记录、不要声称用户已采纳。若无法执行，请说明原因。'})
+                    continue
                 if changed and not repaired:
                     probs = []
                     for pid in changed:
@@ -343,7 +381,7 @@ async def run_agent(*, session_id: str, page_id: str, doc: dict, view: Optional[
                         yield sse({"type": "ask", **wb.ask})
                     else:
                         try:
-                            res, ok = wb.run(name, args), True
+                            res, ok = (await mcp.call(name, args) if name.startswith("mcp_") else wb.run(name, args)), True
                         except ToolError as e:
                             res, ok = f"失败：{e}", False
                         except Exception as e:  # noqa: BLE001 — 工具异常回给模型

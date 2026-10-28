@@ -77,8 +77,8 @@ describe('ModelsPage', () => {
   it('edit reloads server-side and invalidates caches without touching the buffer', async () => {
     const loaded = { ...defaultConfig, model_path: 'E:\\loaded.gguf' }
     mockedApi.mockImplementation((url: string) => {
-      if (url === '/api/config/load') return Promise.resolve(loaded)
-      if (url === '/api/profiles') return Promise.resolve({ profiles: [{ ...profile, name: 'card', is_current: false, model_exists: true }] })
+      if (url === '/api/v1/config/load') return Promise.resolve(loaded)
+      if (url === '/api/v1/profiles') return Promise.resolve({ profiles: [{ ...profile, name: 'card', is_current: false, model_exists: true }] })
       return Promise.resolve({})
     })
     const { client } = renderPage({ dirty: false })
@@ -87,7 +87,7 @@ describe('ModelsPage', () => {
 
     await screen.findByText('card')
     await fireEvent.click(screen.getByRole('button', { name: '编辑参数' }))
-    await waitFor(() => expect(mockedApi).toHaveBeenCalledWith('/api/config/load', expect.objectContaining({ method: 'POST' })))
+    await waitFor(() => expect(mockedApi).toHaveBeenCalledWith('/api/v1/config/load', expect.objectContaining({ method: 'POST' })))
     await waitFor(() => {
       expect(client.getQueryState(['config'])?.isInvalidated).toBe(true)
       expect(client.getQueryState(['current-profile'])?.isInvalidated).toBe(true)
@@ -96,7 +96,7 @@ describe('ModelsPage', () => {
 
   it('removing the current profile falls back to default server-side', async () => {
     mockedApi.mockImplementation((url: string) => {
-      if (url === '/api/profiles') return Promise.resolve({ profiles: [{ ...profile, name: 'doomed', is_current: true, model_exists: true }] })
+      if (url === '/api/v1/profiles') return Promise.resolve({ profiles: [{ ...profile, name: 'doomed', is_current: true, model_exists: true }] })
       return Promise.resolve({})
     })
     const { client } = renderPage({ dirty: false })
@@ -106,7 +106,7 @@ describe('ModelsPage', () => {
     const deleteButton = screen.getByRole('button', { name: '删除档案' })
     await fireEvent.click(deleteButton)
     await fireEvent.click(deleteButton)
-    await waitFor(() => expect(mockedApi).toHaveBeenCalledWith('/api/config/load', expect.objectContaining({ method: 'POST' })))
+    await waitFor(() => expect(mockedApi).toHaveBeenCalledWith('/api/v1/config/load', expect.objectContaining({ method: 'POST' })))
     await waitFor(() => expect(client.getQueryState(['config'])?.isInvalidated).toBe(true))
   })
 })

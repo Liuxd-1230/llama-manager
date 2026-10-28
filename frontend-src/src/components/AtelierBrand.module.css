@@ -1,0 +1,11 @@
+.glyph{display:block;width:32px;height:32px;flex:none;overflow:visible}
+.trace{stroke-dasharray:1;stroke-dashoffset:0;opacity:0}
+.measure{opacity:0;transition:opacity var(--duration-fast)}.measure path{stroke-dasharray:1;stroke-dashoffset:1;transition:stroke-dashoffset var(--duration-panel) var(--ease-out)}
+.interactive:hover .measure,:global(a:hover) .interactive .measure,:global(button:hover) .interactive .measure,:global(a:focus-visible) .interactive .measure,:global(button:focus-visible) .interactive .measure{opacity:.65}
+.interactive:hover .measure path,:global(a:hover) .interactive .measure path,:global(button:hover) .interactive .measure path,:global(a:focus-visible) .interactive .measure path,:global(button:focus-visible) .interactive .measure path{stroke-dashoffset:0}
+.glyph[data-state='working'] .trace{opacity:.7;animation:inkDraw 1s var(--ease-out) 1}.glyph[data-state='complete']{color:var(--green)}.glyph[data-state='error']{color:var(--red)}
+.loading{display:flex;align-items:center;gap:14px;padding:42px;color:var(--text-2);font-size:var(--type-body)}.loading .glyph{color:var(--accent);width:28px;height:28px}
+.folio{display:block;width:104px;height:117px;color:var(--accent);flex:none;overflow:visible}.paper{opacity:.5}.openFrame{opacity:.35}
+@keyframes inkDraw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@media(prefers-reduced-motion:reduce){.glyph *{animation:none!important;transition:none!important}.measure path{stroke-dashoffset:0}}
+:global([data-motion='reduced']) .glyph *{animation:none!important;transition:none!important}

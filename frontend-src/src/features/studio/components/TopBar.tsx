@@ -1,6 +1,6 @@
 import {
   Archive, Check, ChevronDown, Copy, FileText, FolderPlus, History, ImageUp, LayoutGrid, Loader2, Pencil, Plus,
-  Redo2, Settings, Sparkles, Trash2, Undo2, CloudOff,
+  Redo2, Settings, Sparkles, Trash2, Undo2, CloudOff, MoreHorizontal,
 } from "lucide-react";
 import { useState } from "react";
 import {
@@ -9,6 +9,7 @@ import {
 import { openGlobalSettings } from "../globalSettings";
 import { confirmDialog, promptDialog } from "../dialog";
 import { MenuItem, Popover, cx, useAnchor } from "../../../components/kit";
+import { AtelierGlyph } from '../../../components/AtelierBrand';
 
 function PageTab({ id, name, kind, active, pending }: { id: string; name: string; kind: string; active: boolean; pending: boolean }) {
   const [edit, setEdit] = useState<string | null>(null);
@@ -62,21 +63,21 @@ export function TopBar() {
   const s = useWorkState();
   const se = currentSeries(s);
   const seriesMenu = useAnchor();
+  const tools = useAnchor();
   const pendingPages = new Set(
     Object.values(s.messages).flat().flatMap((m) => (m.meta?.proposals || []).filter((p) => p.status === "pending").map((p) => p.page_id)),
   );
   return (
     <header className="topbar">
-      <div className="brand" title="MOSS 提示词工作台">
-        <div className="brand-mark">M</div>
+      <div className="brand" title="Atelier 创作工作台">
+        <div className="brand-mark"><AtelierGlyph /></div>
         <div className="brand-text">
-          <b>MOSS Studio</b>
-          <span>提示词工作台</span>
+          <b>Atelier</b>
+          <span>创作工作台</span>
         </div>
       </div>
       <div className="topbar-sep" />
       <button ref={seriesMenu.ref} type="button" className="btn btn-sm series-btn" onClick={seriesMenu.toggle} title="系列：同一系列的分页共享 Agent 对话">
-        <span className="muted">系列</span>
         <b className="ellipsis">{se?.name}</b>
         <ChevronDown size={13} />
       </button>
@@ -117,12 +118,15 @@ export function TopBar() {
         <button type="button" className="btn btn-sm btn-icon" disabled={!s.redo.length} onClick={redo} title="重做 Ctrl+Shift+Z"><Redo2 size={14} /></button>
       </div>
       <div className="topbar-sep" />
-      <button type="button" className="btn btn-sm" onClick={() => setUi({ modal: "reverse" })} title="从参考图反推 Caption / Layout"><ImageUp size={14} />反推</button>
-      <button type="button" className={`btn btn-sm${s.workspace === "image" ? " on" : ""}`} onClick={() => setUi({ workspace: s.workspace === "image" ? "edit" : "image" })} title={s.workspace === "image" ? "返回编辑（Layout / Caption）" : "切换到出图工作区（ComfyUI）"}><Sparkles size={14} />{s.workspace === "image" ? "编辑" : "出图"}</button>
-      <button type="button" className="btn btn-sm" onClick={() => setUi({ modal: "archive" })} title="档案库：保存和复用整页文档"><Archive size={14} />档案库</button>
-      <button type="button" className="btn btn-sm" onClick={() => setUi({ modal: "revisions" })} title="此页的操作记录，可回滚"><History size={14} />记录</button>
-      <button type="button" className="btn btn-sm" onClick={() => setUi({ modal: "skills" })} title="Skills：Caption / Layout / 改稿风格"><Sparkles size={14} />Skills</button>
-      <button type="button" className="btn btn-sm btn-icon" onClick={openGlobalSettings} title="设置"><Settings size={15} /></button>
+      <button ref={tools.ref} type="button" className="btn btn-sm btn-icon" aria-label="创作工具" aria-expanded={tools.open} title="创作工具" onClick={tools.toggle}><MoreHorizontal size={17}/></button>
+      <Popover anchor={tools.ref.current} open={tools.open} onClose={tools.close} align="right" width={220}>
+        <MenuItem icon={<ImageUp size={15}/>} onClick={()=>{tools.close();setUi({modal:'reverse'})}}>图片反推</MenuItem>
+        <MenuItem icon={<Archive size={15}/>} onClick={()=>{tools.close();setUi({modal:'archive'})}}>档案库</MenuItem>
+        <MenuItem icon={<History size={15}/>} onClick={()=>{tools.close();setUi({modal:'revisions'})}}>文档版本</MenuItem>
+        <MenuItem icon={<Sparkles size={15}/>} onClick={()=>{tools.close();setUi({modal:'skills'})}}>Skills</MenuItem>
+        <div className="menu-sep"/>
+        <MenuItem icon={<Settings size={15}/>} onClick={()=>{tools.close();openGlobalSettings()}}>创作设置</MenuItem>
+      </Popover>
     </header>
   );
 }

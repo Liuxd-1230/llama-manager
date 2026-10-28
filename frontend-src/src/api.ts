@@ -21,7 +21,7 @@ export async function api<T>(url: string, init: RequestInit = {}, timeoutMs = 60
   try {
     const response = await fetch(url, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
+      headers: { ...(!(init.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}), ...(init.headers || {}) },
       signal: init.signal ?? controller.signal,
     })
     const text = await response.text()
@@ -29,7 +29,7 @@ export async function api<T>(url: string, init: RequestInit = {}, timeoutMs = 60
     try { payload = text ? JSON.parse(text) : {} } catch { payload = { error: text } }
     if (!response.ok) {
       const message = typeof payload === 'object' && payload && 'error' in payload ? String((payload as { error: unknown }).error)
-        : typeof payload === 'object' && payload && 'message' in payload ? String((payload as { message: unknown }).message) : `HTTP ${response.status}`
+        : typeof payload === 'object' && payload && 'message' in payload ? String((payload as { message: unknown }).message) : typeof payload === 'object' && payload && 'detail' in payload ? String((payload as { detail: unknown }).detail) : `HTTP ${response.status}`
       throw new ApiError(message, response.status)
     }
     return payload as T

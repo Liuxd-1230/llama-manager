@@ -15,7 +15,8 @@ from backend import provider_manager as providers
 from backend import search_manager
 from backend.chat_state import CandidateContext, ConversationStore
 from backend.config_manager import read_gguf_metadata
-from backend.main import (
+from backend.main import app
+from backend.inference import (
     _deepseek_chat_payload,
     _external_chat_request,
     _local_chat_payload,
@@ -26,7 +27,6 @@ from backend.main import (
     _stream_chat_with_tools,
     _stream_responses_with_tools,
     _strip_dsml_tool_blocks,
-    app,
 )
 from backend.models import AppConfig, BasicSettings, KvmemSettings, NinferSettings, SamplingSettings
 from backend.process_manager import process_manager
@@ -74,24 +74,24 @@ def sse(payload):
 
 class SecurityRegressionTests(unittest.TestCase):
     def test_remote_clients_cannot_browse_local_files(self):
-        response = TestClient(app, client=("192.168.1.20", 50000)).get("/api/browse", params={"dir": "C:\\"})
+        response = TestClient(app, client=("192.168.1.20", 50000)).get("/api/v1/browse", params={"dir": "C:\\"})
         self.assertEqual(response.status_code, 403)
 
     def test_remote_clients_cannot_start_compile_commands(self):
-        response = TestClient(app, client=("192.168.1.20", 50000)).post("/api/update/compile")
+        response = TestClient(app, client=("192.168.1.20", 50000)).post("/api/v1/update/compile")
         self.assertEqual(response.status_code, 403)
 
     def test_unknown_provider_does_not_fall_back_to_local_server(self):
-        response = TestClient(app).post("/api/chat", json={"provider": "missing", "messages": [], "stream": False})
+        response = TestClient(app).post("/api/v1/chat", json={"provider": "missing", "messages": [], "stream": False})
         self.assertEqual(response.status_code, 404)
 
     def test_disabled_and_unconfigured_providers_return_conflict(self):
         disabled = providers.ProviderConfig(id="disabled", name="Disabled", kind="openai_chat", enabled=False)
         missing_key = providers.ProviderConfig(id="missing-key", name="Missing Key", kind="openai_chat", enabled=True)
-        with patch("backend.main.providers.get_provider", return_value=disabled):
-            self.assertEqual(TestClient(app).post("/api/chat", json={"provider": "disabled", "messages": [], "stream": False}).status_code, 409)
-        with patch("backend.main.providers.get_provider", return_value=missing_key), patch("backend.main.providers.resolve_api_key", return_value=""):
-            self.assertEqual(TestClient(app).post("/api/chat", json={"provider": "missing-key", "messages": [], "stream": False}).status_code, 409)
+        with patch("backend.inference.providers.get_provider", return_value=disabled):
+            self.assertEqual(TestClient(app).post("/api/v1/chat", json={"provider": "disabled", "messages": [], "stream": False}).status_code, 409)
+        with patch("backend.inference.providers.get_provider", return_value=missing_key), patch("backend.inference.providers.resolve_api_key", return_value=""):
+            self.assertEqual(TestClient(app).post("/api/v1/chat", json={"provider": "missing-key", "messages": [], "stream": False}).status_code, 409)
 
 
 class ProfileRegressionTests(unittest.TestCase):
@@ -104,9 +104,9 @@ class ProfileRegressionTests(unittest.TestCase):
                 AppConfig(llama_cpp_dir="C:\\llama.cpp", model_path=str(model_file), basic=BasicSettings(ctx_size=32768)),
                 name="default",
             )
-            self.assertEqual(client.post("/api/profiles/duplicate", json={"source": "default", "name": "qwen"}).status_code, 200)
+            self.assertEqual(client.post("/api/v1/profiles/duplicate", json={"source": "default", "name": "qwen"}).status_code, 200)
 
-            profiles = client.get("/api/profiles").json()["profiles"]
+            profiles = client.get("/api/v1/profiles").json()["profiles"]
             self.assertEqual({p["name"] for p in profiles}, {"default", "qwen"})
             default = next(p for p in profiles if p["name"] == "default")
             self.assertEqual(default["ctx_size"], 32768)
@@ -120,47 +120,47 @@ class ProfileRegressionTests(unittest.TestCase):
             self.assertTrue(qwen["model_exists"])
 
             # No real llama-server binary — the launch must fail cleanly with 400.
-            missing = client.post("/api/profiles/launch", json={"name": "qwen"})
+            missing = client.post("/api/v1/profiles/launch", json={"name": "qwen"})
             self.assertEqual(missing.status_code, 400)
             self.assertIn("error", missing.json())
 
     def test_launch_and_duplicate_missing_profiles_return_404(self):
         with TemporaryDirectory() as tmp, patch.object(cfg, "CONFIG_DIR", Path(tmp)):
             client = TestClient(app)
-            self.assertEqual(client.post("/api/profiles/launch", json={"name": "ghost"}).status_code, 404)
-            self.assertEqual(client.post("/api/profiles/duplicate", json={"source": "ghost", "name": "x"}).status_code, 404)
+            self.assertEqual(client.post("/api/v1/profiles/launch", json={"name": "ghost"}).status_code, 404)
+            self.assertEqual(client.post("/api/v1/profiles/duplicate", json={"source": "ghost", "name": "x"}).status_code, 404)
 
     def test_set_current_and_startup_persistence(self):
         with TemporaryDirectory() as tmp, patch.object(cfg, "CONFIG_DIR", Path(tmp)):
             client = TestClient(app)
             cfg.save_config(AppConfig(llama_cpp_dir="C:/a"), name="default")
             cfg.save_config(AppConfig(llama_cpp_dir="C:/b"), name="qwen")
-            self.assertEqual(client.get("/api/profiles/current").json()["name"], "qwen")  # saving makes it current
-            self.assertEqual(client.post("/api/profiles/set-current", json={"name": "default"}).status_code, 200)
-            self.assertEqual(client.get("/api/profiles/current").json()["name"], "default")
-            self.assertEqual(client.post("/api/profiles/set-current", json={"name": "qwen"}).status_code, 200)
-            self.assertEqual(client.get("/api/profiles/current").json()["name"], "qwen")
-            self.assertEqual(client.post("/api/profiles/set-current", json={"name": "ghost"}).status_code, 404)
-            self.assertEqual(client.post("/api/profiles/set-current", json={"name": ""}).status_code, 400)
+            self.assertEqual(client.get("/api/v1/profiles/current").json()["name"], "qwen")  # saving makes it current
+            self.assertEqual(client.post("/api/v1/profiles/set-current", json={"name": "default"}).status_code, 200)
+            self.assertEqual(client.get("/api/v1/profiles/current").json()["name"], "default")
+            self.assertEqual(client.post("/api/v1/profiles/set-current", json={"name": "qwen"}).status_code, 200)
+            self.assertEqual(client.get("/api/v1/profiles/current").json()["name"], "qwen")
+            self.assertEqual(client.post("/api/v1/profiles/set-current", json={"name": "ghost"}).status_code, 404)
+            self.assertEqual(client.post("/api/v1/profiles/set-current", json={"name": ""}).status_code, 400)
             # the choice survives a restart
             self.assertEqual(cfg.initial_profile_name(), "qwen")
 
     def test_duplicate_rejects_empty_name(self):
         with TemporaryDirectory() as tmp, patch.object(cfg, "CONFIG_DIR", Path(tmp)):
             client = TestClient(app)
-            self.assertEqual(client.post("/api/profiles/duplicate", json={"source": "default", "name": "  "}).status_code, 400)
+            self.assertEqual(client.post("/api/v1/profiles/duplicate", json={"source": "default", "name": "  "}).status_code, 400)
 
     def test_save_current_config_preserves_profile_name(self):
         with TemporaryDirectory() as tmp, patch.object(cfg, "CONFIG_DIR", Path(tmp)):
             client = TestClient(app)
             base = AppConfig(llama_cpp_dir="C:\\base", model_path="C:\\m.gguf")
-            self.assertEqual(client.post("/api/config/save-as", json={"name": "kvmem-bonsai", "config": base.model_dump()}).status_code, 200)
-            self.assertEqual(client.post("/api/config/load", json={"name": "kvmem-bonsai"}).status_code, 200)
+            self.assertEqual(client.post("/api/v1/config/save-as", json={"name": "kvmem-bonsai", "config": base.model_dump()}).status_code, 200)
+            self.assertEqual(client.post("/api/v1/config/load", json={"name": "kvmem-bonsai"}).status_code, 200)
 
             changed = AppConfig(llama_cpp_dir="C:\\changed", model_path="C:\\m.gguf")
-            self.assertEqual(client.post("/api/config", json=changed.model_dump()).status_code, 200)
+            self.assertEqual(client.post("/api/v1/config", json=changed.model_dump()).status_code, 200)
 
-            profiles = {p["name"]: p for p in client.get("/api/profiles").json()["profiles"]}
+            profiles = {p["name"]: p for p in client.get("/api/v1/profiles").json()["profiles"]}
             self.assertTrue(profiles["kvmem-bonsai"]["is_current"])
             self.assertNotIn("default", profiles)  # save-current must not create/rename into default
             saved = (Path(tmp) / "kvmem-bonsai.json").read_text(encoding="utf-8")
@@ -676,7 +676,7 @@ class NinferCommandTests(unittest.TestCase):
     def test_detect_server_endpoint_supports_ninfer(self):
         with TemporaryDirectory() as tmp:
             root = self._pack(tmp)
-            response = TestClient(app).get("/api/detect-server", params={"llama_cpp_dir": str(root), "engine": "ninfer"})
+            response = TestClient(app).get("/api/v1/detect-server", params={"llama_cpp_dir": str(root), "engine": "ninfer"})
             self.assertTrue(response.json()["found"])
 
     def test_profile_summary_exposes_ninfer_block(self):
@@ -688,7 +688,7 @@ class NinferCommandTests(unittest.TestCase):
                 AppConfig(llama_cpp_dir="C:\\pack", model_path=str(model_file), engine="ninfer"),
                 name="ninfer-bonsai",
             )
-            profiles = client.get("/api/profiles").json()["profiles"]
+            profiles = client.get("/api/v1/profiles").json()["profiles"]
             summary = next(p for p in profiles if p["name"] == "ninfer-bonsai")
             self.assertEqual(summary["engine"], "ninfer")
             self.assertEqual(summary["ninfer"]["budget"], 8192)
@@ -731,12 +731,12 @@ class NinferCommandTests(unittest.TestCase):
                     "attachments": [], "active_candidate_id": "cand-1",
                     "candidates": [{"id": "cand-1", "provider": "ninfer-webui", "model": "m", "content": "hello", "reasoning": "", "status": "done", "tools": []}],
                 }
-                client.put("/api/conversations/conv-x/turns/turn-1", json=turn)
-                loaded = client.get("/api/conversations/conv-x").json()
+                client.put("/api/v1/conversations/conv-x/turns/turn-1", json=turn)
+                loaded = client.get("/api/v1/conversations/conv-x").json()
                 self.assertEqual(len(loaded["turns"]), 1)
-                self.assertEqual(client.delete("/api/conversations/conv-x/turns/turn-1").status_code, 200)
-                self.assertEqual(client.get("/api/conversations/conv-x").json()["turns"], [])
-                self.assertEqual(client.delete("/api/conversations/conv-x/turns/missing").status_code, 404)
+                self.assertEqual(client.delete("/api/v1/conversations/conv-x/turns/turn-1").status_code, 200)
+                self.assertEqual(client.get("/api/v1/conversations/conv-x").json()["turns"], [])
+                self.assertEqual(client.delete("/api/v1/conversations/conv-x/turns/missing").status_code, 404)
 
 
 class LocalPayloadThinkingTests(unittest.TestCase):
@@ -759,9 +759,9 @@ class DetectEndpointTests(unittest.TestCase):
             bin_dir.mkdir()
             (bin_dir / "llama-kvmem-server.exe").write_text("", encoding="utf-8")
             client = TestClient(app)
-            kvmem_hit = client.get("/api/detect-server", params={"llama_cpp_dir": str(root), "engine": "kvmem"}).json()
+            kvmem_hit = client.get("/api/v1/detect-server", params={"llama_cpp_dir": str(root), "engine": "kvmem"}).json()
             self.assertTrue(kvmem_hit["found"])
-            llama_miss = client.get("/api/detect-server", params={"llama_cpp_dir": str(root), "engine": "llama.cpp"}).json()
+            llama_miss = client.get("/api/v1/detect-server", params={"llama_cpp_dir": str(root), "engine": "llama.cpp"}).json()
             self.assertFalse(llama_miss["found"])
 
 
@@ -801,9 +801,10 @@ class FrontendRegressionTests(unittest.TestCase):
         self.assertIn("请先停止当前生成", chat)
         self.assertIn("parent_candidate_id", chat)
 
-    def test_settings_never_render_api_key_input(self):
+    def test_settings_mask_keys_and_use_the_separate_secret_endpoint(self):
         settings = (ROOT / "frontend-src" / "src" / "components" / "SettingsDrawer.tsx").read_text(encoding="utf-8")
-        self.assertNotRegex(settings, r'type=["\']password')
+        self.assertRegex(settings, r'type=["\']password')
+        self.assertIn("/secret", settings)
         self.assertIn("api_key_env", settings)
 
     def test_production_build_is_committed_surface(self):
@@ -829,16 +830,16 @@ class ProviderConfigRegressionTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "providers.json"
             path.write_text(json.dumps([{"id": "compat", "name": "Compat", "kind": "openai_compatible", "base_url": "https://example.test/v1", "api_key": "sk-old"}]), encoding="utf-8")
-            with patch.object(providers, "PROVIDERS_PATH", path), patch.object(providers, "SECRETS_DIR", Path(tmp)), patch("backend.provider_manager.set_user_env") as migrate:
+            with patch.object(providers, "PROVIDERS_PATH", path), patch.object(providers, "SECRETS_DIR", Path(tmp)), patch("backend.provider_manager.write_secret") as migrate:
                 providers.list_providers()
-            migrate.assert_called_once_with("LLAMA_MANAGER_PROVIDER_COMPAT_API_KEY", "sk-old")
+            migrate.assert_called_once_with("provider:compat", "sk-old")
             self.assertNotIn("api_key", path.read_text(encoding="utf-8"))
 
     def test_failed_legacy_key_migration_keeps_json_and_blocks_provider(self):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "providers.json"
             path.write_text(json.dumps([{"id": "compat", "name": "Compat", "kind": "openai_compatible", "base_url": "https://example.test/v1", "api_key": "sk-old"}]), encoding="utf-8")
-            with patch.object(providers, "PROVIDERS_PATH", path), patch.object(providers, "SECRETS_DIR", Path(tmp)), patch("backend.provider_manager.set_user_env", side_effect=OSError("ACL failed")):
+            with patch.object(providers, "PROVIDERS_PATH", path), patch.object(providers, "SECRETS_DIR", Path(tmp)), patch("backend.provider_manager.write_secret", side_effect=OSError("ACL failed")):
                 public = next(item for item in providers.list_providers() if item["id"] == "compat")
                 private = providers.get_provider("compat")
             self.assertIn("api_key", path.read_text(encoding="utf-8"))
@@ -922,7 +923,7 @@ class ChatProxyRegressionTests(unittest.TestCase):
 
         payload = {"model": "m", "messages": [{"role": "user", "content": "news"}], "tools": [{"type": "function", "function": {"name": "web_search"}}]}
         state = {}
-        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="[1] ok")):
+        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.inference._run_web_search_tool", new=AsyncMock(return_value="[1] ok")):
             chunks = asyncio.run(collect(_stream_chat_with_tools("https://example.test", {}, payload, on_complete=state.update)))
         self.assertEqual(requests[1]["messages"][1]["reasoning_content"], "need web")
         self.assertIn("answer", "".join(chunks))
@@ -957,7 +958,7 @@ class ChatProxyRegressionTests(unittest.TestCase):
             return FakeStreamResponse([sse({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}), sse({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "final"}})])
 
         payload = {"model": "claude", "messages": [{"role": "user", "content": "news"}], "tools": [{"name": "web_search"}]}
-        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="ok")):
+        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.inference._run_web_search_tool", new=AsyncMock(return_value="ok")):
             output = "".join(asyncio.run(collect(_stream_anthropic_with_tools("https://example.test", {}, payload))))
         self.assertIn("final", output)
         self.assertEqual(len(requests), 2)
@@ -972,7 +973,7 @@ class ChatProxyRegressionTests(unittest.TestCase):
             return FakeStreamResponse([sse({"type": "response.created", "response": {"id": "resp_2"}}), sse({"type": "response.output_text.delta", "delta": "final"})])
 
         payload = {"model": "gpt", "input": "news", "tools": [{"type": "function", "name": "web_search"}]}
-        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.main._run_web_search_tool", new=AsyncMock(return_value="ok")):
+        with patch("httpx.AsyncClient.stream", new=stream), patch("backend.inference._run_web_search_tool", new=AsyncMock(return_value="ok")):
             output = "".join(asyncio.run(collect(_stream_responses_with_tools("https://example.test", {}, payload))))
         self.assertIn("final", output)
         self.assertEqual(requests[1]["previous_response_id"], "resp_1")

@@ -1,10 +1,11 @@
 {
-  "name": "llama-manager-frontend",
+  "name": "atelier-frontend",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "generate:brand": "node scripts/generate-brand.mjs",
     "build": "tsc -b && vite build",
     "generate:api": "..\\.venv\\Scripts\\python.exe ..\\scripts\\export_openapi.py && openapi-typescript openapi.json -o src/generated/api.ts",
     "test": "vitest run",

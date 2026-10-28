@@ -1,3 +1,4 @@
+import { api as sharedApi } from "../../../api";
 /**
  * 图像反推：上传参考图 → 视觉模型给出整体描述 + 每个元素的定位框（原图归一化坐标）
  * → 直接在图上标注，可勾选 / 拖动 / 缩放 / 新增 / 改描述 → 按适配方式映射到画布写入。
@@ -277,6 +278,9 @@ export function ReverseModal() {
   const [img, setImg] = useState<Prepared | null>(null);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"layout" | "caption">(doc.kind);
+  const [visionProfile,setVisionProfile] = useState('');
+  const [visionProfiles,setVisionProfiles] = useState<{name:string}[]>([]);
+  useEffect(()=>{void sharedApi<{name:string}[]>('/api/v1/vision/profiles').then(setVisionProfiles).catch(()=>undefined)},[]);
   const [detail, setDetail] = useState("medium");
   const [sizeMode, setSizeMode] = useState<"image" | "page">("image");
   const [fit, setFit] = useState<Fit>("cover");
@@ -336,7 +340,7 @@ export function ReverseModal() {
     setRes(null);
     try {
       const file = new File([img.blob], `${img.name}.jpg`, { type: "image/jpeg" });
-      const r = await api.reverse(file, mode, detail, target.w, target.h, img.w, img.h);
+      const r = await api.reverse(file, mode, detail, target.w, target.h, img.w, img.h, visionProfile ? "local" : undefined);
       setRes(r);
       if (r.mode === "layout") {
         const list: RevItem[] = (r.items || []).map((it: any, i: number) => ({
@@ -458,7 +462,8 @@ export function ReverseModal() {
               <AnnotStage img={img} items={isLayout ? items : []} sel={sel} hover={hover} showLabels={showLabels}
                 crop={isLayout ? crop : null} editable={isLayout} onSelect={setSel} onHover={setHover}
                 onChange={(k, box) => patchItem(k, { box })} onAdd={addItem} />
-              <div className="rev-stage-bar">
+              <div className="row" style={{padding:'12px 18px',flexWrap:'wrap'}}><label>视觉来源 <select className="input" aria-label="视觉反推来源" value={visionProfile} onChange={e=>setVisionProfile(e.target.value)}><option value="">设置中的模型服务</option>{visionProfiles.map(profile=><option key={profile.name} value={profile.name}>{profile.name} · 本地 GGUF</option>)}</select></label>{visionProfile && <button className="btn" onClick={async()=>{try{const server=await sharedApi<{state:string;profile?:string}>('/api/v1/server/status');const conflict=server.state==='running' && server.profile!==visionProfile;if(conflict && !window.confirm(`切换到视觉模型将停止「${server.profile || '当前档案'}」。是否继续？`))return;await sharedApi('/api/v1/vision/select',{method:'POST',body:JSON.stringify({name:visionProfile,confirm_switch:conflict})},300000);toast('视觉模型已启动，请等待加载完成后反推','ok')}catch(e){toast(err(e),'err')}}}>加载视觉模型</button>}{!visionProfiles.length && <span className="hint">在模型配置中添加 GGUF 与 MMProj，即可在此加载本地反推。</span>}</div>
+        <div className="rev-stage-bar">
                 <button type="button" className="btn btn-xs" onClick={() => fileInput.current?.click()}><RefreshCw size={11} />换一张</button>
                 {isLayout && (
                   <button type="button" className={cx("btn btn-xs", showLabels && "on")} onClick={() => setShowLabels(!showLabels)}>
@@ -564,8 +569,8 @@ export function ReverseModal() {
             <section className="rev-sec grow rev-tips">
               <div className="section-title">说明</div>
               <ul>
-                <li>Layout 模式会让视觉模型按原图坐标给出每个元素的定位框，并直接标在左侧图上。</li>
-                <li>框不准可以直接拖动 / 拉角修正，空白处拖拽新增，取消勾选的框不会写入。</li>
+                <li>识别元素并标出定位框。</li>
+                <li>拖动或拉角调整；空白处拖拽新增。未勾选的框不会写入。</li>
                 <li>画布比例和原图不同时，可选裁切 / 拉伸 / 留边。</li>
                 <li>可导出带标注的 PNG。</li>
               </ul>

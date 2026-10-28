@@ -15,7 +15,7 @@ from .config import SKILLS_PATH, load_json, now_iso as _now_iso, save_json as _s
 # Marker so the legacy import runs once even when it found nothing.
 MIGRATED_FLAG = SKILLS_PATH.with_name(".skills-migrated")
 
-router = APIRouter(prefix="/api/moss/skills")
+router = APIRouter(prefix="/api/v1/moss/skills")
 
 
 class SkillActiveBody(BaseModel):

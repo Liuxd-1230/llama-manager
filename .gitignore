@@ -19,3 +19,14 @@ frontend-src/vite.config.d.ts
 temp/
 engine/
 .impeccable/
+
+# Local review output, editor state and user-data backups
+artifacts/
+.zcode/
+DESIGN_bak.md
+*.db
+*.db-*
+*.db.*
+*.sqlite
+*.sqlite3
+*.sqlite-*

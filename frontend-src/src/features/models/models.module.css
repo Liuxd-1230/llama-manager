@@ -69,3 +69,8 @@
   .featured .titleName { font-size:28px }
   .launch { margin-left:0 }
 }
+
+/* Atelier resource list: compact, stable columns without decorative numbering. */
+.card,.featured{grid-template-columns:minmax(0,1fr);grid-template-areas:'header' 'body' 'actions';padding:23px 0;animation:none}
+.no{display:none}.featured .titleName,.titleName{font-size:20px}.featured .cardBody,.cardBody{grid-template-columns:minmax(0,1.3fr) minmax(240px,.7fr);gap:24px;margin-top:12px}.facts span{font-family:var(--font-body);letter-spacing:0;font-size:12px}.metaLine{font-size:12px;letter-spacing:0}.count{letter-spacing:0;font-family:var(--font-body);font-size:12px}.featured .facts b{font-size:15px}
+@media(max-width:900px){.featured .cardBody,.cardBody{grid-template-columns:minmax(0,1fr)}}

@@ -41,11 +41,11 @@ class BridgeTests(unittest.TestCase):
             resolved = bridge.resolve("p1")
         self.assertEqual(resolved["base_url"], "https://api.deepseek.com")
 
-    def test_anthropic_provider_is_rejected(self):
+    def test_anthropic_provider_is_available_to_shared_adapter(self):
         provider = _make_provider(kind="anthropic", base_url="https://api.anthropic.com")
         with mock.patch.object(bridge.provider_manager, "get_provider", return_value=provider):
-            with self.assertRaises(bridge.ProviderError):
-                bridge.resolve("p1")
+            resolved = bridge.resolve("p1")
+            self.assertEqual(resolved["provider"].kind, "anthropic")
 
     def test_model_chain_prefers_settings_then_provider_models_without_duplicates(self):
         provider = _make_provider(models=["m2", "m1"])

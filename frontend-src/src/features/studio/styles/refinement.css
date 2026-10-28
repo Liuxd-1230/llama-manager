@@ -1,0 +1,41 @@
+/* Work surfaces share the host palette; art stays in the brand construction. */
+.studio-root{font-size:var(--type-body)}
+.studio-root .topbar{min-height:44px;padding:6px 12px;gap:8px;overflow:visible}
+.studio-root .topbar .page-tabs{flex:1;min-width:0;overflow:auto}.studio-root .topbar>.spacer{display:none}
+.studio-root .topbar .series-btn{max-width:160px}.studio-root .topbar .series-btn b{font-weight:500}
+.studio-root .topbar .save-state{font-size:var(--type-small);white-space:nowrap}.studio-root .topbar>.topbar-sep{display:none}
+.studio-root .btn{border-radius:var(--radius);box-shadow:none;border:1px solid transparent;background:var(--control-bg);font-size:var(--type-small);min-height:30px}
+.studio-root .btn:hover:not(:disabled){background:var(--control-hover);border-color:transparent}.studio-root .btn-primary{background:var(--accent-fill);color:var(--accent-fg)}.studio-root .btn-primary:hover:not(:disabled){background:var(--accent-hover)}
+.studio-root .btn-ghost,.studio-root .btn-icon{background:transparent}.studio-root .btn-icon{width:30px;min-width:30px;padding:5px}.studio-root .btn:disabled{color:var(--text-disabled);opacity:1}
+.studio-root .session-bar{gap:4px;min-height:42px;padding:6px 10px;border-bottom:1px solid var(--line)}
+.studio-root .session-tabs{min-width:0;flex:1}.studio-root .session-tab{font-size:var(--type-small);border:0;box-shadow:none;border-radius:var(--radius);padding:5px 7px;background:transparent}.studio-root .session-tab.on{background:var(--selected-bg);color:var(--text)}
+.studio-root .agent-ctx{padding:8px 14px;font-size:var(--type-small);border-bottom:1px solid var(--line)}.studio-root .agent-ctx .badge{display:none}
+.studio-root .messages{padding:16px;gap:22px}.studio-root .composer-wrap{padding:10px 12px 12px}.studio-root .quick-bar{gap:5px}.studio-root .quick{background:transparent;box-shadow:none;border:0;font-size:var(--type-small)}
+.studio-root .proposal{box-shadow:none;border:1px solid var(--line);background:var(--bg-elevated);border-radius:var(--radius)}.studio-root .proposal-head{background:var(--selected-bg);color:var(--text);border-bottom:1px solid var(--line)}
+.studio-root .reasoning,.studio-root .step{font-size:var(--type-small)}
+.studio-root .compile-options{padding:10px}.studio-root .compile-options label{display:grid;gap:8px;font-size:var(--type-small);color:var(--text-2)}.studio-root .compile-options select{width:100%;height:34px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-elevated);padding:4px 8px}.studio-root .compile-options .menu-item{margin-top:10px}
+
+/* Agent reference transition: actual grid tracks resize, text is never scaled. */
+.studio-root .main{--agent-size:clamp(320px,28vw,400px);--agent-track:var(--agent-size);--inspector-size:clamp(190px,18vw,230px);display:grid;grid-template-columns:var(--inspector-size) minmax(0,1fr) minmax(0,var(--agent-track));grid-template-rows:minmax(0,1fr);gap:0;padding:0;overflow:hidden;transition:grid-template-columns var(--duration-space) var(--ease-out)}
+.studio-root .main.caption-main{grid-template-columns:minmax(0,1fr) minmax(0,var(--agent-track))}.studio-root .main[data-agent-open='false']{--agent-track:0px}
+.studio-root .stage-slot,.studio-root .agent-slot,.studio-root .inspector-slot{min-width:0;min-height:0;overflow:hidden;height:100%}.studio-root .stage-slot{display:flex;flex-direction:column}.studio-root .stage-slot>.stage{flex:1;min-height:0!important;height:100%;border-radius:0}.studio-root .inspector-slot>.panel{height:100%;max-height:none}
+.studio-root .agent-slot>.agent{width:var(--agent-size);height:100%;min-height:0;max-height:none;border-left:1px solid var(--line);opacity:1;transform:translateX(0);transition:transform var(--duration-space) var(--ease-out),opacity var(--duration-fast) ease}
+.studio-root .main[data-agent-open='false'] .agent-slot>.agent{transform:translateX(24px);opacity:0}.studio-root .agent-slot .session-bar,.studio-root .agent-slot .agent-ctx,.studio-root .agent-slot .composer-wrap{transition:translate var(--duration-space) var(--ease-out)}
+.studio-root .main[data-agent-open='false'] .agent-slot :is(.session-bar,.agent-ctx,.composer-wrap){translate:8px 0}
+.studio-root .stage .drawer{border-radius:0;box-shadow:none}
+@media(max-width:1100px){
+ .studio-root .main,.studio-root .main.caption-main{--agent-size:100%;position:relative;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);overflow:hidden;transition:none}
+ .studio-root .stage-slot,.studio-root .agent-slot{grid-area:1/1;min-height:0;max-height:none;width:100%;height:100%;transition:transform var(--duration-space) var(--ease-out),opacity var(--duration-fast)}
+ .studio-root .agent-slot{z-index:2;background:var(--bg);transform:translateX(0)}.studio-root .agent-slot>.agent{width:100%;border:0;transform:none!important;opacity:1!important}
+ .studio-root .main[data-agent-open='false'] .agent-slot{transform:translateX(100%);opacity:0}.studio-root .main[data-agent-open='true'] .stage-slot{transform:translateX(-28px);opacity:0}
+ .studio-root .main .agent-ctx{min-height:38px}.studio-root .main>.inspector-slot{position:absolute;left:0;top:0;bottom:0;z-index:4;width:min(310px,90%);background:var(--bg-elevated);border-right:1px solid var(--line);transform:translateX(-100%);transition:transform var(--duration-space) var(--ease-out)}
+ .studio-root .main[data-inspector-open='true']>.inspector-slot{transform:translateX(0)}
+ .studio-root[data-mobile-panel] .main .stage-slot,.studio-root[data-mobile-panel] .main .agent-slot{display:flex}
+ .studio-root .topbar .key-group{display:none}.studio-root .topbar .page-tabs{min-width:80px}.studio-root .topbar .series-btn{max-width:105px}.studio-root .save-state{font-size:var(--type-small)}
+}
+@media(prefers-reduced-motion:reduce){.studio-root .main,.studio-root .main *{transition:none!important;animation:none!important}}
+[data-motion='reduced'] .studio-root .main,[data-motion='reduced'] .studio-root .main *{transition:none!important;animation:none!important}
+
+/* The composer owns focus; the inner editing surface must not draw a square ring. */
+.studio-root .composer:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.studio-root .composer .composer-input:focus,.studio-root .composer .composer-input:focus-visible{outline:none;box-shadow:none;background:transparent;border-radius:calc(var(--radius-composer) - 1px) calc(var(--radius-composer) - 1px) 0 0}

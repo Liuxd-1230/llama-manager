@@ -69,12 +69,6 @@ function PageSection() {
   const setKind = (k: "layout" | "caption") => commit({ ...doc, kind: k });
   return (
     <Section id="page" title="页面">
-      <div className="field">
-        <Seg full value={doc.kind} onChange={setKind} options={[
-          { v: "layout", t: <><LayoutGrid size={13} />Layout 分区</>, title: "画框 + 每个框的描述，精确控制构图" },
-          { v: "caption", t: <><FileText size={13} />Caption 散文</>, title: "一段完整的画面描述" },
-        ]} />
-      </div>
       {doc.kind === "layout" ? (
         <>
           <div className="field">
