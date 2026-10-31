@@ -47,11 +47,11 @@ jobs:
         run: pnpm build
       - name: Committed frontend is fresh
         # The production bundle is committed; a source change without a rebuild
-        # (or a manual edit of frontend/) must fail CI. The build is
-        # deterministic for a given lockfile, so an up-to-date tree diffs clean.
-        # Step-level override: defaults pin this job to frontend-src.
+        # (or a manual edit of frontend/) must fail CI. Vite 8 hashes are
+        # machine-dependent, so the check normalizes hash tokens before
+        # comparing; see scripts/check_frontend_fresh.mjs.
         working-directory: ${{ github.workspace }}
-        run: git diff --exit-code -- frontend/
+        run: node scripts/check_frontend_fresh.mjs
 
   e2e:
     runs-on: windows-latest
