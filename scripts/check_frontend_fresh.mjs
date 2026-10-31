@@ -17,6 +17,11 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const HASH_TOKEN = /-([A-Za-z0-9_-]{8})\.(js|css)\b/g
+// CSS Modules scoped names (_modal_n1rwm_1) are build-internal identifiers:
+// lightningcss generates different hashes and enumerations per machine while
+// each bundle stays internally consistent (CSS and JS agree). Normalize the
+// whole scoped name so the gate compares rule structure, not tool internals.
+const MODULE_NAME = /_[A-Za-z0-9]+_[a-z0-9]{4,6}_\d+\b/g
 const TEXT_SUFFIX = /\.(js|css|html?|json|webmanifest|svg|txt|md)$/i
 const ROOT = 'frontend/'
 const key = rel => rel.replace(HASH_TOKEN, '-HASH.$2')
@@ -25,7 +30,11 @@ function normalize(rel, bytes) {
   if (!TEXT_SUFFIX.test(rel)) return bytes.toString('latin1')
   // Hash tokens hide rename cascades; EOL normalization hides checkout
   // filters (blobs may predate eol settings, builds always write LF).
-  return bytes.toString('utf-8').replace(HASH_TOKEN, '-HASH.$2').replace(/\r\n/g, '\n')
+  return bytes
+    .toString('utf-8')
+    .replace(HASH_TOKEN, '-HASH.$2')
+    .replace(/\r\n/g, '\n')
+    .replace(MODULE_NAME, '_SCOPED_')
 }
 
 function read(rel) {
