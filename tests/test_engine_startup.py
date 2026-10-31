@@ -11,8 +11,8 @@ from backend.process_manager import ProcessManager
 class EngineStartupTests(unittest.TestCase):
     def test_profile_system_prompt_is_not_a_server_cli_argument(self):
         config = AppConfig(system_prompt='Keep the configured default instruction.')
-        with patch('backend.process_manager.detect_server_binary', return_value='llama-server.exe'), \
-                patch('backend.process_manager.resolve_engine_dir', return_value='engine'):
+        with patch('backend.config_manager.detect_server_binary', return_value='llama-server.exe'), \
+                patch('backend.config_manager.resolve_engine_dir', return_value='engine'):
             command = ProcessManager().build_command(config)
         self.assertNotIn('--system-prompt', command)
         self.assertNotIn(config.system_prompt, command)

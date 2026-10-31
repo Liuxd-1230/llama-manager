@@ -408,8 +408,7 @@ class KvmemCommandTests(unittest.TestCase):
             self.assertNotIn(flag, command)
 
     def test_kvmem_pinned_windows_align_to_blocks_and_gate_on_budget(self):
-        from backend import process_manager as pm
-        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: {"--kvmem-lrfu"}):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "binary_flags", lambda path: {"--kvmem-lrfu"}):
             root = Path(tmp)
             (root / "bin").mkdir()
             (root / "bin" / "llama-kvmem-server.exe").write_text("", encoding="utf-8")
@@ -428,8 +427,7 @@ class KvmemCommandTests(unittest.TestCase):
                 process_manager.build_command(config)
 
     def test_kvmem_lrfu_on_pre_v017_build_fails_with_a_usable_message(self):
-        from backend import process_manager as pm
-        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: set()):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "binary_flags", lambda path: set()):
             root = Path(tmp)
             (root / "bin").mkdir()
             (root / "bin" / "llama-kvmem-server.exe").write_text("", encoding="utf-8")
@@ -467,8 +465,7 @@ class NinferCommandTests(unittest.TestCase):
         return root
 
     def test_ninfer_engine_builds_v018_command(self):
-        from backend import process_manager as pm
-        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: self.V018_FLAGS):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "binary_flags", lambda path: self.V018_FLAGS):
             root = self._pack(tmp)
             config = AppConfig(
                 llama_cpp_dir=str(root), model_path="E:\\models\\bonsai.ninfer", engine="ninfer",
@@ -510,8 +507,7 @@ class NinferCommandTests(unittest.TestCase):
         self.assertNotIn("--host-kv-mib", command)
 
     def test_ninfer_aligns_windows_down_to_whole_pages(self):
-        from backend import process_manager as pm
-        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: self.V018_FLAGS):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "binary_flags", lambda path: self.V018_FLAGS):
             root = self._pack(tmp)
             config = AppConfig(
                 llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer",
@@ -524,8 +520,7 @@ class NinferCommandTests(unittest.TestCase):
         self.assertEqual(command[command.index("--kvmem-recent-tokens") + 1], "960")
 
     def test_ninfer_rejects_pinned_windows_larger_than_budget(self):
-        from backend import process_manager as pm
-        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: self.V018_FLAGS):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "binary_flags", lambda path: self.V018_FLAGS):
             root = self._pack(tmp)
             config = AppConfig(
                 llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer",
@@ -535,8 +530,7 @@ class NinferCommandTests(unittest.TestCase):
                 process_manager.build_command(config)
 
     def test_ninfer_rejects_device_tokens_over_context(self):
-        from backend import process_manager as pm
-        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: self.V018_FLAGS):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "binary_flags", lambda path: self.V018_FLAGS):
             root = self._pack(tmp)
             config = AppConfig(
                 llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer",
@@ -546,8 +540,7 @@ class NinferCommandTests(unittest.TestCase):
                 process_manager.build_command(config)
 
     def test_ninfer_lrfu_on_older_worker_fails_with_a_usable_message(self):
-        from backend import process_manager as pm
-        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: set()):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "binary_flags", lambda path: set()):
             root = self._legacy_pack(tmp)
             config = AppConfig(llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer")
             with self.assertRaises(ValueError) as caught:
@@ -555,8 +548,7 @@ class NinferCommandTests(unittest.TestCase):
         self.assertIn("LRFU", str(caught.exception))
 
     def test_ninfer_thinking_maps_to_reasoning_effort(self):
-        from backend import process_manager as pm
-        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: self.V018_FLAGS):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "binary_flags", lambda path: self.V018_FLAGS):
             root = self._pack(tmp)
             config = AppConfig(llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer")
             command = process_manager.build_command(config)
@@ -568,8 +560,7 @@ class NinferCommandTests(unittest.TestCase):
             self.assertEqual(command[command.index("--default-thinking-budget") + 1], "8192")
 
     def test_ninfer_spec_none_and_draft_clamp(self):
-        from backend import process_manager as pm
-        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: self.V018_FLAGS):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "binary_flags", lambda path: self.V018_FLAGS):
             root = self._pack(tmp)
             config = AppConfig(llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer",
                                ninfer=NinferSettings(spec="none"))
@@ -583,8 +574,7 @@ class NinferCommandTests(unittest.TestCase):
             self.assertEqual(command[command.index("--draft-tokens") + 1], "15")
 
     def test_ninfer_ssd_tier_opt_in(self):
-        from backend import process_manager as pm
-        with TemporaryDirectory() as tmp, patch.object(pm, "binary_flags", lambda path: self.V018_FLAGS):
+        with TemporaryDirectory() as tmp, patch.object(cfg, "binary_flags", lambda path: self.V018_FLAGS):
             root = self._pack(tmp)
             config = AppConfig(llama_cpp_dir=str(root), model_path="E:\\m.ninfer", engine="ninfer")
             command = process_manager.build_command(config)
