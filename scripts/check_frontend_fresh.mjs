@@ -52,15 +52,25 @@ for (const rel of workFiles) {
 }
 
 const problems = []
+const excerpts = []
 for (const name of [...new Set([...committed.keys(), ...worktree.keys()])].sort()) {
   if (!worktree.has(name)) problems.push(`缺失（重建后不再产出）: ${name}`)
   else if (!committed.has(name)) problems.push(`多出（提交树没有对应产物）: ${name}`)
-  else if (committed.get(name) !== worktree.get(name)) problems.push(`内容不同（源码改动未重建，或产物被手改）: ${name}`)
+  else if (committed.get(name) !== worktree.get(name)) {
+    problems.push(`内容不同（源码改动未重建，或产物被手改）: ${name}`)
+    if (excerpts.length < 3) {
+      const a = committed.get(name), b = worktree.get(name)
+      let i = 0
+      while (i < Math.min(a.length, b.length) && a[i] === b[i]) i += 1
+      excerpts.push(`@@ ${name} @ 公共前缀 ${i}/${a.length},${b.length}\n  index: ${JSON.stringify(a.slice(Math.max(0, i - 60), i + 120))}\n  work : ${JSON.stringify(b.slice(Math.max(0, i - 60), i + 120))}`)
+    }
+  }
 }
 
 if (problems.length) {
   console.error('frontend/ 与源码不一致：')
   for (const p of problems) console.error('  - ' + p)
+  for (const e of excerpts) console.error(e)
   process.exit(1)
 }
 console.log(`frontend/ fresh: ${committed.size} files compared (hash-token normalized)`)
