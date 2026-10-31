@@ -83,3 +83,38 @@ MiniLM SHA-256：`53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9
 最终回归：unittest 151/151、HF 核心 pytest 42/42、Vitest 68/68、生产静态资源 Playwright 88/88，TypeScript、OpenAPI 类型生成和生产构建通过。初轮浏览器失败包含旧的“刷新”文案选择器，以及真实的新项目首笔编辑被重复 boot 覆盖问题；更新选择器并修复数据竞态后完整重跑，未放宽断言。设计扫描结果为空；此结果不替代实际界面判断。
 
 另实测 GGUF 文件选择在上述三种尺寸下准确回填，选中文件后取消也不改变原字段；LoRA 扫描入口的目录窗口实际打开与取消。下载重启恢复复测保留同一 job ID，收到 206、从 6,291,456 字节处继续，最终 SHA-256 一致。真实模型日志也记录了取消对应的 cancel task 与 slot release。真实测试用的独立模型服务已停止，正式用户档案未切换。
+
+## 并发与阻塞防线（P0）· 2026-10-31
+
+针对真实使用中的服务级卡死与竞态做 P0 加固。以下均为受控夹具与隔离数据目录验证，不含真实引擎启动或 ComfyUI 全链路。
+
+- ComfyUI 轮询 `moss_server/comfy.py` 的 `wait_for_images` 原在 async 函数内使用 `time.sleep(0.8)`，阻塞事件循环；主生成链路超时 1800 秒，意味着出图期间状态轮询、对话与 Agent 全部停摆。改为 `asyncio.sleep` 并注明必须保持 async 的约束。心跳夹具实测：旧实现事件循环最大停顿 2.4s，新实现心跳间隔不超 0.5s。
+- `ProcessManager.start/stop` 以 `asyncio.Lock` 串行化，并发双启动夹具只拉起一个引擎进程，另一个收到「already running」。命令构建（含 `binary_flags --help` 探测，单次最长 60s）与引擎目录解析移入 `asyncio.to_thread`，且在锁外执行。日志读取任务改为接收自身 process 引用：start 替换进程后旧 reader 不会误读新进程输出；task 引用保存于 `_reader_task`，避免被垃圾回收。
+- 档案保存（`config_manager.save_config`）原用固定 `default.tmp` 临时文件且无锁，并发保存可能互相覆盖或写出坏 JSON。改为同目录唯一临时文件 + `os.replace` 原子写，save/load/read/duplicate/import 共用 `threading.RLock`。夹具：24 线程并发保存 24 个档案全部可解析且无 `.tmp` 残留；同档案并发保存终态合法；序列化中途失败时旧档案保持不变、无临时文件残留。
+- 隔离数据目录（9096 端口）真实服务冒烟：状态、主机资源、配置保存与往返正常，配置目录无 `.tmp` 残留；引擎目录无效时 `server/start` 经线程内命令构建返回可读的 400 错误。
+
+回归结果：unittest 168 项 167 通过（含本轮新增 `tests/test_concurrency_guards.py` 8 项）。两个失败为改动前已存在的环境依赖问题，与本次无关：`tests/test_atelier.py::test_mcp_http_transport`（真实 MCP HTTP 子进程）与 `tests/hf_download` 中依赖本地 FakeHFServer 的 18 项（元数据请求被返回 HTTP 502）。未运行真实引擎与 ComfyUI；生产用户数据未触碰。
+
+## 上游回归追平与数据卫生（P1）· 2026-10-31
+
+追平 `-moss-prompt-editor` 上游已有的 3D 精确体块保护，并给共享数据加上保留与级联策略。以下为受控夹具与隔离服务冒烟结果，不含真实 3D 场景手工作业。
+
+- 从上游补回：`sanitize_body` 对 `body.exact` 世界体块保留 5 位小数并透传 `exact` 标记（避免来回保存尺寸漂移）；`fit_to_canvas` 在编译前裁剪/剔除出画框，初始机位前脸超画布从「编译报错」变为正常裁剪；`compile_checks` 恢复 view 参数；`ops.clamp_bbox` 恢复 slack，新增 `_is_world_3d`，Agent 编辑时把投影框抄回 bbox 会被拒绝并提示（不再把 3D 体块挤歪），画布缩放对 world 3D 保留 2 倍 slack，`compact_item` 恢复 `partly_out_of_frame`；Agent 系统提示恢复完整的 bbox/view_bbox 语义说明，`run_agent` 重新接收前端视图（`wb.views`）。
+- 任务与事件保留：`atelier_jobs` 只增不删且每帧一条事件。启动时保留最近 500 个任务、事件只保留运行中任务与最近 50 个任务的回放窗口；每创建 50 个任务在事务内增量清理。夹具：520 任务清理后余 500、无孤儿事件；持续创建同样有界。
+- 三个管理器（engine/download/update）日志缓冲改 `deque(maxlen=5000)`（原先 list 逐行切片为 O(n)），WebSocket 订阅队列上限 1000，慢客户端满时丢自己队列最旧一行而不是无限堆积。
+- 隔离 `MOSS_DATA_DIR` 的 workspace.db 开启 WAL 与 `synchronous=NORMAL`（共享 atelier.db 已由 storage.py 开启）；文件系统拒绝 WAL 时静默降级。
+- 删除项目对象现在级联删除其系列/分页/修订/会话/消息；删除当前项目返回 409 并保持原状。任务快照与作品素材按设计保留。
+
+回归：unittest 182 项 181 通过（新增 `tests/test_p1_guards.py` 14 项），唯一错误仍为改动前已存在的 `test_mcp_http_transport` 环境问题。隔离数据目录（9096，独立 ATELIER_DATA_DIR + MOSS_DATA_DIR）冒烟：创建/选择项目、删除当前项目 409、切换后删除 200 且该项目的系列在 workspace.db 中清零、隔离库 journal_mode=wal。未运行真实 3D 场景与 ComfyUI。
+
+## 工程流水线（P2）· 2026-10-31
+
+- **系统代理劫持本地回环（真实产品缺陷，P2 期间发现并修复）**：urllib 在 Windows 上读取注册表代理（本机为 127.0.0.1:7890），`requests`/`httpx` 默认遵循它，于是本地引擎、ComfyUI、MCP 与测试夹具的回环请求全部经代理转发；代理不可用时整组功能瘫痪。`backend/__init__.py` 现在在包导入时把 `127.0.0.1/localhost/::1` 合并进 `NO_PROXY`/`no_proxy`。此前被误判为「环境依赖问题」的 hf_download 18 个失败与 MCP HTTP 传输错误全部转为通过。
+- **CI**：新增 `.github/workflows/ci.yml`（windows-latest）：backend 岗（ruff + unittest + pytest hf）、frontend 岗（frozen-lockfile 安装 + vitest + build + 新鲜度门禁）、e2e 岗（隔离数据目录起 9092 后跑 Playwright，先以 continue-on-error 观察，转正后再改为阻塞）。
+- **新鲜度门禁**：生产构建提交在 `frontend/`，CI 重建后 `git diff --exit-code frontend/`，改源不重建或手改产物会挂。本机两次重建输出哈希完全一致，构建确定性成立。门禁生效前提是当前工作区的新哈希产物先提交。
+- **Lint**：根 `pyproject.toml` 配 ruff（`select = ["F", "E9"]`，line-length 200，排除 vendored 与前端目录），清理了 45 项未使用导入/重定义与 7 处死变量；`backend/version.py` 的唯一版本常量通过 `as` 别名形式在 moss config 重导出以免被自动清理。`ruff` 进入 requirements-dev 与 AGENTS 命令清单。
+- **依赖锁定**：`frontend-src/package.json` 的 21 个 `latest` 全部按锁文件解析版本改为 `^` 区间（react 19.2.7、vite 8.1.4、vitest 4.1.10 等），`pnpm-lock.yaml` 同步；vitest 68/68、tsc、构建复验通过。Python 侧新增 `requirements-lock.txt`（pip freeze，57 项），requirements.txt 仍是语义来源，改依赖后需重新生成。
+- **版本口径**：`backend/version.py` 成为唯一来源，`main.py` 与 `moss_server/config.py` 引用同一常量，前端 package.json 从 0.1.0 提到 3.0.0。
+- **大文件拆分缓期并记录原因**：`moss_server/api.py`（957 行）与 `process_manager.py` 的机械拆分会破坏现有测试缝隙——`test_atelier` 直接 patch `backend.moss_server.api` 的 `load_settings/save_settings` 来隔离 comfy 路由，`test_regressions`/`test_engine_startup` patch `backend.process_manager` 命名空间里的二进制探测函数。安全路径是先把缝隙迁到 `config.SETTINGS_PATH`/`store` 路径这类数据边界，再拆路由与引擎 builder；本轮不做。
+
+回归：unittest 182/182、pytest hf 42/42、ruff 0 违规、vitest 68/68、tsc 与生产构建通过且产物哈希与既有提交一致。未提交任何变更；工作区仍含用户先前未提交的改动。
