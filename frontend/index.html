@@ -8,12 +8,23 @@
     <link rel="apple-touch-icon" href="/static/brand/atelier-180.png" />
     <link rel="manifest" href="/static/manifest.webmanifest" />
     <title>Atelier</title>
-    <script type="module" crossorigin src="/static/assets/index-C-7UE3II.js"></script>
+    <script>
+      // Apply theme and accent before first paint; mirrors resolveInitialTheme
+      // / resolveInitialAccent in App.tsx.
+      try {
+        var theme = localStorage.getItem("theme");
+        if (theme !== "dark" && theme !== "light") theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme = theme;
+        var accent = localStorage.getItem("accent");
+        if (accent === "violet" || accent === "ocean" || accent === "amber") document.documentElement.dataset.accent = accent;
+      } catch (e) {}
+    </script>
+    <script type="module" crossorigin src="/static/assets/index-DSHK7xHk.js"></script>
     <link rel="modulepreload" crossorigin href="/static/assets/ui-Ch9_YoEe.js">
     <link rel="stylesheet" crossorigin href="/static/assets/ui-CgA_akgO.css">
     <link rel="stylesheet" crossorigin href="/static/assets/index-C2oHY8zq.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
   </body>
 </html>
