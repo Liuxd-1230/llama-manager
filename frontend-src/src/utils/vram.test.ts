@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { estimateUsage, type VramInput } from './vram'
+import { estimateUsage, type ModelGeom, type VramInput } from './vram'
 
 // 校准事实(注释里的本机实测,nvidia-smi deltas 2026-10-06)以断言形式钉死:
 //  - llama.cpp f16 KV 斜率 ≈31.7KB/token,几何公式差 <1%
@@ -73,7 +73,62 @@ describe('vram estimator — MoE expert offload (Hermes 35B-A3B calibration)', (
   })
 })
 
+describe('vram estimator — sliding-window (gemma4-12B real header)', () => {
+  // Real GGUF header (read via /api/v1/model-info, 2026-10-31): 48 layers in a
+  // [8×5, 1] pattern, window 1024, head_dim 512. Measured launch with --fit on
+  // at 16K ctx: 7171 MiB total VRAM — the old dense estimate said 17.41 GB.
+  const GEMMA12: ModelGeom = {
+    kv_heads: [8, 8, 8, 8, 8, 1, 8, 8, 8, 8, 8, 1, 8, 8, 8, 8, 8, 1, 8, 8, 8, 8, 8, 1,
+               8, 8, 8, 8, 8, 1, 8, 8, 8, 8, 8, 1, 8, 8, 8, 8, 8, 1, 8, 8, 8, 8, 8, 1],
+    head_dim: 512,
+    sliding_window: 1024,
+    full_layers: 8,
+    kv_layers: 48,
+  }
+  const gemma = (over: Partial<VramInput>) => base({ modelSizeMb: 7039.4, ctxSize: 16384, kvCacheQuant: 'q8_0', geom: GEMMA12, ...over })
+
+  it('caches window tokens on sliding layers and full context on global layers', () => {
+    const r = estimateUsage(gemma({}))
+    // 40 sliding layers: 2·8·512·2 B × 1024 tokens; 8 full layers: 2·1·512·2 B ×
+    // 16384 tokens; × 0.73 (q8) → 0.64 GiB instead of the dense 8.76.
+    const kv = r.vram.parts.find(p => p.label.includes('KV(SWA'))!
+    expect(kv.gb).toBeCloseTo((40 * 2 * 8 * 512 * 2 * 1024 + 8 * 2 * 1 * 512 * 2 * 16384) * 0.73 / GB ** 3, 2)
+    // Without fit the all-GPU honest estimate does exceed the card; fit mode
+    // is what makes the launch fit (asserted below).
+    expect(r.vram.totalGb).toBeGreaterThan(8.5)
+    expect(r.vram.over).toBe(true)
+  })
+
+  it('matches the dense figure when the context fits inside the window', () => {
+    const r = estimateUsage(gemma({ ctxSize: 1024 }))
+    const kv = r.vram.parts.find(p => p.label.includes('KV(SWA'))!
+    // Dense per-token: 2·512·2·(Σ heads = 328) = 671,744 B — same math.
+    expect(kv.gb).toBeCloseTo((671744 * 1024 * 0.73) / GB ** 3, 2)
+  })
+
+  it('splits weights to RAM in fit mode and stays under the safe line', () => {
+    const r = estimateUsage(gemma({ fitEnabled: true }))
+    expect(r.vram.over).toBe(false)
+    const gpu = r.vram.parts.find(p => p.label.startsWith('权重'))!
+    const cpu = ramFitPart(r.ram.parts)
+    const scratch = Math.max(0, (7039.4 / GB) * -0.12 + 1.6)
+    expect(gpu.gb).toBeCloseTo(7.4 - 1 - kvGb(gemma({})) - scratch, 1)
+    expect(cpu.gb).toBeCloseTo(7039.4 / GB - gpu.gb, 1)
+    expect(r.vram.totalGb).toBeLessThan(8)
+  })
+})
+
+function ramFitPart(parts: { label: string; gb: number }[]) {
+  return parts.find(p => p.label.includes('fit 卸载'))!
+}
+
+function kvGb(input: VramInput): number {
+  // Same value the estimator derives for the gemma12 header at q8.
+  return (40 * 2 * 8 * 512 * 2 * 1024 + 8 * 2 * 1 * 512 * 2 * 16384) * 0.73 / GB ** 3
+}
+
 describe('vram estimator — units and budget threshold', () => {
+
   it('converts bytes to GB with the 1024³ divisor (2a97f8b guard)', () => {
     const r = estimateUsage(base({ ctxSize: 1, geom: { kv_bytes_per_token: GB ** 3 } }))
     expect(r.vram.parts.find(p => p.label.startsWith('KV'))!.gb).toBe(1)

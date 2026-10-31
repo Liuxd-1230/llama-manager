@@ -10,7 +10,7 @@ import { ResourceUsage } from '../../components/ResourceUsage'
 import page from '../pages.module.css'
 import styles from './models.module.css'
 
-type ProfileMeta = { name?: string; architecture?: string; layers?: number; active_experts?: number; context_length?: number; native_mtp?: boolean; hidden?: number; kv_layers?: number; kv_bytes_per_token?: number; kv_bytes_per_token_f16?: number; experts?: number; moe_layers?: number }
+type ProfileMeta = { name?: string; architecture?: string; layers?: number; active_experts?: number; context_length?: number; native_mtp?: boolean; hidden?: number; kv_layers?: number; kv_bytes_per_token?: number; kv_bytes_per_token_f16?: number; experts?: number; moe_layers?: number; kv_heads?: number[]; head_dim?: number; sliding_window?: number; full_layers?: number }
 
 type Profile = {
   name: string
@@ -198,6 +198,7 @@ function ProfileCard({ profile, index, delay, busy, stopping, serverRunning, dir
     kvmem: { budget: profile.kvmem?.budget ?? 0, gen_reserve: profile.kvmem?.gen_reserve ?? 0, kv_dtype: profile.kvmem?.kv_dtype ?? 'q8_0' },
     ninfer: { budget: profile.ninfer?.budget ?? 0, gen_reserve: profile.ninfer?.gen_reserve ?? 0, prefill_chunk: profile.ninfer?.prefill_chunk ?? 256, cuda_graph: profile.ninfer?.cuda_graph ?? false, host_kv_mib: profile.ninfer?.host_kv_mib ?? 4096 },
     nCpuMoe: (profile.engine || 'llama.cpp') === 'llama.cpp' ? (profile.n_cpu_moe ?? 0) : 0,
+    fitEnabled: (profile.engine || 'llama.cpp') === 'llama.cpp' && (profile.fit_enabled ?? false),
     geom: {
       kv_bytes_per_token: typeof meta.kv_bytes_per_token === 'number' ? meta.kv_bytes_per_token : undefined,
       kv_bytes_per_token_f16: typeof meta.kv_bytes_per_token_f16 === 'number' ? meta.kv_bytes_per_token_f16 : undefined,
@@ -205,6 +206,11 @@ function ProfileCard({ profile, index, delay, busy, stopping, serverRunning, dir
       kv_layers: typeof meta.kv_layers === 'number' ? meta.kv_layers : undefined,
       experts: typeof meta.experts === 'number' ? meta.experts : undefined,
       moe_layers: typeof meta.moe_layers === 'number' ? meta.moe_layers : undefined,
+      // Sliding-window (gemma family) geometry for the window-aware KV estimate.
+      kv_heads: Array.isArray(meta.kv_heads) ? meta.kv_heads.filter((v: unknown) => typeof v === 'number') : undefined,
+      head_dim: typeof meta.head_dim === 'number' ? meta.head_dim : undefined,
+      sliding_window: typeof meta.sliding_window === 'number' ? meta.sliding_window : undefined,
+      full_layers: typeof meta.full_layers === 'number' ? meta.full_layers : undefined,
     },
   })
   const chips: { label: string; active?: boolean }[] = [

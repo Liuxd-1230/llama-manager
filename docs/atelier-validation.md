@@ -112,3 +112,11 @@
 - 配置的本地引擎端口 18080 曾被非 Atelier 的本机服务间歇应答（空 404 与非 UTF-8 字节）；建议核对 18080 的占用者。
 
 **边界**：本轮未测恢复功能（尚未实现）；出图期间事件循环心跳测量因驱动错误未取得数据，仅有出图成功这一事实；gemma12（llama.cpp，预估 17.4 GB）未启动；未重复下载多 GB 模型。正式后端保持在 9090 运行本轮代码，受管引擎已停止，验收档案已删除，当前档案恢复为 gemma12。
+
+## 显存估算修复（gemma12 实测校准）· 2026-10-31 同日
+
+用户指出 gemma12 实际显存不超，旧估算 17.41GB 有误。取证与修复：
+- 根因：GGUF 的逐层 KV 头数组（[8×5, 1] 循环）被取首元素当全层值，且未读 `attention.sliding_window`——40 个滑动层被按全上下文计费。另发现估算器对无 KV 量化的 llama.cpp 档案默认按 q8_0 折算（应为 f16）。
+- 修复：后端元数据补读 `sliding_window` 并输出 `full_layers/sliding_layers`（layer_types 缺失时以最小 kv 头数识别全局层），稠密 per-token 改为逐层求和；前端估算器窗口感知（滑动层缓存 min(ctx, window)），`--fit on` 档案按安全线封顶、超出权重计入内存倍策；KV 量化缺省改 f16；ModelsPage 的 geom 白名单与 ProfileMeta 类型补齐新字段。
+- 校准：gemma12 启动实测 nvidia-smi 7171 MiB（16K ctx、KV 双 q8_0、`--fit on`），新估算 7.40GB，差 0.4GB；旧估算 17.41GB。页面截图 `frontend-src/demo/shots/current/models-gemma12-fixed.png`。
+- 回归：unittest 188/188、ruff 0 违规、vitest 71/71（含 4 个 gemma12 夹具新断言：窗口 KV、窗口内与稠密一致、fit 拆分、无 fit 超线）、生产构建通过。引擎留停（启动前即为停止态）。

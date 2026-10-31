@@ -42,6 +42,10 @@ c.post(f'{BASE}/api/v1/profiles/launch', json={'name': '<档案名>'})          
 | 投机解码 | `mtp.*`（`--spec-type`） | `mtp.*`（需合并 MTP 头的模型） | `ninfer.spec`（`mtp/dflash/dflash2`）+ `draft_tokens`（≤15）+ `adaptive_mtp` + `ngram_draft_tokens`(≤63)/`ngram_min_match` |
 
 
+## 显存估算（llama.cpp，滑动窗口 SWA）
+
+估算器（`frontend-src/src/utils/vram.ts`）读 GGUF 头的逐层 KV 头数组与 `attention.sliding_window`：滑动层只缓存窗口内 token，全局层（本族即每层 KV 头最少的层）缓存全上下文。gemma4-12B（48 层按 [8×5, 1] 循环、head_dim 512、窗口 1024、ctx 16K、KV 双 q8_0）实测：KV ≈ 0.64GB，`--fit on` 再把约 1.9GB 权重挪去内存，预估总显存 7.4GB（nvidia-smi 实测 7171MiB）。旧稠密算法（48 层全按首个 kv 头数 × 全 ctx）把这类模型高估到 17.4GB；`--fit on` 的档案总估算以安全线封顶、超出部分计入内存倍策。
+
 显存账（KVMem，RTX 4060 Laptop 8GB 实测）：**桌面常驻 ~1GB + 权重 5.5GB + CUDA 缓冲 ~0.4GB + (预算+预留) × 25MB/千token（q8_0）或 ~12.5MB/千token（q4_0）**。安全线：总计 ≤ 7.4GB。`basic.ctx_size/threads/parallel/fit/MoE/KV K/V/mmap/...` 在 KVMem/NInfer 引擎下不进命令，不要设置。
 
 ## NInfer 引擎专节（KVMem v0.18.0 统一包）

@@ -247,6 +247,8 @@ def _parse_gguf_header(path: Path) -> dict:
                 meta["head_dim"] = value
             elif key.endswith(".attention.layer_types"):
                 meta["layer_types"] = value
+            elif key.endswith(".attention.sliding_window"):
+                meta["sliding_window"] = value
             else:
                 return False
             return True
@@ -263,9 +265,14 @@ def _parse_gguf_header(path: Path) -> dict:
             if key.startswith("tokenizer.") and "layers" in meta and "kv_heads" in meta:
                 break
             if record(key, read_value(value_type)):
-                if ("name" in meta and "architecture" in meta and "layers" in meta
-                        and "context_length" in meta and "kv_heads" in meta
-                        and ("experts" in meta or index >= 32)):
+                basics = ("name" in meta and "architecture" in meta and "layers" in meta
+                          and "context_length" in meta and "kv_heads" in meta
+                          and ("experts" in meta or index >= 32))
+                # SWA facts (layer types / window) sit right after the head
+                # counts; without them the KV estimate over-counts windowed
+                # layers by the full-context ratio.
+                swa = "layer_types" in meta or "sliding_window" in meta
+                if basics and (swa or index >= 96):
                     break
     _finalize_gguf_meta(meta)
     return meta
@@ -285,11 +292,23 @@ def _finalize_gguf_meta(meta: dict) -> dict:
         return meta
     layers = meta.get("layers")
     if isinstance(kv_heads, list):
+        # Per-layer heads: the dense per-token figure must sum every layer's
+        # own heads — taking the first entry over-counts gemma-style hybrids
+        # whose global layers carry a single KV head.
+        total_heads = sum(int(heads) for heads in kv_heads if heads)
         kv_layers = sum(1 for heads in kv_heads if heads)
-        per_layer_heads = next((heads for heads in kv_heads if heads), 0)
+        per_layer_heads = total_heads
         layer_types = meta.get("layer_types")
         if isinstance(layer_types, list) and layer_types:
-            kv_layers = sum(1 for kind in layer_types if str(kind) == "full_attention")
+            full = sum(1 for kind in layer_types if "full" in str(kind))
+            meta["full_layers"] = full
+            meta["sliding_layers"] = max(kv_layers - full, 0)
+        elif len(set(kv_heads)) > 1:
+            # gemma family: the minimal-head layers are the global ones
+            minimal = min(heads for heads in kv_heads if heads)
+            full = sum(1 for heads in kv_heads if heads == minimal)
+            meta["full_layers"] = full
+            meta["sliding_layers"] = max(kv_layers - full, 0)
     else:
         kv_layers = layers or 0
         per_layer_heads = kv_heads
@@ -305,7 +324,9 @@ def _finalize_gguf_meta(meta: dict) -> dict:
     meta["head_dim"] = head_dim
     meta["kv_layers"] = kv_layers
     if kv_layers and per_layer_heads and head_dim:
-        meta["kv_bytes_per_token_f16"] = 2 * int(per_layer_heads) * int(head_dim) * int(kv_layers) * 2
+        # per_token = 2 (K+V) × head_dim × 2 bytes × Σ(per-layer KV heads):
+        # multiplying an average by kv_layers is only exact for uniform models.
+        meta["kv_bytes_per_token_f16"] = 2 * int(head_dim) * 2 * int(per_layer_heads)
     if meta.get("experts") and layers:
         # MoE architectures put experts on every block; the estimator splits
         # GPU/RAM at --n-cpu-moe using this count.
