@@ -184,6 +184,10 @@ def _force_web_search_tool_choice(payload: dict) -> dict:
 
 
 def _local_chat_payload(data: dict, config: AppConfig, messages: list[dict]) -> dict:
+    # llama-server does not accept --system-prompt. Keep the saved profile
+    # default in the request instead, without overriding an explicit caller.
+    if config.system_prompt.strip() and not any(message.get('role') in {'system', 'developer'} for message in messages):
+        messages = [{'role': 'system', 'content': config.system_prompt}, *messages]
     sampling = config.sampling
     web_tool = bool(data.get("web_search_tool") or data.get("web_search") is True)
     if config.engine == "ninfer":
@@ -461,7 +465,6 @@ async def _execute_chat_tool_calls(
 
 
 async def _complete_with_chat_tools(target: str, headers: dict[str, str], payload: dict, max_rounds: int = 4) -> dict:
-    import httpx
     tool_payload = dict(payload)
     tool_payload["stream"] = False
     tool_events = [{"type": "status", "message": "Web Search 工具已启用，等待模型决定是否调用。"}]
@@ -521,7 +524,6 @@ async def _stream_chat_with_tools(
     max_rounds: int = 4,
     on_complete=None,
 ):
-    import httpx
     tool_payload = dict(payload)
     tool_payload["stream"] = True
     messages = [*tool_payload.get("messages", [])]
@@ -630,7 +632,6 @@ async def _stream_chat_with_tools(
 
 
 async def _complete_with_anthropic_tools(target: str, headers: dict[str, str], payload: dict, max_rounds: int = 3) -> dict:
-    import httpx
     tool_payload = dict(payload)
     tool_payload["stream"] = False
     tool_events = [{"type": "status", "message": "Web Search 工具已启用，等待模型决定是否调用。"}]
@@ -683,7 +684,6 @@ async def _complete_with_anthropic_tools(target: str, headers: dict[str, str], p
 
 
 async def _complete_with_responses_tools(target: str, headers: dict[str, str], payload: dict, max_rounds: int = 3) -> dict:
-    import httpx
     tool_payload = dict(payload)
     tool_payload["stream"] = False
     tool_events = [{"type": "status", "message": "Web Search 工具已启用，等待模型决定是否调用。"}]
@@ -753,7 +753,6 @@ async def _stream_anthropic_with_tools(
     max_rounds: int = 4,
     on_complete=None,
 ):
-    import httpx
 
     request_base = dict(payload)
     request_base["stream"] = True
@@ -856,7 +855,6 @@ async def _stream_responses_with_tools(
     max_rounds: int = 4,
     on_complete=None,
 ):
-    import httpx
 
     request_payload = dict(payload)
     request_payload["stream"] = True

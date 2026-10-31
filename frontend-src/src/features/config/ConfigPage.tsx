@@ -213,7 +213,6 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
       if (mtp.p_min !== 0) args.push('--spec-draft-p-min', String(mtp.p_min))
       if (mtp.p_split !== 0.1) args.push('--spec-draft-p-split', String(mtp.p_split))
     }
-    if (config.system_prompt.trim()) args.push('--system-prompt', quote(config.system_prompt.trim()))
     args.push('--host', config.server.host, '--port', String(config.server.port))
     if (config.chat_template_file.trim()) args.push('--chat-template-file', quote(config.chat_template_file.trim()))
     if (config.extra_params.trim()) args.push(config.extra_params.trim())
@@ -356,7 +355,7 @@ export function ConfigPage({ config, setConfig, dirty, toast }: { config: AppCon
         </div></details>
 
         <details className={page.advanced}><summary>提示词与附加参数<span>系统提示词、模板与扩展参数</span></summary><div className={page.advancedBody}>
-          <div className={page.formGrid}><Field label="系统提示词"><Textarea value={config.system_prompt} onChange={event => patch('system_prompt', event.target.value)}/></Field><Field label="附加参数"><Textarea value={config.extra_params} onChange={event => patch('extra_params', event.target.value)}/></Field></div>
+          <div className={page.formGrid}><Field label="系统提示词（Atelier 本地对话）"><Textarea value={config.system_prompt} onChange={event => patch('system_prompt', event.target.value)}/></Field><Field label="附加参数"><Textarea value={config.extra_params} onChange={event => patch('extra_params', event.target.value)}/></Field></div>
           <Field label="聊天模板文件（可选，--chat-template-file）" className={page.wide}><div className={page.row}><Input value={config.chat_template_file} onChange={event => patch('chat_template_file', event.target.value)} /><Button iconOnly title="浏览" onClick={() => setBrowse({ key: 'chat_template_file', mode: 'file' })}><FolderOpen size={16}/></Button></div></Field>
           <p className={page.hint}>编译命令已移至「维护」页的编译面板。</p>
         </div></details>
