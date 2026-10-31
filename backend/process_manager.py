@@ -5,6 +5,7 @@ import shlex
 import subprocess
 import time
 import sys
+from collections import deque
 from pathlib import Path
 from typing import Optional, List, Any
 from .models import AppConfig, ServerStatus
@@ -23,6 +24,12 @@ ENGINE_IMAGE_NAMES = ("llama-server", "llama-kvmem-server", "ninfer-kvmem-server
 # NInfer allocates its KV in fixed 64-token pages; llama-kvmem-server uses
 # --kvmem-block-tokens instead, so the rounding unit differs per engine.
 KV_PAGE_TOKENS = 64
+
+
+def _exit_error(returncode: int) -> str:
+    if returncode & 0xFFFFFFFF == 0xC0000135:
+        return '引擎启动失败：找不到所需 DLL 运行库，请检查引擎目录和 CUDA 依赖（0xC0000135）。'
+    return f'Exit code: {returncode}'
 
 
 def _align(value: int, unit: int) -> int:
@@ -87,10 +94,16 @@ class ProcessManager:
     def __init__(self):
         self._process: Optional[asyncio.subprocess.Process] = None
         self._start_time: float = 0
-        self._log_buffer: List[str] = []
-        self._log_subscribers: List[Any] = []  # WebSocket connections
         self._max_log_lines: int = 5000
+        # deque auto-trims: slicing a list per log line is O(n) per line.
+        self._log_buffer = deque(maxlen=self._max_log_lines)
+        self._log_subscribers: List[Any] = []  # WebSocket connections
         self._profile_name: str = ""
+        # Serializes start/stop: both check self._process before awaiting, so
+        # two concurrent calls could otherwise spawn or kill twice.
+        self._lock = asyncio.Lock()
+        # Strong reference keeps the log reader alive until it drains stdout.
+        self._reader_task: Optional[asyncio.Task] = None
 
     def get_status(self) -> ServerStatus:
         if self._process and self._process.returncode is None:
@@ -103,7 +116,8 @@ class ProcessManager:
         elif self._process and self._process.returncode is not None:
             return ServerStatus(
                 state="stopped",
-                error=f"Exit code: {self._process.returncode}",
+                error=_exit_error(self._process.returncode),
+                profile=self._profile_name,
             )
         return ServerStatus(state="stopped")
 
@@ -200,9 +214,6 @@ class ProcessManager:
             cmd += ["--repeat-penalty", str(s.repeat_penalty)]
         if s.presence_penalty_enabled:
             cmd += ["--presence-penalty", str(s.presence_penalty)]
-
-        if config.system_prompt:
-            cmd += ["--system-prompt", config.system_prompt]
 
         srv = config.server
         cmd += ["--host", srv.host, "--port", str(srv.port)]
@@ -435,32 +446,42 @@ class ProcessManager:
 
 
     async def start(self, config: AppConfig, profile_name: str = ""):
-        if self._process and self._process.returncode is None:
-            raise RuntimeError("Server is already running. Stop it first.")
-
-        cmd = self.build_command(config)
-        self._profile_name = profile_name
-        self._log_buffer.clear()
-        self._append_log(f"[manager] Starting: {' '.join(cmd)}")
-
-        self._process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            cwd=self._engine_dir(config) or None,
+        # build_command probes the engine binary with --help (cached per file
+        # revision) and resolve_engine_dir stats the disk: keep both off the
+        # event loop and outside the lock so a slow first probe cannot stall
+        # other requests or block a pending stop.
+        cmd, engine_dir = await asyncio.to_thread(
+            lambda: (self.build_command(config), self._engine_dir(config))
         )
-        self._start_time = time.time()
-        record_engine_pid(self._process.pid)
-        self._append_log(f"[manager] Process started, PID={self._process.pid}")
+        async with self._lock:
+            if self._process and self._process.returncode is None:
+                raise RuntimeError("Server is already running. Stop it first.")
 
-        # Start log reader task
-        asyncio.create_task(self._read_output())
+            self._profile_name = profile_name
+            self._log_buffer.clear()
+            self._append_log(f"[manager] Starting: {' '.join(cmd)}")
 
-    async def _read_output(self):
-        if not self._process or not self._process.stdout:
+            self._process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                cwd=engine_dir or None,
+            )
+            self._start_time = time.time()
+            record_engine_pid(self._process.pid)
+            self._append_log(f"[manager] Process started, PID={self._process.pid}")
+
+            # Start log reader task
+            self._reader_task = asyncio.create_task(self._read_output(self._process))
+
+    async def _read_output(self, process: asyncio.subprocess.Process):
+        # Bind to the process passed in: start() may replace self._process while
+        # a previous reader is still draining, and the old reader must keep
+        # reading the old process instead of stealing the new one's output.
+        if process.stdout is None:
             return
         try:
-            async for line in self._process.stdout:
+            async for line in process.stdout:
                 text = line.decode("utf-8", errors="replace").rstrip()
                 self._append_log(text)
         except Exception as e:
@@ -469,60 +490,76 @@ class ProcessManager:
             # Settle the exit status: on Windows, returncode stays None until
             # wait() runs, which would leave a crashed server looking alive.
             try:
-                if self._process and self._process.returncode is None:
-                    await self._process.wait()
+                if process.returncode is None:
+                    await process.wait()
             except ProcessLookupError:
                 pass
+            if process.returncode not in (None, 0):
+                self._append_log(f'[manager] {_exit_error(process.returncode)}')
 
     def _append_log(self, text: str):
         self._log_buffer.append(text)
-        if len(self._log_buffer) > self._max_log_lines:
-            self._log_buffer = self._log_buffer[-self._max_log_lines:]
         # Notify subscribers
         for sub in list(self._log_subscribers):
             try:
                 sub.put_nowait(text)
+            except asyncio.QueueFull:
+                # A stalled WebSocket client must not grow memory without
+                # bound; drop its oldest line and keep the newest flowing.
+                try:
+                    sub.get_nowait()
+                    sub.put_nowait(text)
+                except Exception:
+                    try:
+                        self._log_subscribers.remove(sub)
+                    except ValueError:
+                        pass
             except Exception:
-                self._log_subscribers.remove(sub)
+                try:
+                    self._log_subscribers.remove(sub)
+                except ValueError:
+                    pass
 
     async def stop(self):
-        if not self._process or self._process.returncode is not None:
-            self._append_log("[manager] No running process to stop.")
-            return
+        async with self._lock:
+            process = self._process
+            if not process or process.returncode is not None:
+                self._append_log("[manager] No running process to stop.")
+                return
 
-        pid = self._process.pid
-        self._append_log(f"[manager] Stopping PID={pid}...")
-        try:
-            if IS_WINDOWS:
-                # Windows: use taskkill to kill process tree
-                kill_proc = await asyncio.create_subprocess_exec(
-                    "taskkill", "/F", "/T", "/PID", str(pid),
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                await kill_proc.wait()
-                self._append_log(f"[manager] Process {pid} killed via taskkill.")
-            else:
-                self._process.terminate()
-                try:
-                    await asyncio.wait_for(self._process.wait(), timeout=10)
-                    self._append_log(f"[manager] Process {pid} exited gracefully.")
-                except asyncio.TimeoutError:
-                    self._append_log(f"[manager] Terminate timeout, killing...")
-                    self._process.kill()
-                    await self._process.wait()
-                    self._append_log(f"[manager] Process {pid} killed.")
-        except ProcessLookupError:
-            self._append_log(f"[manager] Process {pid} already exited.")
-        finally:
-            # Reap the killed process so a subsequent start() does not race on returncode.
+            pid = process.pid
+            self._append_log(f"[manager] Stopping PID={pid}...")
             try:
-                if self._process and self._process.returncode is None:
-                    await self._process.wait()
+                if IS_WINDOWS:
+                    # Windows: use taskkill to kill process tree
+                    kill_proc = await asyncio.create_subprocess_exec(
+                        "taskkill", "/F", "/T", "/PID", str(pid),
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    await kill_proc.wait()
+                    self._append_log(f"[manager] Process {pid} killed via taskkill.")
+                else:
+                    process.terminate()
+                    try:
+                        await asyncio.wait_for(process.wait(), timeout=10)
+                        self._append_log(f"[manager] Process {pid} exited gracefully.")
+                    except asyncio.TimeoutError:
+                        self._append_log("[manager] Terminate timeout, killing...")
+                        process.kill()
+                        await process.wait()
+                        self._append_log(f"[manager] Process {pid} killed.")
             except ProcessLookupError:
-                pass
-            forget_engine_pid(pid)
-            self._profile_name = ""
+                self._append_log(f"[manager] Process {pid} already exited.")
+            finally:
+                # Reap the killed process so a subsequent start() does not race on returncode.
+                try:
+                    if process.returncode is None:
+                        await process.wait()
+                except ProcessLookupError:
+                    pass
+                forget_engine_pid(pid)
+                self._profile_name = ""
 
     def clear_logs(self):
         self._log_buffer.clear()
@@ -532,7 +569,7 @@ class ProcessManager:
         return list(self._log_buffer)
 
     def subscribe(self) -> asyncio.Queue:
-        q: asyncio.Queue = asyncio.Queue()
+        q: asyncio.Queue = asyncio.Queue(maxsize=1000)
         self._log_subscribers.append(q)
         return q
 

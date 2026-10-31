@@ -7,6 +7,7 @@ talk to ComfyUI's HTTP API (/prompt, /history, /view).
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 import time
@@ -143,7 +144,9 @@ async def wait_for_images(base: str, prompt_id: str, timeout: float = 300.0) -> 
                             return []
             except httpx.RequestError:
                 pass
-            time.sleep(0.8)
+            # Must stay async: this loop runs for the whole generation window,
+            # and a sync sleep here would stall every other request.
+            await asyncio.sleep(0.8)
     raise ComfyError("等待 ComfyUI 出图超时")
 
 

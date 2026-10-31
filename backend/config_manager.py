@@ -4,6 +4,8 @@ import json
 import os
 import re
 import struct
+import tempfile
+import threading
 from pathlib import Path
 from typing import List
 from .models import AppConfig, ModelInfo
@@ -11,6 +13,29 @@ from .models import AppConfig, ModelInfo
 from .paths import APP_DATA_DIR
 CONFIG_DIR = APP_DATA_DIR / "config"
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+# Profile writes come from both threadpool (sync routes) and event-loop (async
+# routes) contexts; one reentrant lock keeps read-modify-write sequences and
+# the _current_config swap consistent.
+_config_lock = threading.RLock()
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write through a unique temp file in the target directory, then replace.
+
+    A fixed `.tmp` name let two concurrent saves interleave and hand
+    os.replace a half-written file.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f"{path.name}.", suffix=".tmp")
+    temp = Path(temp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(temp, path)
+    finally:
+        if temp.exists():
+            temp.unlink(missing_ok=True)
 
 
 def _sanitize_name(name: str) -> str:
@@ -39,7 +64,7 @@ def _current_file() -> Path:
 
 def _persist_current() -> None:
     try:
-        _current_file().write_text(_current_name, encoding="utf-8")
+        _atomic_write_text(_current_file(), _current_name)
     except OSError:
         pass
 
@@ -59,13 +84,12 @@ def save_config(config: AppConfig, name: str = "default", *, make_current: bool 
     global _current_config, _current_name
     safe_name = _sanitize_name(name)
     path = CONFIG_DIR / f"{safe_name}.json"
-    temp = path.with_suffix('.tmp')
-    temp.write_text(json.dumps(config.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
-    temp.replace(path)
-    if make_current:
-        _current_config = config
-        _current_name = safe_name
-        _persist_current()
+    with _config_lock:
+        _atomic_write_text(path, json.dumps(config.model_dump(), indent=2, ensure_ascii=False))
+        if make_current:
+            _current_config = config
+            _current_name = safe_name
+            _persist_current()
     return path
 
 
@@ -73,30 +97,33 @@ def load_config(name: str = "default") -> AppConfig:
     global _current_config, _current_name
     name = _sanitize_name(name)
     path = CONFIG_DIR / f"{name}.json"
-    if path.exists():
-        data = json.loads(path.read_text(encoding="utf-8"))
-        _current_config = AppConfig(**data)
-        _current_name = name
-        _persist_current()
-    return _current_config
+    with _config_lock:
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            _current_config = AppConfig(**data)
+            _current_name = name
+            _persist_current()
+        return _current_config
 
 
 def read_config(name: str) -> AppConfig | None:
     """Read a saved profile without switching the current config."""
     path = CONFIG_DIR / f"{_sanitize_name(name)}.json"
-    if not path.exists():
-        return None
-    return AppConfig(**json.loads(path.read_text(encoding="utf-8")))
+    with _config_lock:
+        if not path.exists():
+            return None
+        return AppConfig(**json.loads(path.read_text(encoding="utf-8")))
 
 
 def duplicate_config(source: str, new_name: str) -> Path:
     source = _sanitize_name(source)
     new_name = _sanitize_name(new_name)
     src = CONFIG_DIR / f"{source}.json"
-    if not src.exists():
-        raise FileNotFoundError(f"Profile not found: {source}")
     dst = CONFIG_DIR / f"{new_name}.json"
-    dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    with _config_lock:
+        if not src.exists():
+            raise FileNotFoundError(f"Profile not found: {source}")
+        _atomic_write_text(dst, src.read_text(encoding="utf-8"))
     return dst
 
 
@@ -106,9 +133,9 @@ def list_configs() -> List[str]:
 
 def import_config(file_content: str) -> AppConfig:
     global _current_config
-    data = json.loads(file_content)
-    _current_config = AppConfig(**data)
-    return _current_config
+    with _config_lock:
+        _current_config = AppConfig(**json.loads(file_content))
+        return _current_config
 
 
 def scan_models(directory: str) -> List[ModelInfo]:
@@ -386,7 +413,6 @@ def list_drives() -> list[str]:
 
 def browse_directory(directory: str) -> list[dict]:
     """List contents of a directory (files + dirs)."""
-    from .models import DirEntry
     d = Path(directory)
     if not d.is_dir():
         return []
