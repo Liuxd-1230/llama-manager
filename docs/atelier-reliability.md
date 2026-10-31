@@ -136,3 +136,12 @@ P3 快赢随后落地并经隔离服务（9093）实测：index.html 首绘前�
 - e2e 岗在连续三轮 CI 真实运行中稳定通过（每轮 88 项、约 5 分钟），已移除 continue-on-error。
 
 浏览器验收：P0–P3 全部改动在真实 Chrome、四视口矩阵下 88/88 通过（本地与 CI 各一轮）。深色主题预渲染、合并轮询与懒加载 chunk 经隔离服务 DOM 检查与截图确认。
+
+## 小加固与大拆分 · 2026-10-31
+
+- **数据备份**：`POST /api/v1/data/backup` 以 SQLite backup API 生成一致快照，连同档案目录与 moss 设置/Skill 打进 `backups/atelier-backup-<stamp>.zip`，保留最近 10 份；设置页隐私行提供入口。夹具验证压缩包内是可加载的 SQLite 库且含档案与 Skill。
+- **远程浏览收敛**：开启远程 API 时，非本机调用方使用 `/api/v1/browse`、`/api/v1/drives` 只能看到已配置模型/引擎/模板的父目录与数据目录树，不再获得整盘地图；本机调用方不变。
+- **start.bat 依赖 stamp**：以 requirements.txt 的 SHA256 与 `.venv\.requirements-stamp` 比对，一致则跳过 pip install，日常启动不再付费网络安装。
+- **process_manager 拆分**：三个引擎的命令行构建移入 `backend/engine_commands.py`（EngineCommandBuilder 混入），二进制探测/flag 缓存经 config_manager 模块命名空间在调用时解析，测试缝隙迁到属主。ProcessManager 只剩生命周期、日志与传输。
+- **moss_server/api.py 拆分**：957 行 49 条路由成为 api/ 包，`routes/{workspace,sessions,archive,compile,comfy,settings,reverse}` 各自持有同前缀 APIRouter 由包聚合；设置读取经 config 模块命名空间、会话运行经 agent 模块命名空间调用，测试缝隙随属主迁移（config.load_settings/save_settings、agent.run_agent、routes.settings._resolve_creds）；`session_messages` 自包内保持兼容重导出。
+- 全部完成后：unittest 187/187、ruff 0 违规、vitest 68/68、tsc 与构建通过，拆分后的后端再跑真实 Playwright 88/88。
