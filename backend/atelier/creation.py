@@ -57,7 +57,7 @@ async def compile_document(document: dict, target: str, *, asset_ids: list[str] 
                 draft=sanitize_draft(draft)
                 prompt,error=await asyncio.to_thread(compile_safe,draft,view)
                 if error: raise ValueError(error)
-                checks=compile_checks(draft) if 'items' in draft else []
+                checks=compile_checks(draft, view) if 'items' in draft else []
                 settings=load_settings();prefix=settings.get('prompt_prefix') or '';negative=settings.get('negative_prompt') or ''
                 result={'prompt':prompt}
         else: raise ValueError('提示词输出目标无效')

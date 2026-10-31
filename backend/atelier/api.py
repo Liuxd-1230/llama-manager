@@ -1,19 +1,17 @@
 """Atelier domain APIs: projects, assets, downloads, jobs and creative services."""
 from __future__ import annotations
 import asyncio
-from dataclasses import asdict
 import hashlib
 import json
 from pathlib import Path
 import re
 import shutil
 from typing import Literal
-import uuid
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from . import store, compiler, generation, mcp
+from . import store, generation, mcp
 from .downloads import downloads, token
 from ..hf_download.core.cache_utils import build_hf_command
 from ..hf_download.core.hf_client import test_mirror
@@ -134,7 +132,15 @@ def validate_asset(kind: str, data: dict):
 
 @router.delete('/objects/{kind}/{identifier}')
 def delete_object(kind: str,identifier: str):
-    if store.get_object(identifier)['kind']!=kind: raise ValueError('类型不匹配')
+    record=store.get_object(identifier)
+    if record['kind']!=kind: raise ValueError('类型不匹配')
+    if kind=='project':
+        from ..moss_server import db
+        if db.kv_get('current_project','project_default')==identifier:
+            raise HTTPException(status_code=409,detail='不能删除当前项目，请先切换到其他项目')
+        # Cascade the project's series/pages/revisions/sessions; jobs keep
+        # their immutable snapshots and artworks stay as user content.
+        db.delete_project_series(identifier)
     with store.connection() as db: db.execute('DELETE FROM atelier_objects WHERE id=?',(identifier,))
     return {'ok':True}
 

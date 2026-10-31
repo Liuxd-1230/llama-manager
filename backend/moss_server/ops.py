@@ -9,7 +9,7 @@ import uuid
 from typing import Any, Optional
 
 from . import db
-from .layout_core import _is_cjk, sanitize_body, sanitize_camera, _ensure_wh
+from .layout_core import _is_cjk, camera_active, sanitize_body, sanitize_camera, _ensure_wh
 from .lighting import (PRESET_BY_ID, PRESETS, ROLES, _wrap, default_lighting, describe_lighting, lighting_phrase,
                        preset_lighting, sanitize_light, sanitize_lighting)
 
@@ -49,17 +49,27 @@ def _bbox4(v: Any) -> Optional[list[float]]:
     return out  # type: ignore[return-value]
 
 
-def clamp_bbox(b: list[float], w: int, h: int) -> list[int]:
+def clamp_bbox(b: list[float], w: int, h: int, slack: float = 0.0) -> list[int]:
+    """裁到画布内；slack > 0 时允许超出画布 slack 倍宽高（3D 体块的初始机位前脸可以在画布外）。"""
     x1, y1, x2, y2 = b
     if x2 < x1:
         x1, x2 = x2, x1
     if y2 < y1:
         y1, y2 = y2, y1
-    x1 = int(round(max(0, min(x1, w - 4))))
-    y1 = int(round(max(0, min(y1, h - 4))))
-    x2 = int(round(max(x1 + 4, min(x2, w))))
-    y2 = int(round(max(y1 + 4, min(y2, h))))
+    lx, ly, hx, hy = -w * slack, -h * slack, w * (1 + slack), h * (1 + slack)
+    x1 = int(round(max(lx, min(x1, hx - 4))))
+    y1 = int(round(max(ly, min(y1, hy - 4))))
+    x2 = int(round(max(x1 + 4, min(x2, hx))))
+    y2 = int(round(max(y1 + 4, min(y2, hy))))
     return [x1, y1, x2, y2]
+
+
+def _is_world_3d(it: dict, cam_on: bool) -> bool:
+    """摄像机开启时的 3D 体块，或按真实尺寸摆的实体：bbox 是初始机位下的前脸，不是画面里的框"""
+    b = it.get("body") or {}
+    if b.get("anchor", "world") != "world":
+        return False
+    return cam_on or b.get("exact") is True
 
 
 def _strs(v: Any) -> Optional[list[str]]:
@@ -104,7 +114,8 @@ def find_item(items: list[dict], ref: Any) -> int:
     raise ToolError(f"找不到框「{r}」（可用 id、名称或 #层号）")
 
 
-def _apply_fields(it: dict, inp: dict, w: int, h: int, *, is_new: bool) -> list[str]:
+def _apply_fields(it: dict, inp: dict, w: int, h: int, *, is_new: bool, cam_on: bool = False,
+                  view_bbox: Optional[list] = None) -> list[str]:
     changed: list[str] = []
     if inp.get('shape') in ('rectangle','ellipse','polygon'):
         it['shape']=inp['shape']
@@ -151,10 +162,16 @@ def _apply_fields(it: dict, inp: dict, w: int, h: int, *, is_new: bool) -> list[
         b = _bbox4(inp["bbox"])
         if b is None:
             raise ToolError("bbox 必须是 [x1,y1,x2,y2] 四个数字（画布左上角原点的绝对像素）")
-        nb = clamp_bbox(b, w, h)
-        if nb != it.get("bbox"):
-            it["bbox"] = nb
-            changed.append("位置")
+        world3d = not is_new and _is_world_3d(it, cam_on)
+        if world3d and isinstance(view_bbox, list) and len(view_bbox) == 4 and it.get("bbox") != view_bbox \
+                and all(abs(float(a) - float(v)) <= 4 for a, v in zip(b, view_bbox)):
+            # 把"当前镜头下的投影框"抄回 bbox 会把 3D 体块挤歪（bbox 是初始机位下的前脸），直接忽略
+            changed.append("位置未改（bbox 是初始机位下的坐标，view_bbox 只是当前镜头里的投影，两者不同是正常的，不需要同步）")
+        else:
+            nb = clamp_bbox(b, w, h, 2.0 if world3d else 0.0)
+            if nb != it.get("bbox"):
+                it["bbox"] = nb
+                changed.append("位置")
     if "group" in inp:
         g = inp["group"]
         g = g.strip()[:40] if isinstance(g, str) else ""
@@ -263,6 +280,8 @@ class Workbench:
         self.names: dict[str, str] = {}
         self.created: list[dict] = []
         self.ask: Optional[dict] = None
+        # 前端算好的当前镜头视图（每页：{id: {bbox, visible}}），用来识别"把投影框抄回 bbox"
+        self.views: dict[str, dict] = {}
         for p in db.series_pages(series_id):
             self.names[p["id"]] = p["name"]
             self.base[p["id"]] = db.normalize_doc(p["doc"])
@@ -362,6 +381,8 @@ class Workbench:
         L = self.layout()
         items = L.setdefault("items", [])
         w, h = L["width"], L["height"]
+        cam_on = camera_active(L)
+        vitems = self.views.get(self.target) or {}
         out, errs = [], []
         for u in updates:
             if not isinstance(u, dict):
@@ -371,7 +392,8 @@ class Workbench:
                 it = items[i]
                 if it.get("locked"):
                     raise ToolError(f"「{item_name(it)}」已锁定，不能修改")
-                ch = _apply_fields(it, u, w, h, is_new=False)
+                vb = (vitems.get(it.get("id")) or {}).get("bbox") if isinstance(vitems.get(it.get("id")), dict) else None
+                ch = _apply_fields(it, u, w, h, is_new=False, cam_on=cam_on, view_bbox=vb)
                 out.append(f"「{item_name(it)}」{'/'.join(ch) or '无变化'}")
             except ToolError as e:
                 errs.append(str(e))
@@ -479,8 +501,9 @@ class Workbench:
         nw, nh = _ensure_wh(int(max(256, min(4096, dw))), int(max(256, min(4096, dh))))
         L["width"], L["height"] = nw, nh
         if scale_items is not False:
+            cam_on = camera_active(L)
             for it in L.get("items") or []:
-                it["bbox"] = clamp_bbox(_scale_bbox(it["bbox"], nw / ow, nh / oh), nw, nh)
+                it["bbox"] = clamp_bbox(_scale_bbox(it["bbox"], nw / ow, nh / oh), nw, nh, 2.0 if _is_world_3d(it, cam_on) else 0.0)
         return f"画布 {ow}×{oh} → {nw}×{nh}" + ("，框已按比例缩放" if scale_items is not False else "")
 
     def t_set_camera(self, **kw: Any) -> str:
@@ -679,6 +702,8 @@ def compact_item(it: dict, layer: int, view: Optional[dict] = None) -> dict:
         d["view_bbox"] = v.get("bbox")
         if v.get("visible") is False:
             d["out_of_frame"] = True
+        elif v.get("partial") is True:
+            d["partly_out_of_frame"] = True
     return d
 
 

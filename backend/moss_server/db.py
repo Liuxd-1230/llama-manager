@@ -58,6 +58,15 @@ def conn() -> Iterator[sqlite3.Connection]:
         c = sqlite3.connect(DB_PATH, timeout=10)
         c.row_factory = sqlite3.Row
         try:
+            # journal_mode is persistent: the shared atelier.db already gets WAL
+            # from storage.py, but an isolated MOSS_DATA_DIR database only gets
+            # it here. Skip silently if the filesystem refuses WAL.
+            c.execute("PRAGMA journal_mode=WAL")
+            c.execute("PRAGMA synchronous=NORMAL")
+        except sqlite3.Error:
+            pass
+        c.execute("PRAGMA busy_timeout=10000")
+        try:
             yield c
             c.commit()
         finally:
@@ -137,7 +146,6 @@ def _migrate_legacy_history() -> None:
         for it in items:
             if not isinstance(it, dict) or not isinstance(it.get("draft"), dict):
                 continue
-            kind = "layout" if "items" in it["draft"] else "caption"
             add_archive(it.get("title") or "未命名", "旧版历史", normalize_doc(it["draft"]), it.get("prompt") or "")
             count += 1
     with conn() as c:
@@ -185,6 +193,15 @@ def delete_series(sid: str) -> None:
             c.execute("DELETE FROM messages WHERE session_id=?", (x,))
         c.execute("DELETE FROM sessions WHERE series_id=?", (sid,))
         c.execute("DELETE FROM series WHERE id=?", (sid,))
+
+
+def delete_project_series(project_id: str) -> int:
+    """Cascade every series of a project (pages, revisions, sessions, messages)."""
+    with conn() as c:
+        sids = [r[0] for r in c.execute("SELECT id FROM series WHERE project_id=?", (project_id,))]
+    for sid in sids:
+        delete_series(sid)
+    return len(sids)
 
 
 def get_page(pid: str) -> Optional[dict]:

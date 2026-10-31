@@ -30,12 +30,29 @@ def initialize():
         CREATE TABLE IF NOT EXISTS atelier_dictionary(kind TEXT NOT NULL,name TEXT NOT NULL,search TEXT NOT NULL,popularity INTEGER NOT NULL,data TEXT NOT NULL,PRIMARY KEY(kind,name));
         CREATE TABLE IF NOT EXISTS atelier_jobs(id TEXT PRIMARY KEY,kind TEXT NOT NULL,title TEXT NOT NULL,status TEXT NOT NULL,data TEXT NOT NULL,result TEXT NOT NULL DEFAULT '{}',error TEXT NOT NULL DEFAULT '',updated_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS atelier_events(seq INTEGER PRIMARY KEY AUTOINCREMENT,job_id TEXT NOT NULL,event TEXT NOT NULL,created_at REAL NOT NULL);
+        CREATE INDEX IF NOT EXISTS atelier_events_job ON atelier_events(job_id);
         ''')
         db.execute("UPDATE atelier_jobs SET status='interrupted',error='服务已重启，请检查结果后手动重试' WHERE status IN ('queued','running')")
+        prune_history(db)
         # Existing series join the default project without changing their IDs.
         project = db.execute("SELECT id FROM atelier_objects WHERE kind='project' LIMIT 1").fetchone()
         if not project:
             db.execute('INSERT INTO atelier_objects VALUES(?,?,?,?,?)', ('project_default','project','我的创作', '{}', time.time()))
+
+
+JOB_RETENTION = 500
+EVENT_JOB_RETENTION = 50
+
+
+def prune_history(db) -> None:
+    """Jobs grow one event per streamed frame and nothing removed them before;
+    keep a working window (SSE resume only replays recent runs) and drop the
+    rest instead of letting the database grow without bound."""
+    db.execute('DELETE FROM atelier_jobs WHERE id NOT IN (SELECT id FROM atelier_jobs ORDER BY updated_at DESC LIMIT ?)', (JOB_RETENTION,))
+    db.execute('''DELETE FROM atelier_events WHERE job_id NOT IN (
+        SELECT id FROM atelier_jobs WHERE status IN ('queued','running')
+        UNION ALL
+        SELECT id FROM (SELECT id FROM atelier_jobs ORDER BY updated_at DESC LIMIT ?))''', (EVENT_JOB_RETENTION,))
 
 
 def objects(kind: str, query: str = '') -> list[dict]:
@@ -59,10 +76,20 @@ def put_object(kind: str, name: str, data: dict, identifier: str | None = None) 
     return get_object(identifier)
 
 
+_prune_counter = 0
+
+
 def create_job(kind: str, title: str, data: dict) -> dict:
+    global _prune_counter
     identifier = uuid.uuid4().hex
     with connection() as db:
         db.execute('INSERT INTO atelier_jobs(id,kind,title,status,data,updated_at) VALUES(?,?,?,?,?,?)', (identifier,kind,title,'queued',json.dumps(data,ensure_ascii=False),time.time()))
+        # Retention between restarts: a cheap counter avoids pruning on every
+        # submission while long-running servers still stay bounded.
+        _prune_counter += 1
+        if _prune_counter >= 50:
+            _prune_counter = 0
+            prune_history(db)
     return update_job(identifier, status='queued')
 
 

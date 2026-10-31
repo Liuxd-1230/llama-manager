@@ -7,7 +7,7 @@ import base64
 import copy
 import json
 import re
-from typing import Any, AsyncIterator, Optional
+from typing import AsyncIterator, Optional
 
 from . import db, llm
 from .agent_tools import (TOOL_LABELS, TOOLS, TagFilter, brief_args, parse_args, parse_tool_tags,
@@ -54,8 +54,8 @@ SYSTEM_BASE = """你是「MOSS 提示词工作台」的 Agent，和用户一起�
 
 ## 摄像机与体块（3D）
 - 摄像机参数：orbit 环绕（正=镜头绕到右侧）、pitch 俯仰（正=升高俯拍，负=仰拍）、roll 滚转（荷兰角）、distance 距离（<1 推近）、fov 视角（50 标准，大=广角，小=长焦）、pan 平移。
-- 每个框可有 body：z 远近（1=主体平面，<1 更近）、thickness 厚度（相对框宽）、yaw 朝向、anchor（world 立体物 / screen 贴在画面上的字和贴纸 / backdrop 铺满的背景）。
-- 摄像机开启时，框位由体块按机位投影得到（workbench 里的 view_bbox 是当前镜头下的框）。
+- 每个框可有 body：z 远近（1=主体平面，<1 更近）、thickness 厚度（相对框宽）、yaw 朝向、anchor（world 立体物 / screen 贴在画面上的字和贴纸 / backdrop 铺满的背景）。body.exact=true 的是用户在 3D 场景里按真实尺寸摆好的体块（bbox 是它在初始机位下的前脸，画面里看到的是 view_bbox），用户没要求就不要改它的 bbox / body。
+- 摄像机开启时，框位由体块按机位投影得到（workbench 里的 view_bbox 是当前镜头下的框，编译用的就是它）。这时 bbox 是体块在「初始机位」下的前脸坐标：和 view_bbox 不一样、甚至超出画布都是正常的，编译时会自动裁到画布内，**不要把 view_bbox 抄回 bbox，也不要为了"越界"去改坐标**。只有 out_of_frame=true 才是真的整个出画；partly_out_of_frame=true 是部分出画（一般是用户有意的构图，用户没提就别动）。用户要求挪位置时，按 view_bbox 到目标位置的差值去平移 bbox（缩放同理），不要用画面坐标直接覆盖。
 - 「按视角改描述」：框位、图层、可见文字都不动，只用 update_items 改写各框 caption 和 summary.caption，使其符合当前机位（比如俯拍能看到头顶与地面、仰拍能看到下巴和帽檐底面、侧面只见一只眼）。
 
 ## 灯光
@@ -255,6 +255,8 @@ async def run_agent(*, session_id: str, page_id: str, doc: dict, view: Optional[
     db.update_page(page_id, doc=doc)
     wb = Workbench(session["series_id"], page_id)
     wb.set_current_doc(page_id, doc)
+    if isinstance(view, dict) and isinstance(view.get("items"), dict):
+        wb.views[page_id] = view["items"]
     meta = dict(session.get("meta") or {})
     protocol = meta.get("protocol") or ("tags" if s["agent_protocol"] == "tags" else "tools")
     msgs, _manual = build_messages(session=session, history=history, wb=wb, page_id=page_id, doc=doc, view=view,

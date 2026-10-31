@@ -427,11 +427,14 @@ def sanitize_body(b: Any) -> Optional[dict]:
     t = _num(b.get("thickness"))
     yaw = _num(b.get("yaw"))
     anchor = b.get("anchor") if b.get("anchor") in BODY_ANCHORS else "world"
+    exact = b.get("exact") is True and anchor == "world"
+    nd = 5 if exact else 0  # 精确体块（按真实尺寸建的）多留几位，避免来回保存时尺寸漂移
     return {
-        "z": round(_clampf(z if z is not None else 1.0, 0.15, 12.0), 4),
-        "thickness": round(_clampf(t if t is not None else 0.3, 0.0, 3.0), 3),
+        "z": round(_clampf(z if z is not None else 1.0, 0.15, 12.0), max(4, nd)),
+        "thickness": round(_clampf(t if t is not None else 0.3, 0.0, 3.0), max(3, nd)),
         "yaw": round(_clampf(yaw if yaw is not None else 0.0, -180.0, 180.0), 2),
         "anchor": anchor,
+        **({"exact": True} if exact else {}),
     }
 
 
@@ -568,6 +571,39 @@ def apply_view(draft: dict, view: Any) -> dict:
     return {**draft, "items": out_items}
 
 
+def fit_to_canvas(draft: dict) -> dict:
+    """
+    编译前把框裁到画布内、去掉完全在画布外的框。
+    3D 体块（尤其按真实尺寸摆的、或转过机位后）存的 bbox 是"初始机位下的前脸"，超出画布是正常的；
+    画面里只出现画布内那部分，所以这里裁掉，而不是报错。
+    """
+    w, h = draft.get("width"), draft.get("height")
+    if not (isinstance(w, int) and isinstance(h, int)):
+        return draft
+    out, changed = [], False
+    for it in draft.get("items", []):
+        b = it.get("bbox")
+        if not (isinstance(b, list) and len(b) == 4 and all(isinstance(x, (int, float)) for x in b)):
+            out.append(it)
+            continue
+        x1, y1, x2, y2 = b
+        if x2 < x1:
+            x1, x2 = x2, x1
+        if y2 < y1:
+            y1, y2 = y2, y1
+        nx1, ny1 = max(0, min(x1, w)), max(0, min(y1, h))
+        nx2, ny2 = max(0, min(x2, w)), max(0, min(y2, h))
+        if nx2 - nx1 < 2 or ny2 - ny1 < 2:
+            changed = True
+            continue
+        nb = [int(round(nx1)), int(round(ny1)), int(round(nx2)), int(round(ny2))]
+        if nb != b:
+            changed = True
+            it = {**it, "bbox": nb}
+        out.append(it)
+    return {**draft, "items": out} if changed else draft
+
+
 def prepare_layout_for_compile(draft: dict, view: Any = None) -> dict:
     """
     把带编辑器元数据的 Layout 草稿转成官方 schema：
@@ -587,6 +623,7 @@ def prepare_layout_for_compile(draft: dict, view: Any = None) -> dict:
     cam_on = camera_active(draft)
     if cam_on and view is not None:
         draft = apply_view(draft, view)
+    draft = fit_to_canvas(draft)
     visible = [it for it in draft.get("items", []) if not it.get("hidden")]
     if not visible:
         raise ValueError("没有可编译的框（全部隐藏或已出画）")
@@ -649,7 +686,7 @@ def compile_safe(draft: dict, view: Any = None) -> tuple[str | None, str | None]
         return None, str(e)
 
 
-def compile_checks(draft: dict) -> list[str]:
+def compile_checks(draft: dict, view: Any = None) -> list[str]:
     """给 Agent 自检用：列出会导致编译失败或明显不对的问题（不改草稿）。"""
     probs: list[str] = []
     if "items" not in draft:
@@ -674,7 +711,7 @@ def compile_checks(draft: dict) -> list[str]:
         b = it.get("bbox") or []
         if len(b) == 4 and (b[2] - b[0] < 8 or b[3] - b[1] < 8):
             probs.append(f"框「{nm}」太小（小于 8px）")
-    _, err = compile_safe(draft)
+    _, err = compile_safe(draft, view)
     if err:
         probs.append(f"编译报错：{err}")
     return probs

@@ -2,6 +2,7 @@
 from __future__ import annotations
 import asyncio
 import sys
+from collections import deque
 from pathlib import Path
 from typing import List
 
@@ -9,7 +10,7 @@ from typing import List
 class DownloadManager:
     def __init__(self):
         self._process: asyncio.subprocess.Process | None = None
-        self._log_buffer: List[str] = []
+        self._log_buffer = deque(maxlen=5000)
         self._is_downloading: bool = False
         self._subscribers: List[asyncio.Queue] = []
 
@@ -18,6 +19,17 @@ class DownloadManager:
         for q in list(self._subscribers):
             try:
                 q.put_nowait(text)
+            except asyncio.QueueFull:
+                # Drop the stalled client's oldest line instead of growing
+                # its queue without bound.
+                try:
+                    q.get_nowait()
+                    q.put_nowait(text)
+                except Exception:
+                    try:
+                        self._subscribers.remove(q)
+                    except ValueError:
+                        pass
             except Exception:
                 self._subscribers.remove(q)
 
@@ -94,7 +106,7 @@ class DownloadManager:
         return self._is_downloading
 
     def subscribe(self) -> asyncio.Queue:
-        q: asyncio.Queue = asyncio.Queue()
+        q: asyncio.Queue = asyncio.Queue(maxsize=1000)
         self._subscribers.append(q)
         return q
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import sys
+from collections import deque
 from typing import List
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from pathlib import Path
 class UpdateManager:
     def __init__(self):
         self._compile_process: asyncio.subprocess.Process | None = None
-        self._compile_log: List[str] = []
+        self._compile_log = deque(maxlen=5000)
         self._is_compiling: bool = False
         self._subscribers: List[asyncio.Queue] = []
 
@@ -19,6 +20,17 @@ class UpdateManager:
         for q in list(self._subscribers):
             try:
                 q.put_nowait(text)
+            except asyncio.QueueFull:
+                # Drop the stalled client's oldest line instead of growing
+                # its queue without bound.
+                try:
+                    q.get_nowait()
+                    q.put_nowait(text)
+                except Exception:
+                    try:
+                        self._subscribers.remove(q)
+                    except ValueError:
+                        pass
             except Exception:
                 self._subscribers.remove(q)
 
@@ -170,7 +182,7 @@ class UpdateManager:
         return self._is_compiling
 
     def subscribe(self) -> asyncio.Queue:
-        q: asyncio.Queue = asyncio.Queue()
+        q: asyncio.Queue = asyncio.Queue(maxsize=1000)
         self._subscribers.append(q)
         return q
 
