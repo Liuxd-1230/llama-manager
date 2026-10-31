@@ -215,12 +215,12 @@ class EmptyKeyAuthTests(unittest.TestCase):
     """The local engine has no key; a bare 'Bearer ' header makes it reject us."""
 
     def test_empty_key_sends_no_authorization_header(self):
-        from backend.moss_server import api as moss_api
-        self.assertEqual(moss_api._auth_headers(""), {})
+        from backend.moss_server.routes import settings as moss_settings
+        self.assertEqual(moss_settings._auth_headers(""), {})
 
     def test_present_key_sends_bearer(self):
-        from backend.moss_server import api as moss_api
-        self.assertEqual(moss_api._auth_headers("sk-x"), {"Authorization": "Bearer sk-x"})
+        from backend.moss_server.routes import settings as moss_settings
+        self.assertEqual(moss_settings._auth_headers("sk-x"), {"Authorization": "Bearer sk-x"})
 
 
 class WorkflowLibraryTests(unittest.TestCase):

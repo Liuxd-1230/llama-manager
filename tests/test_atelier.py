@@ -203,12 +203,12 @@ class AtelierAPITests(unittest.TestCase):
         submit.assert_not_called()
 
     def test_workflow_params_and_late_writes_are_scoped(self):
-        from backend.moss_server import api as studio_api
+        from backend.moss_server import config as moss_config
         settings={'comfy_workflows':{},'comfy_active':'','comfy_url':'http://127.0.0.1:1','comfy_params':{'cfg':7,'steps':20,'scheduler':'normal'}}
         def save(value): settings.clear();settings.update(copy.deepcopy(value));return settings
         def workflow(node, cfg):
             return {str(node):{'class_type':'KSampler','inputs':{'seed':1,'steps':28,'cfg':cfg,'sampler_name':'euler','scheduler':'sgm_uniform'}}}
-        with patch.object(studio_api,'load_settings',side_effect=lambda:copy.deepcopy(settings)),patch.object(studio_api,'save_settings',side_effect=save):
+        with patch.object(moss_config,'load_settings',side_effect=lambda:copy.deepcopy(settings)),patch.object(moss_config,'save_settings',side_effect=save):
             first=self.client.post('/api/v1/moss/comfy/import',json={'workflow':json.dumps(workflow(3,4.5)),'name':'A'}).json()['id']
             second=self.client.post('/api/v1/moss/comfy/import',json={'workflow':json.dumps(workflow(103,5.5)),'name':'B'}).json()['id']
             status=self.client.get('/api/v1/moss/comfy/status').json()
@@ -251,7 +251,7 @@ class AtelierAPITests(unittest.TestCase):
             yield 'data: '+json.dumps({'type':'text','delta':'完整中文'})+'\n\n'
             yield 'data: '+json.dumps({'type':'done','message':{'id':'fixture','content':'完整中文'}})+'\n\n'
         body={'page_id':page['id'],'doc':page['doc'],'message':'fixture','request_id':'stable-fixture-id'}
-        with patch('backend.moss_server.api.run_agent',side_effect=agent),patch('backend.atelier.providers.frozen_request',return_value=nullcontext()),patch('backend.atelier.providers.request_settings',return_value={'provider_id':'local','model':'fixture'}):
+        with patch('backend.moss_server.agent.run_agent',side_effect=agent),patch('backend.atelier.providers.frozen_request',return_value=nullcontext()),patch('backend.atelier.providers.request_settings',return_value={'provider_id':'local','model':'fixture'}):
             first=self.client.post(f"/api/v1/moss/sessions/{session['id']}/run",json=body)
             self.assertEqual(first.status_code,200)
             second=self.client.post(f"/api/v1/moss/sessions/{session['id']}/run",json=body)
@@ -266,7 +266,7 @@ class AtelierAPITests(unittest.TestCase):
             yield ('text','ping')
             yield ('done',{'content':'ping','tool_calls':[]})
         resolved={'provider':SimpleNamespace(id='native',kind='anthropic',default_model='test'), 'base_url':'https://example.test/v1','api_key':'fixture'}
-        with patch('backend.moss_server.api._resolve_creds',return_value=('https://example.test/v1','fixture')),patch('backend.moss_server.bridge.resolve',return_value=resolved),patch('backend.atelier.providers.stream',side_effect=events):
+        with patch('backend.moss_server.routes.settings._resolve_creds',return_value=('https://example.test/v1','fixture')),patch('backend.moss_server.bridge.resolve',return_value=resolved),patch('backend.atelier.providers.stream',side_effect=events):
             response=self.client.post('/api/v1/moss/settings/test',json={'provider_id':'native'})
         self.assertEqual(response.status_code,200)
         self.assertTrue(response.json()['stream_ok'])

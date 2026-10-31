@@ -49,11 +49,12 @@ class AgentDelivery(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"status": "cancelled"', ''.join(frames))
 
     async def test_cancel_before_response_headers_prevents_late_request_execution(self):
-        from backend.moss_server import api
+        from backend.moss_server import agent
+        from backend.moss_server.routes import sessions as api
         with patch.object(api.db,'get_session',return_value={'id':'session'}):
             result=await api.cancel_session_request('session',api.CancelRunBody(request_id='early-stop'))
             self.assertEqual(result['status'],'cancelled')
-            with patch.object(api,'run_agent',side_effect=AssertionError('cancelled request must not call model/tools')):
+            with patch.object(agent,'run_agent',side_effect=AssertionError('cancelled request must not call model/tools')):
                 response=await api.run_session('session',api.RunBody(page_id='page',doc={},message='stop me',request_id='early-stop'))
                 text=''.join([part async for part in response.body_iterator])
                 self.assertIn('"status": "cancelled"',text)
