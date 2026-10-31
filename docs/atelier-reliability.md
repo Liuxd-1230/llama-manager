@@ -118,3 +118,11 @@ MiniLM SHA-256：`53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9
 - **大文件拆分缓期并记录原因**：`moss_server/api.py`（957 行）与 `process_manager.py` 的机械拆分会破坏现有测试缝隙——`test_atelier` 直接 patch `backend.moss_server.api` 的 `load_settings/save_settings` 来隔离 comfy 路由，`test_regressions`/`test_engine_startup` patch `backend.process_manager` 命名空间里的二进制探测函数。安全路径是先把缝隙迁到 `config.SETTINGS_PATH`/`store` 路径这类数据边界，再拆路由与引擎 builder；本轮不做。
 
 回归：unittest 182/182、pytest hf 42/42、ruff 0 违规、vitest 68/68、tsc 与生产构建通过且产物哈希与既有提交一致。未提交任何变更；工作区仍含用户先前未提交的改动。
+
+## 浏览器验收与 P3 快赢 · 2026-10-31
+
+真实 Playwright 全矩阵（四视口 × 6 份 spec）88/88 通过，覆盖 P0/P1/P2 三轮后端改动：Agent SSE 与工具链、构图编辑与编译、项目切换、下载/设置与系统选择器。这是三轮改动首次在真实浏览器层验收。
+
+P3 快赢随后落地并经隔离服务（9093）实测：index.html 首绘前写入 data-theme/data-accent（深色用户不再闪浅色帧）；`/static/assets/*` 标记 immutable、index.html no-cache、gzip 1KB 起；DirectorView / ComfyWorkspace / ReverseModal 拆为按需 chunk，Studio 入口 413K → 109K；顶栏两个轮询合并为 `/api/v1/server/summary`（3s 一次），suspend/resume/启动档案的失效键同步更新。DOM 首绘检查实测 DOMContentLoaded 时 theme=dark、accent=amber 已就位，顶栏单轮询显示真实显存读数。截图 `frontend-src/demo/shots/current/p3-home-dark.png`。
+
+回归：unittest 182/182、ruff 0 违规、vitest 68/68、tsc、生产构建与新鲜度门禁通过。
