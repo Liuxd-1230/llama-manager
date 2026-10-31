@@ -2,9 +2,10 @@ import {
   Archive, ArrowDown, ArrowUp, Bot, Check, Copy, FilePlus2, History, ImageUp, KeyRound, Loader2, Plug,
   Plus, RotateCcw, Search, Settings, Sparkles, Trash2, Upload, User, X, Zap,
 } from "lucide-react";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
-import { ReverseModal } from "./ReverseModal";
+// Reverse engineering pulls in the box-drawing canvas; load it only when opened.
+const ReverseModal = lazy(() => import("./ReverseModal").then(m => ({ default: m.ReverseModal })));
 import { confirmDialog, promptDialog } from "../dialog";
 import { boxColor, clone, emptyDoc, normalizeDoc, normalizeLayout, snap16 } from "../lib/doc";
 import {
@@ -425,7 +426,7 @@ function DraftModal() {
 export function Modals() {
   const m = useStore((s) => s.modal);
   if (m === "skills") return <SkillsModal />;
-  if (m === "reverse") return <ReverseModal />;
+  if (m === "reverse") return <Suspense fallback={null}><ReverseModal /></Suspense>;
   if (m === "archive") return <ArchiveModal />;
   if (m === "revisions") return <RevisionsModal />;
   if (m === "quick") return <QuickModal />;

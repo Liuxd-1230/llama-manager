@@ -323,6 +323,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/server/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Server Summary
+         * @description One poll for the top bar: engine state plus host RAM/VRAM readouts.
+         */
+        get: operations["server_summary_api_v1_server_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/server/logs": {
         parameters: {
             query?: never;
@@ -3722,6 +3742,26 @@ export interface operations {
         };
     };
     server_health_api_v1_server_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    server_summary_api_v1_server_summary_get: {
         parameters: {
             query?: never;
             header?: never;

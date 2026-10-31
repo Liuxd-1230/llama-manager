@@ -77,7 +77,7 @@ export function ModelsPage({ config, dirty, server, toast }: {
   const afterServerAction = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['profiles'] }),
-      queryClient.invalidateQueries({ queryKey: ['server-status'] }),
+      queryClient.invalidateQueries({ queryKey: ['server-summary'] }),
       queryClient.invalidateQueries({ queryKey: ['config'] }),
       queryClient.invalidateQueries({ queryKey: ['current-profile'] }),
     ])

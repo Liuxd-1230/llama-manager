@@ -71,32 +71,33 @@ function Shell() {
   const setAccent = (next: Accent) => { setAccentState(next); localStorage.setItem('accent', next) }
   useEffect(() => { document.documentElement.dataset.theme = theme }, [theme])
   useEffect(() => { document.documentElement.dataset.accent = accent }, [accent])
-  const serverQuery = useQuery({ queryKey: ['server-status'], queryFn: () => api<{ state: string; pid?: number; profile?: string }>('/api/v1/server/status'), refetchInterval: 4000 })
-  const server = serverQuery.data ?? { state: 'stopped' }
-  const configQuery = useQuery({ queryKey: ['config'], queryFn: () => api<AppConfig>('/api/v1/config') })
-  const hostQuery = useQuery({
-    queryKey: ['host-resources'],
-    queryFn: () => api<{ ram: { used_mib: number; total_mib: number } | null; gpu: { used_mib: number; total_mib: number } | null }>('/api/v1/host/resources'),
+  // One poll feeds both top-bar readouts; /server/status and /host/resources
+  // stay available for pages that need a single piece on demand.
+  const summaryQuery = useQuery({
+    queryKey: ['server-summary'],
+    queryFn: () => api<{ server: { state: string; pid?: number; profile?: string }; resources: { ram: { used_mib: number; total_mib: number } | null; gpu: { used_mib: number; total_mib: number } | null } }>('/api/v1/server/summary'),
     refetchInterval: 3000,
   })
+  const server = summaryQuery.data?.server ?? { state: 'stopped' }
+  const configQuery = useQuery({ queryKey: ['config'], queryFn: () => api<AppConfig>('/api/v1/config') })
   const [suspending, setSuspending] = useState(false)
   const suspend = async () => {
     setSuspending(true)
-    try { await api('/api/v1/server/suspend', { method: 'POST' }); toast('已暂停，显存已释放'); await queryClient.invalidateQueries({ queryKey: ['server-status'] }) }
+    try { await api('/api/v1/server/suspend', { method: 'POST' }); toast('已暂停，显存已释放'); await queryClient.invalidateQueries({ queryKey: ['server-summary'] }) }
     catch (reason) { toast(`暂停失败：${reason instanceof Error ? reason.message : String(reason)}`) }
     finally { setSuspending(false) }
   }
   const resume = async () => {
     setSuspending(true)
-    try { await api('/api/v1/server/resume', { method: 'POST', body: JSON.stringify({}) }); toast('已恢复上次档案'); await queryClient.invalidateQueries({ queryKey: ['server-status'] }) }
+    try { await api('/api/v1/server/resume', { method: 'POST', body: JSON.stringify({}) }); toast('已恢复上次档案'); await queryClient.invalidateQueries({ queryKey: ['server-summary'] }) }
     catch (reason) { toast(`恢复失败：${reason instanceof Error ? reason.message : String(reason)}`) }
     finally { setSuspending(false) }
   }
-  const host = hostQuery.data
+  const host = summaryQuery.data?.resources
   const gib = (mib: number) => (mib / 1024).toFixed(1)
-  // A 404 here means the backend predates /api/v1/host/resources; say so instead of
+  // A 404 here means the backend predates /api/v1/server/summary; say so instead of
   // leaving the capsule on a placeholder that looks like a slow load forever.
-  const hostError = hostQuery.isError ? (hostQuery.error instanceof Error ? hostQuery.error.message : String(hostQuery.error)) : ''
+  const hostError = summaryQuery.isError ? (summaryQuery.error instanceof Error ? summaryQuery.error.message : String(summaryQuery.error)) : ''
   const resourceTitle = host
     ? `显存 ${host.gpu ? `${gib(host.gpu.used_mib)} / ${gib(host.gpu.total_mib)} GB` : '不可用'} · 内存 ${host.ram ? `${gib(host.ram.used_mib)} / ${gib(host.ram.total_mib)} GB` : '不可用'}`
     : hostError ? `无法读取主机占用：${hostError}（后端可能未重启）` : '正在读取主机占用…'

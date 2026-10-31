@@ -79,6 +79,12 @@ async def server_health():
         return {"ready": False, "status": "unreachable"}
 
 
+@router.get("/api/v1/server/summary")
+def server_summary():
+    """One poll for the top bar: engine state plus host RAM/VRAM readouts."""
+    return {"server": process_manager.get_status().model_dump(), "resources": resources.read_resources()}
+
+
 @router.get("/api/v1/server/logs")
 def server_logs():
     return {"logs": process_manager.get_logs()}

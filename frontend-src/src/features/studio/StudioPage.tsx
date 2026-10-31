@@ -5,12 +5,14 @@ import "./styles/app.css";
 import "./styles/refinement.css";
 import { useCompactWorkspace } from '../../hooks/useCompactWorkspace';
 import { AlertTriangle, CheckCircle2, Info, Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { api } from "./api";
 import { AgentPanel } from "./components/AgentPanel";
-import { DirectorView } from "./components/DirectorView";
 import { DocPanel } from "./components/DocPanel";
-import { ComfyWorkspace } from "./components/ComfyWorkspace";
+// The image workspace and the 3D director take over the whole main area and
+// drag in their own dependency trees; keep them out of the studio entry chunk.
+const ComfyWorkspace = lazy(() => import("./components/ComfyWorkspace").then(m => ({ default: m.ComfyWorkspace })));
+const DirectorView = lazy(() => import("./components/DirectorView").then(m => ({ default: m.DirectorView })));
 import { Modals } from "./components/Modals";
 import { Stage } from "./components/Stage";
 import { CreativeBar } from "./components/CreativePanels";
@@ -218,12 +220,12 @@ function App() {
     <div className="app">
       <TopBar />
       <CreativeBar />
-      {workspace === "image" ? <ComfyWorkspace /> : <div className={`main ${kind === "caption" ? "caption-main" : ""}`} data-agent-open={agentVisible} data-inspector-open={inspectorOpen && !agentVisible}>
+      {workspace === "image" ? <Suspense fallback={null}><ComfyWorkspace /></Suspense> : <div className={`main ${kind === "caption" ? "caption-main" : ""}`} data-agent-open={agentVisible} data-inspector-open={inspectorOpen && !agentVisible}>
         {kind !== "caption" && <div className="inspector-slot" id="creation-inspector" inert={compact && (!inspectorOpen || agentVisible)} onKeyDown={event=>{if(compact && event.key==='Escape' && !isComposingKey(event.nativeEvent)){event.stopPropagation();setUi({inspectorOpen:false});document.querySelector<HTMLButtonElement>('[data-inspector-toggle]')?.focus()}}}><DocPanel /></div>}
         <div className="stage-slot" inert={compact && agentVisible}><Stage /></div>
         <div className="agent-slot" id="creation-agent" aria-hidden={!agentVisible} inert={!agentVisible}><AgentPanel /></div>
       </div>}
-      {director && <DirectorView />}
+      {director && <Suspense fallback={null}><DirectorView /></Suspense>}
       <Modals />
       <DialogHost />
       <Toasts />

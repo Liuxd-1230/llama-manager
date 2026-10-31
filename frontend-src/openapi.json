@@ -570,6 +570,26 @@
         }
       }
     },
+    "/api/v1/server/summary": {
+      "get": {
+        "tags": [
+          "runtime"
+        ],
+        "summary": "Server Summary",
+        "description": "One poll for the top bar: engine state plus host RAM/VRAM readouts.",
+        "operationId": "server_summary_api_v1_server_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/server/logs": {
       "get": {
         "tags": [

@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.gzip import GZipMiddleware
 from starlette.exceptions import HTTPException
 from .storage import database
 from .version import APP_VERSION
@@ -48,6 +49,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title='Atelier', version=APP_VERSION, lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
 @app.middleware('http')
@@ -64,6 +66,9 @@ async def local_api(request: Request, call_next):
     finally:
         request_id.reset(token)
     response.headers['X-Request-ID'] = request.state.request_id
+    if request.url.path.startswith('/static/assets/') and response.status_code == 200:
+        # Vite content-hashes everything under assets/; revalidation is pure waste.
+        response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     return response
 
 
@@ -87,4 +92,4 @@ if FRONTEND.exists():
 
 @app.get('/', include_in_schema=False)
 def index():
-    return FileResponse(FRONTEND / 'index.html')
+    return FileResponse(FRONTEND / 'index.html', headers={'Cache-Control': 'no-cache'})
