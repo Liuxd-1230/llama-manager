@@ -145,6 +145,45 @@ def delete_object(kind: str,identifier: str):
     return {'ok':True}
 
 
+@router.post('/data/backup')
+def create_data_backup():
+    """Snapshot user data into backups/atelier-backup-<stamp>.zip: a consistent
+    SQLite copy of atelier.db plus profiles and moss settings/skills. Keeps the
+    newest 10 archives."""
+    import sqlite3
+    import time
+    import zipfile
+    stamp = time.strftime('%Y%m%d-%H%M%S')
+    backup_dir = APP_DATA_DIR / 'backups'
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    dest = backup_dir / f'atelier-backup-{stamp}.zip'
+    for old in sorted(backup_dir.glob('atelier-backup-*.zip'))[:-9]:
+        old.unlink(missing_ok=True)
+    tmp_db = backup_dir / f'.backup-{stamp}.db'
+    try:
+        src = sqlite3.connect(store.DATABASE_PATH)
+        dst = sqlite3.connect(tmp_db)
+        with dst:
+            src.backup(dst)
+        src.close()
+        dst.close()
+        with zipfile.ZipFile(dest, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.write(tmp_db, 'atelier.db')
+            config_dir = APP_DATA_DIR / 'config'
+            if config_dir.is_dir():
+                for profile in sorted(config_dir.iterdir()):
+                    if profile.is_file():
+                        zf.write(profile, 'config/' + profile.name)
+            moss_dir = APP_DATA_DIR / 'moss'
+            if moss_dir.is_dir():
+                for name in ('settings.json', 'skills.json'):
+                    if (moss_dir / name).is_file():
+                        zf.write(moss_dir / name, 'moss/' + name)
+    finally:
+        tmp_db.unlink(missing_ok=True)
+    return {'path': str(dest), 'bytes': dest.stat().st_size}
+
+
 @router.post('/projects/{identifier}/select')
 def select_project(identifier: str):
     from ..moss_server import db

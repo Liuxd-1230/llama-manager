@@ -57,3 +57,6 @@
 
 .intro{grid-template-columns:minmax(0,1.4fr) minmax(280px,.8fr);gap:48px;padding-bottom:28px;margin-bottom:20px;align-items:center}.intro h1{font-size:clamp(30px,2.5vw,38px);line-height:1.4}.newProject{margin-top:22px;max-width:470px}.introCopy{padding:8px 0}.homeColumns{gap:40px}
 @media(max-width:700px){.intro{grid-template-columns:1fr;gap:20px}.intro h1{font-size:30px}.homeColumns{gap:24px}}
+
+.backupInline{display:inline-flex;align-items:center;gap:8px;min-width:0}
+.backupPath{font-family:var(--font-mono);font-size:12px;color:var(--text-2);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle}

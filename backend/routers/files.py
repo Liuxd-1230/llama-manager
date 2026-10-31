@@ -3,6 +3,7 @@ import asyncio
 import base64
 import binascii
 import io
+from pathlib import Path
 from fastapi import WebSocket, WebSocketDisconnect, Request
 from ..responses import JSONResponse
 from pypdf import PdfReader
@@ -51,19 +52,58 @@ def _check_picker_access(request: Request):
     if origin and urlsplit(origin).netloc != request.url.netloc:
         raise HTTPException(status_code=403, detail='系统窗口只允许应用自身打开')
 
+def _allowed_browse_roots() -> list[Path]:
+    """Directories a non-local caller may browse: trees that already matter to
+    the configured app (the parent of each configured model/engine/template
+    path, plus the data dir). Local callers browse the whole machine."""
+    from pathlib import Path
+    from ..paths import APP_DATA_DIR
+
+    config = cfg.get_config()
+    roots: dict[str, Path] = {str(APP_DATA_DIR): APP_DATA_DIR}
+    for value in (config.model_path, config.mmproj_path, config.chat_template_file, config.llama_cpp_dir):
+        value = str(value or '').strip()
+        if not value:
+            continue
+        path = Path(value)
+        base = path.parent if path.suffix else path
+        roots[str(base)] = base
+    return list(roots.values())
+
+
+def _browse_guard(request: Request, target: Path) -> None:
+    from ..inference import _is_local_host
+
+    if _is_local_host(request.client.host if request.client else None):
+        return
+    roots = _allowed_browse_roots()
+    if not any(target == root or root in target.parents for root in roots):
+        raise HTTPException(status_code=403, detail='远程访问只允许浏览已配置的模型、引擎与数据目录')
+
+
 @router.get("/api/v1/drives")
-def list_drives():
-    """List available drives (Windows) or ['/'] (Linux)."""
-    return {"drives": cfg.list_drives()}
+def list_drives(request: Request):
+    """List available drives (Windows) or ['/'] (Linux).
+
+    A non-local caller only sees the drives hosting configured roots —
+    with remote API enabled this endpoint must not double as a disk map.
+    """
+    from ..inference import _is_local_host
+
+    if _is_local_host(request.client.host if request.client else None):
+        return {"drives": cfg.list_drives()}
+    drives = sorted({root.drive + '\\' for root in _allowed_browse_roots() if root.drive} or {'/'})
+    return {"drives": drives}
 
 
 @router.get("/api/v1/browse")
-def browse_dir(dir: str):
+def browse_dir(request: Request, dir: str):
     """Browse directory contents for folder picker."""
     from pathlib import Path
     target=Path(dir).expanduser()
     if target.is_file(): target=target.parent
     if not target.is_dir(): raise ValueError('目录不存在，请检查路径或返回上一级')
+    _browse_guard(request, target.resolve())
     try:
         next(target.iterdir(), None)
     except PermissionError: raise ValueError('没有权限读取此目录，请选择其他目录') from None

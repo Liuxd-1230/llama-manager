@@ -33,10 +33,23 @@ if not exist ".venv\Scripts\activate.bat" (
 REM -- Activate venv --
 call .venv\Scripts\activate.bat
 
-REM -- Install deps --
-echo [2/3] Checking dependencies...
-pip install -q -r requirements.txt
-if errorlevel 1 exit /b 1
+REM -- Install deps only when requirements.txt changed --
+set "REQ_STAMP=%~dp0.venv\.requirements-stamp"
+set "REQ_HASH="
+for /f "skip=1 delims=" %%h in ('certutil -hashfile requirements.txt SHA256 2^>nul') do (
+    if not defined REQ_HASH set "REQ_HASH=%%h"
+)
+set "REQ_HASH=%REQ_HASH: =%"
+set "STAMPED="
+if exist "%REQ_STAMP%" set /p STAMPED=<"%REQ_STAMP%"
+if /i "%REQ_HASH%"=="%STAMPED%" (
+    echo [2/3] Dependencies up to date.
+) else (
+    echo [2/3] Checking dependencies...
+    pip install -q -r requirements.txt
+    if errorlevel 1 exit /b 1
+    >"%REQ_STAMP%" echo %REQ_HASH%
+)
 
 REM -- Start --
 echo [3/3] Starting server...
