@@ -126,3 +126,13 @@ MiniLM SHA-256：`53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9
 P3 快赢随后落地并经隔离服务（9093）实测：index.html 首绘前写入 data-theme/data-accent（深色用户不再闪浅色帧）；`/static/assets/*` 标记 immutable、index.html no-cache、gzip 1KB 起；DirectorView / ComfyWorkspace / ReverseModal 拆为按需 chunk，Studio 入口 413K → 109K；顶栏两个轮询合并为 `/api/v1/server/summary`（3s 一次），suspend/resume/启动档案的失效键同步更新。DOM 首绘检查实测 DOMContentLoaded 时 theme=dark、accent=amber 已就位，顶栏单轮询显示真实显存读数。截图 `frontend-src/demo/shots/current/p3-home-dark.png`。
 
 回归：unittest 182/182、ruff 0 违规、vitest 68/68、tsc、生产构建与新鲜度门禁通过。
+
+## CI 转绿与构建产物跨机器差异 · 2026-10-31
+
+推送后 CI 三轮迭代全部转绿（backend 2m9s、frontend 1m0s、e2e 4m46s，e2e 已为阻塞岗）。期间定位并处理了两个工具链事实：
+
+- **本机系统代理劫持回环**已在 backend/__init__.py 修复（见上文 P2 一节），CI 与本地 hf/MCP 测试稳定通过。
+- **Vite 8（rolldown/lightningcss）产物跨机器非确定**：文件名哈希含机器相关值（纯改名级联），CSS Modules 作用域名（_modal_n1rwm_1 vs _modal_rnpvh_7）与枚举序也随机器不同，而每个产物内部 CSS/JS 自洽、语义等价。本机对照实验排除了绝对路径、文件枚举顺序与 Node 版本（Node 22/24 均复现）。字节级 `git diff` 门禁不可行；`scripts/check_frontend_fresh.mjs` 改为归一化比较——哈希 token 折叠为 -HASH、作用域名折叠为 _SCOPED_、EOL 折叠——再对提交树（git index）与重建产物比对文件集合与内容。本地验证：干净树通过、手改 chunk 失败；CI 实测通过。
+- e2e 岗在连续三轮 CI 真实运行中稳定通过（每轮 88 项、约 5 分钟），已移除 continue-on-error。
+
+浏览器验收：P0–P3 全部改动在真实 Chrome、四视口矩阵下 88/88 通过（本地与 CI 各一轮）。深色主题预渲染、合并轮询与懒加载 chunk 经隔离服务 DOM 检查与截图确认。
