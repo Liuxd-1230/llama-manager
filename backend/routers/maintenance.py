@@ -23,7 +23,6 @@ router = APIRouter(tags=["maintenance"])
 @router.get("/api/v1/mirrors")
 async def probe_mirrors():
     """Probe each candidate's git smart-HTTP handshake endpoint; rank by latency."""
-    import httpx
     probe_path = "/ggml-org/llama.cpp.git/info/refs?service=git-upload-pack"
 
     async def probe(candidate: dict) -> dict:

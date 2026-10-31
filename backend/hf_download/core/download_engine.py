@@ -21,7 +21,6 @@ from .errors import (
     KIND_AUTH,
     KIND_NETWORK,
     RETRYABLE_KINDS,
-    FriendlyError,
     translate_exception,
 )
 

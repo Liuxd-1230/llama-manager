@@ -46,7 +46,9 @@ VENDOR = RES_ROOT / "moss_vendor"
 SKILL_COMPILE = VENDOR / "moss-image-prompt-enhancer" / "scripts" / "compile_prompt.py"
 CAPTION_PROMPT_PATH = VENDOR / "docs" / "CAPTION_PROMPT_ZH.md"
 
-APP_VERSION = "3.0.0"
+# Single source lives in backend/version.py; re-exported here because the
+# studio API surface imports APP_VERSION from this module.
+from ..version import APP_VERSION as APP_VERSION
 
 
 def now_iso() -> str:

@@ -1,0 +1,16 @@
+# Tool configuration only — the project installs via requirements*.txt, not as a package.
+[tool.ruff]
+line-length = 200
+target-version = "py312"
+extend-exclude = [
+    "backend/moss_vendor",   # vendored upstream skill, kept verbatim
+    "frontend-src",
+    "frontend",
+    ".venv",
+    "temp",
+]
+
+[tool.ruff.lint]
+# Pyflakes + syntax errors catch unused imports/variables and undefined names
+# without fighting the deliberately dense existing style.
+select = ["F", "E9"]

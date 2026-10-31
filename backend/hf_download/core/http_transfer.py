@@ -4,12 +4,12 @@ Hub 1.33 creates random temporary names and restarts HTTP transfers. Atelier
 therefore owns this small transport; Hub still resolves authoritative metadata.
 """
 from __future__ import annotations
-import hashlib,json,os,shutil,time
+import hashlib,json,os,shutil
 from pathlib import Path,PurePosixPath
-from urllib.parse import quote,urlsplit
+from urllib.parse import urlsplit
 import requests
 from filelock import FileLock
-from .errors import FriendlyError,KIND_NETWORK,KIND_AUTH,classify_status
+from .errors import FriendlyError,KIND_NETWORK,classify_status
 
 CHUNK=256*1024
 

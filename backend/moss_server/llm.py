@@ -9,7 +9,7 @@ from typing import Any, AsyncIterator, Optional
 import httpx
 from fastapi import HTTPException
 
-from .config import load_settings, model_chain
+from .config import load_settings
 
 
 class UpstreamError(Exception):

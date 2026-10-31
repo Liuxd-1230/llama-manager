@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import base64
 import logging
-import os
 import sys
 from pathlib import Path
 

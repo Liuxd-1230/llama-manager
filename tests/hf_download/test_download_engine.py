@@ -122,7 +122,7 @@ def test_download_cache_mode(server, repo, tmp_path):
         assert fh.read() == repo.files["config.json"]
     # blobs 中应存在 sha256 命名的实体文件
     sha = hashlib.sha256(repo.files["config.json"]).hexdigest()
-    assert (cache / f"models--e2e-org--e2e-model" / "blobs" / sha).is_file()
+    assert (cache / "models--e2e-org--e2e-model" / "blobs" / sha).is_file()
     # refs/main 记录 commit
     refs = cache / "models--e2e-org--e2e-model" / "refs" / "main"
     assert refs.read_text().strip() == repo.commit
@@ -200,7 +200,7 @@ def test_resume_after_kill(tmp_path, monkeypatch):
 
         server.throttle_seconds = 0.004  # 限速以便在中途暂停
         engine1 = DownloadEngine(lambda: None, max_workers=1, max_retries=0, retry_base_delay=0.1)
-        batch1 = submit_to(engine1)
+        submit_to(engine1)
         tid = engine1.snapshot()[0]["task_id"]
         wait_for(engine1, lambda s: s[0]["bytes_done"] >= 1024 * 1024, interval=0.01)
         engine1.pause(tid)
@@ -209,7 +209,7 @@ def test_resume_after_kill(tmp_path, monkeypatch):
 
         # 模拟重启：全新引擎 + 全新 HistoryStore，恢复同一 local_dir
         engine2 = DownloadEngine(lambda: None, max_workers=1, max_retries=0, retry_base_delay=0.1)
-        batch2 = submit_to(engine2)
+        submit_to(engine2)
         recovered=wait_for(engine2, lambda s: all(t["state"] is TaskState.COMPLETED for t in s))
         assert recovered[0]["http_status"]==206
         assert recovered[0]["resumed_from"]>0

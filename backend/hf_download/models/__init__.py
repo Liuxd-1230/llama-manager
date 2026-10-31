@@ -151,7 +151,6 @@ class DownloadTask:
                 (t0, b0), (t1, b1) = samples[0], samples[-1]
                 if t1 > t0:
                     speed = (b1 - b0) / (t1 - t0)
-            elapsed = max(now - samples[0][0], 1e-6) if samples else 1.0
             if self.started_at is not None:
                 wall = max((self.finished_at or time.time()) - self.started_at, 1e-6)
                 avg = (self.bytes_done - self._start_bytes) / wall

@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 from .storage import database
+from .version import APP_VERSION
 from . import config_manager as cfg
 from .moss_server import db as studio_db
 from .moss_server.api import router as studio_router
@@ -46,7 +47,7 @@ async def lifespan(app: FastAPI):
     await shutdown()
 
 
-app = FastAPI(title='Atelier', version='3.0.0', lifespan=lifespan)
+app = FastAPI(title='Atelier', version=APP_VERSION, lifespan=lifespan)
 
 
 @app.middleware('http')

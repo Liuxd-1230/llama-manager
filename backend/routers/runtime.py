@@ -69,7 +69,6 @@ async def server_resume(body: dict | None = None):
 @router.get("/api/v1/server/health")
 async def server_health():
     """Check if llama-server is accepting requests."""
-    import httpx
     config = cfg.get_config()
     url = f"{_local_base_url(config)}/health"
     try:

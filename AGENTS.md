@@ -34,9 +34,10 @@ start.bat
 Build production UI into committed `frontend/` after source changes. Run relevant tests, generated API types, TypeScript and production build. Browser checks inspect actual rendered screens, both themes, narrow layouts, keyboard focus and reduced motion.
 
 ```bash
-# Backend (requirements-dev.txt adds pytest for the download core)
+# Backend (requirements-dev.txt adds pytest and ruff for the download core)
 .venv\Scripts\python.exe -X utf8 -m unittest discover -s tests -p 'test_*.py'
 .venv\Scripts\python.exe -m pytest tests/hf_download -q
+.venv\Scripts\python.exe -m ruff check backend scripts tests
 
 # Frontend (from frontend-src/)
 npx vitest run
@@ -45,6 +46,8 @@ npm run generate:api   # re-export OpenAPI and regenerate src/generated/api.ts
 npm run build
 npx playwright test    # isolated backend on 9092; one worker owns current project
 ```
+
+CI (`.github/workflows/ci.yml`) runs all of the above on `windows-latest` plus a freshness gate: `frontend/` is committed, so CI rebuilds it and fails on any diff. `requirements-lock.txt` pins the CI environment; regenerate it after changing `requirements.txt`.
 
 
 ## Architecture

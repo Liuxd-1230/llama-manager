@@ -18,7 +18,6 @@ router = APIRouter(tags=["chat"])
 @router.post("/api/v1/chat")
 async def chat_proxy(request: Request):
     """Proxy a chat turn while preserving provider-specific branch context."""
-    import httpx
 
     config = cfg.get_config()
     data = await request.json()
@@ -178,7 +177,6 @@ async def clear_chat_conversation(conversation_id: str):
 @router.get("/api/v1/chat/models")
 async def list_models(provider: str = "local"):
     """List local or DeepSeek models."""
-    import httpx
     provider_config = providers.get_provider(provider)
     if provider_config:
         return {"data": [{"id": model} for model in provider_config.models]}
@@ -227,7 +225,6 @@ async def delete_chat_provider(provider_id: str):
 
 @router.post("/api/v1/chat/providers/{provider_id}/models")
 async def fetch_provider_models(provider_id: str):
-    import httpx
     provider = providers.get_provider(provider_id)
     if not provider:
         return JSONResponse(status_code=404, content={"error": "Provider not found"})

@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-lock.txt
+      - name: Install dependencies
+        run: pip install -r requirements-lock.txt
+      - name: Ruff
+        run: python -m ruff check backend scripts tests
+      - name: Backend tests
+        run: python -X utf8 -m unittest discover -s tests -p "test_*.py"
+      - name: HF download core tests
+        run: python -m pytest tests/hf_download -q
+
+  frontend:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: frontend-src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend-src/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Unit tests
+        run: npx vitest run
+      - name: Type check and build
+        run: pnpm build
+      - name: Committed frontend is fresh
+        # The production bundle is committed; a source change without a rebuild
+        # (or a manual edit of frontend/) must fail CI. The build is
+        # deterministic for a given lockfile, so an up-to-date tree diffs clean.
+        run: git diff --exit-code frontend/
+
+  e2e:
+    runs-on: windows-latest
+    # Newly automated; flip to blocking once it has been green for a while.
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: frontend-src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-lock.txt
+      - name: Install backend dependencies
+        run: pip install -r requirements-lock.txt
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend-src/pnpm-lock.yaml
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Start isolated backend on 9092
+        shell: bash
+        env:
+          ATELIER_DATA_DIR: ${{ runner.temp }}/atelier-e2e
+        run: |
+          python -X utf8 -m uvicorn backend.main:app --host 127.0.0.1 --port 9092 &
+          for i in $(seq 1 30); do
+            curl -s -o /dev/null http://127.0.0.1:9092/api/v1/server/status && break
+            sleep 1
+          done
+      - name: Playwright
+        run: npx playwright test

@@ -10,8 +10,8 @@ from ..hf_download.core.download_engine import DownloadEngine
 from ..hf_download.core.history import HistoryStore
 from ..hf_download.core.hf_client import list_repo_files_full
 from ..hf_download.core.url_parser import parse_input
-from ..hf_download.core.cache_utils import build_hf_command, resolve_hub_cache_dir
-from ..hf_download.models import BatchSpec, RepoFile
+from ..hf_download.core.cache_utils import resolve_hub_cache_dir
+from ..hf_download.models import BatchSpec
 from ..paths import APP_DATA_DIR, DATABASE_PATH, copy_database
 from ..secrets import read_secret
 from . import store

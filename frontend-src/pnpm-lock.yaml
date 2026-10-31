@@ -23,47 +23,53 @@ importers:
       '@fontsource/ibm-plex-mono':
         specifier: ^5.3.0
         version: 5.3.0
+      '@gsap/react':
+        specifier: ^2.1.2
+        version: 2.1.2(gsap@3.15.0)(react@19.2.7)
       '@tanstack/react-query':
         specifier: ^5.101.2
         version: 5.101.2(react@19.2.7)
       '@vitejs/plugin-react':
-        specifier: latest
+        specifier: ^6.0.3
         version: 6.0.3(vite@8.1.4(@types/node@26.1.1))
       '@xyflow/react':
         specifier: ^12.12.0
         version: 12.12.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      gsap:
+        specifier: ^3.15.0
+        version: 3.15.0
       katex:
-        specifier: latest
+        specifier: ^0.17.0
         version: 0.17.0
       lucide-react:
-        specifier: latest
+        specifier: ^1.24.0
         version: 1.24.0(react@19.2.7)
       motion:
-        specifier: latest
+        specifier: ^12.42.2
         version: 12.42.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       react:
-        specifier: latest
+        specifier: ^19.2.7
         version: 19.2.7
       react-dom:
-        specifier: latest
+        specifier: ^19.2.7
         version: 19.2.7(react@19.2.7)
       react-markdown:
-        specifier: latest
+        specifier: ^10.1.0
         version: 10.1.0(@types/react@19.2.17)(react@19.2.7)
       react-router-dom:
-        specifier: latest
+        specifier: ^7.18.1
         version: 7.18.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       rehype-katex:
-        specifier: latest
+        specifier: ^7.0.1
         version: 7.0.1
       rehype-sanitize:
-        specifier: latest
+        specifier: ^6.0.0
         version: 6.0.0
       remark-gfm:
-        specifier: latest
+        specifier: ^4.0.1
         version: 4.0.1
       remark-math:
-        specifier: latest
+        specifier: ^6.0.0
         version: 6.0.0
       use-sync-external-store:
         specifier: ^1.7.0
@@ -76,25 +82,25 @@ importers:
         specifier: ^1.61.1
         version: 1.61.1
       '@testing-library/jest-dom':
-        specifier: latest
+        specifier: ^6.9.1
         version: 6.9.1
       '@testing-library/react':
-        specifier: latest
+        specifier: ^16.3.2
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@types/katex':
-        specifier: latest
+        specifier: ^0.16.8
         version: 0.16.8
       '@types/node':
-        specifier: latest
+        specifier: ^26.1.1
         version: 26.1.1
       '@types/react':
-        specifier: latest
+        specifier: ^19.2.17
         version: 19.2.17
       '@types/react-dom':
-        specifier: latest
+        specifier: ^19.2.3
         version: 19.2.3(@types/react@19.2.17)
       jsdom:
-        specifier: latest
+        specifier: ^29.1.1
         version: 29.1.1
       openapi-typescript:
         specifier: ^7.13.0
@@ -103,10 +109,10 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
       vite:
-        specifier: latest
+        specifier: ^8.1.4
         version: 8.1.4(@types/node@26.1.1)
       vitest:
-        specifier: latest
+        specifier: ^4.1.10
         version: 4.1.10(@types/node@26.1.1)(jsdom@29.1.1)(vite@8.1.4(@types/node@26.1.1))
 
 packages:
@@ -213,6 +219,12 @@ packages:
 
   '@fontsource/ibm-plex-mono@5.3.0':
     resolution: {integrity: sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q==}
+
+  '@gsap/react@2.1.2':
+    resolution: {integrity: sha512-JqliybO1837UcgH2hVOM4VO+38APk3ECNrsuSM4MuXp+rbf+/2IG2K1YJiqfTcXQHH7XlA0m3ykniFYstfq0Iw==}
+    peerDependencies:
+      gsap: ^3.12.5
+      react: '>=17'
 
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
@@ -733,6 +745,9 @@ packages:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
+
+  gsap@3.15.0:
+    resolution: {integrity: sha512-dMW4CWBTUK1AEEDeZc1g4xpPGIrSf9fJF960qbTZmN/QwZIWY5wgliS6JWl9/25fpTGJrMRtSjGtOmPnfjZB+A==}
 
   hast-util-from-dom@5.0.1:
     resolution: {integrity: sha512-N+LqofjR2zuzTjCPzyDUdSshy4Ma6li7p/c3pA78uTwzFgENbgbUrm2ugwsOdcjI1muO+o6Dgzp9p8WHtn/39Q==}
@@ -1630,6 +1645,11 @@ snapshots:
 
   '@fontsource/ibm-plex-mono@5.3.0': {}
 
+  '@gsap/react@2.1.2(gsap@3.15.0)(react@19.2.7)':
+    dependencies:
+      gsap: 3.15.0
+      react: 19.2.7
+
   '@jridgewell/sourcemap-codec@1.5.5': {}
 
   '@napi-rs/wasm-runtime@1.1.6(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
@@ -2074,6 +2094,8 @@ snapshots:
 
   fsevents@2.3.3:
     optional: true
+
+  gsap@3.15.0: {}
 
   hast-util-from-dom@5.0.1:
     dependencies:

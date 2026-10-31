@@ -1,6 +1,5 @@
 import asyncio
 import json
-import re
 import struct
 import time
 import unittest
@@ -168,7 +167,6 @@ class ProfileRegressionTests(unittest.TestCase):
 
 
 def _gguf_kv_string(key: str, value: str) -> bytes:
-    raw = value.encode("utf-8")
     return _gguf_string(key) + struct.pack("<I", 8) + _gguf_string(value)
 
 
@@ -229,7 +227,7 @@ class GgufEarlyExitTests(unittest.TestCase):
             path = self._write(tmpdir, with_experts=False)
             with open(path, "rb") as fh:
                 blob = fh.read()
-            tokenizer_at = blob.index(b"tokenizer.ggml.tokens")
+            blob.index(b"tokenizer.ggml.tokens")  # assert the key is present
             # Reading the key itself is unavoidable (that is how we decide to
             # stop); the array payload after it must stay untouched.
             array_payload_at = blob.index(b"tokenizer.ggml.tokens") + len(b"tokenizer.ggml.tokens") + 8 + 4

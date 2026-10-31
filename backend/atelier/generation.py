@@ -1,7 +1,6 @@
 """Durable generation snapshots. Only this application's queued prompts may be cancelled."""
 import asyncio
 import copy
-import json
 import uuid
 import httpx
 from ..paths import APP_DATA_DIR

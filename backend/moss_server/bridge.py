@@ -8,7 +8,6 @@ speaks the OpenAI protocol at its own port and needs no key.
 
 from __future__ import annotations
 
-import os
 from types import SimpleNamespace
 from typing import Any
 

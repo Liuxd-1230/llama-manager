@@ -2,17 +2,15 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import uuid
 from urllib.parse import urlsplit
-from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from .secrets import read_secret, write_secret
-from .env_manager import APP_DATA_DIR, env_source, env_value, set_user_env
+from .env_manager import APP_DATA_DIR, env_source, env_value
 
 
 ProviderKind = Literal["openai_chat", "openai_responses", "anthropic"]
@@ -93,7 +91,6 @@ def _migrate_legacy_keys(items: list[dict]) -> list[dict]:
         key = str(item.pop("api_key", "") or "").strip()
         if key:
             provider = ProviderConfig(**item)
-            env_name = provider_env_names(provider)[0]
             try:
                 write_secret("provider:" + provider.id, key)
                 changed = True

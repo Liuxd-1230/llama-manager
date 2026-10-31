@@ -1,6 +1,5 @@
 """缓存目录解析、命令预览、文件分类、格式化、历史的单元测试。"""
 
-import os
 
 from backend.hf_download.core.cache_utils import build_hf_command, find_incomplete_files, resolve_hub_cache_dir
 from backend.hf_download.core.formatting import format_eta, human_size, human_speed
