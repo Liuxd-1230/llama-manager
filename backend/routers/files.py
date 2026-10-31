@@ -76,7 +76,9 @@ def _browse_guard(request: Request, target: Path) -> None:
 
     if _is_local_host(request.client.host if request.client else None):
         return
-    roots = _allowed_browse_roots()
+    # Resolve both sides: runner workspaces can sit behind reparse points, and
+    # an unresolved root never matches a resolved browse target.
+    roots = [root.resolve() for root in _allowed_browse_roots()]
     if not any(target == root or root in target.parents for root in roots):
         raise HTTPException(status_code=403, detail='远程访问只允许浏览已配置的模型、引擎与数据目录')
 
