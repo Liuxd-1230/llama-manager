@@ -36,7 +36,7 @@ jobs:
           version: 10.6.2
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
           cache-dependency-path: frontend-src/pnpm-lock.yaml
       - name: Install dependencies
@@ -55,8 +55,6 @@ jobs:
 
   e2e:
     runs-on: windows-latest
-    # Newly automated; flip to blocking once it has been green for a while.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -71,7 +69,7 @@ jobs:
           version: 10.6.2
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
           cache-dependency-path: frontend-src/pnpm-lock.yaml
       - name: Install frontend dependencies
