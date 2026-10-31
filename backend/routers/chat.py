@@ -130,10 +130,16 @@ async def chat_proxy(request: Request):
         except Exception as exc:
             return JSONResponse(status_code=400, content={"error": str(exc)})
     else:
-        async with httpx.AsyncClient(timeout=300) as client:
-            resp = await client.post(target, content=body, headers=headers)
+        try:
+            async with httpx.AsyncClient(timeout=300) as client:
+                resp = await client.post(target, content=body, headers=headers)
+        except httpx.HTTPError as exc:
+            # 引擎宕机要给出可操作的错误，而不是把连接异常裸穿成 400/500。
+            hint = "本地引擎未运行，请先在「模型」页启动引擎" if provider_config is None else "上游模型服务无法连接"
+            return JSONResponse(status_code=502, content={"error": f"{hint}: {exc}"})
         if resp.status_code >= 400:
-            return JSONResponse(status_code=resp.status_code, content={"error": resp.text})
+            # 上游可能是本机其它服务（端口被占用时），原文返回状态码与截断正文。
+            return JSONResponse(status_code=resp.status_code, content={"error": resp.text[:400] or f"HTTP {resp.status_code}"})
         raw_payload = resp.json()
         if provider_kind in {"openai_chat"}:
             payload = raw_payload

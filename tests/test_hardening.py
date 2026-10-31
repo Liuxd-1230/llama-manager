@@ -101,5 +101,24 @@ class RemoteBrowseTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class ChatDownTests(unittest.TestCase):
+    """With the managed engine stopped, chat must fail with an actionable 502
+    instead of leaking connection errors as 400s or echoing another local
+    service's response."""
+
+    def setUp(self):
+        self.client = TestClient(app, raise_server_exceptions=False)
+
+    def test_dead_local_engine_returns_actionable_502(self):
+        with patch('backend.routers.chat._local_base_url', return_value='http://127.0.0.1:59999'):
+            response = self.client.post('/api/v1/chat', json={
+                'provider': 'local',
+                'messages': [{'role': 'user', 'content': 'ping'}],
+                'stream': False,
+            })
+        self.assertEqual(response.status_code, 502)
+        self.assertIn('本地引擎未运行', response.json()['error'])
+
+
 if __name__ == '__main__':
     unittest.main()
