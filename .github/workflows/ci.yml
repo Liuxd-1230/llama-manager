@@ -49,15 +49,14 @@ jobs:
         # The production bundle is committed; a source change without a rebuild
         # (or a manual edit of frontend/) must fail CI. The build is
         # deterministic for a given lockfile, so an up-to-date tree diffs clean.
-        run: git diff --exit-code frontend/
+        # Step-level override: defaults pin this job to frontend-src.
+        working-directory: ${{ github.workspace }}
+        run: git diff --exit-code -- frontend/
 
   e2e:
     runs-on: windows-latest
     # Newly automated; flip to blocking once it has been green for a while.
     continue-on-error: true
-    defaults:
-      run:
-        working-directory: frontend-src
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -76,6 +75,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: frontend-src/pnpm-lock.yaml
       - name: Install frontend dependencies
+        working-directory: frontend-src
         run: pnpm install --frozen-lockfile
       - name: Start isolated backend on 9092
         shell: bash
@@ -88,4 +88,5 @@ jobs:
             sleep 1
           done
       - name: Playwright
+        working-directory: frontend-src
         run: npx playwright test
